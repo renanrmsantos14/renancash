@@ -160,6 +160,13 @@ A chave privada só sai pelo pipe e vira secret (nunca em arquivo nem na tela). 
 
 Push local: no `.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de teste gerado fora do repositório (`node scripts/vapid.mjs <pasta-temporaria>/vapid-local.txt > <pasta-temporaria>/vapid-local.json`); o mock (porta 8788) simula o serviço de push.
 
+## App Android (Cashew)
+
+- **Criar token**: no painel, **Ajustar → Apps conectados**, informe o nome do aparelho e toque em **Criar token**. O token (`mb_...`) aparece uma única vez: copie e cole no app. No D1 fica só o SHA-256.
+- **Rota**: `GET /api/app/transacoes?desde=<ISO opcional>` com `Authorization: Bearer mb_...` (sem cookie). Devolve `agora`, `contas`, `transacoes` (alteradas depois de `desde`, ou tudo sem `desde`, com a categoria já ajustada no painel) e `ids_pendentes`. Guarde `agora` e use como próximo `desde`. Token ausente, inválido ou revogado → 401.
+- **Revogar**: em **Apps conectados**, **Revogar** e confirme (ou `DELETE /api/app/tokens/<id>` com sessão). O app passa a receber 401 na hora. Perdeu o aparelho: revogue e crie outro.
+- Aplique o schema novo antes: `pnpm db:remote` (só `CREATE TABLE IF NOT EXISTS`).
+
 ## Segurança
 
 - A API key do MCP.AI só existe como secret no Worker; o navegador nunca a recebe e ela não está em nenhum arquivo do projeto. `.dev.vars` está no `.gitignore`.

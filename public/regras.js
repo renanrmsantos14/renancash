@@ -33,6 +33,8 @@ export const CATEGORIAS = {
   "Vehicle maintenance": "Manutenção do veículo", "Traffic tickets": "Multas de trânsito", "Insurance": "Seguros", "Life insurance": "Seguro de vida",
   "Home insurance": "Seguro residencial", "Health insurance": "Plano de saúde", "Vehicle insurance": "Seguro do veículo", "Leisure": "Lazer", "Other": "Outros",
 };
+// Categoria que o painel mostra: o ajuste do usuário, se houver, senão a do banco.
+export const categoriaEfetiva = (t) => t.ajuste_categoria || t.category;
 export const traduzir = (c) => (c ? CATEGORIAS[c] || c : "Sem categoria");
 
 // Não é gasto: pagamento de fatura, investimentos/poupança e transferência entre minhas contas.

@@ -2,6 +2,7 @@ import { ApiCliente } from "./api.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { enviarPush } from "./push.js";
+import { gerarToken, hashToken, tokenDoCabecalho, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -20,6 +21,7 @@ export default {
       let resp;
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
+      else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
       } else if (caminho === "/api/sair" && request.method === "POST") {
@@ -42,6 +44,9 @@ export default {
       else if (caminho === "/api/push" && (request.method === "POST" || request.method === "DELETE")) resp = await inscreverPush(request, env, url);
       else if (caminho === "/api/push/teste" && request.method === "POST") resp = await testePush(request, env, url);
       else if (caminho === "/api/notificacoes/entregar" && request.method === "POST") resp = await entregarNotificacoes(request, env, url);
+      else if (caminho === "/api/app/tokens" && request.method === "GET") resp = await listarTokens(env);
+      else if (caminho === "/api/app/tokens" && request.method === "POST") resp = await criarToken(request, env, url);
+      else if (/^\/api\/app\/tokens\/[^/]+$/.test(caminho) && request.method === "DELETE") resp = await revogarToken(env, request, url, caminho.slice(16));
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
         const api = new ApiCliente(env);
@@ -327,6 +332,56 @@ async function entregarNotificacoes(request, env, url) {
     "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 5) RETURNING chave, titulo, corpo"
   ).bind(agora(), validadeAlerta()).all();
   return json({ notificacoes: results });
+}
+
+// ---------- App Android (token de aparelho) ----------
+
+const USO_TOKEN_MS = 60 * 1000; // ultimo_uso é gravado no máximo 1 vez por minuto
+
+async function listarTokens(env) {
+  const { results } = await env.DB.prepare("SELECT id, nome, criado, ultimo_uso, revogado FROM app_tokens ORDER BY criado DESC").all();
+  return json({ tokens: results });
+}
+
+async function criarToken(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const nome = (await request.json().catch(() => null))?.nome;
+  const limpo = typeof nome === "string" ? nome.trim() : "";
+  if (!limpo || limpo.length > 40) return json({ erro: "Informe um nome de 1 a 40 caracteres" }, 400);
+  const token = gerarToken();
+  const id = crypto.randomUUID();
+  await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agora()).run();
+  return json({ id, nome: limpo, token }, 201);
+}
+
+async function revogarToken(env, request, url, idUrl) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  let id = "";
+  try { id = decodeURIComponent(idUrl); } catch {}
+  const t = await env.DB.prepare("SELECT revogado FROM app_tokens WHERE id = ?1").bind(id).first();
+  if (!t) return json({ erro: "Token não encontrado" }, 404);
+  if (!t.revogado) await env.DB.prepare("UPDATE app_tokens SET revogado = ?1 WHERE id = ?2").bind(agora(), id).run();
+  return json({ ok: true });
+}
+
+// Dados para o app: só leitura, autenticado por Bearer. `agora` é lido antes da consulta e vira o próximo `desde`
+// (linhas gravadas durante a consulta têm updated_at >= agora e voltam na rodada seguinte).
+async function appTransacoes(request, env, url) {
+  const token = tokenDoCabecalho(request.headers.get("authorization"));
+  const reg = token && await env.DB.prepare("SELECT id FROM app_tokens WHERE hash = ?1 AND revogado IS NULL").bind(await hashToken(token)).first();
+  if (!reg) return json({ erro: "Token inválido" }, 401, { "www-authenticate": "Bearer" });
+  const desde = normalizarDesde(url.searchParams.get("desde"));
+  if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+  const agoraIso = agora();
+  const db = env.DB;
+  const [contas, tx, pend] = await db.batch([
+    db.prepare("SELECT * FROM accounts ORDER BY type, name"),
+    db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
+    db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
+    db.prepare("UPDATE app_tokens SET ultimo_uso = ?1 WHERE id = ?2 AND (ultimo_uso IS NULL OR ultimo_uso < ?3)")
+      .bind(agoraIso, reg.id, new Date(Date.now() - USO_TOKEN_MS).toISOString()),
+  ]);
+  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }), 200, { "cache-control": "no-store" });
 }
 
 // ---------- Sincronização ----------

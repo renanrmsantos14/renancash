@@ -74,3 +74,13 @@ CREATE TABLE IF NOT EXISTS notificacoes (
   entregue_em TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notif_criada ON notificacoes(criada);
+
+-- Tokens de aparelho (app Android). Só o SHA-256 (hex) do token é guardado; o token em claro aparece uma vez, na criação.
+CREATE TABLE IF NOT EXISTS app_tokens (
+  id        TEXT PRIMARY KEY,
+  nome      TEXT NOT NULL,
+  hash      TEXT NOT NULL UNIQUE,
+  criado    TEXT NOT NULL,
+  ultimo_uso TEXT,
+  revogado  TEXT
+);
