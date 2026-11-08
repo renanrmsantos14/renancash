@@ -9,13 +9,23 @@ const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos qu
 
 export default {
   async fetch(request, env, ctx) {
-    const auth = await checarSenha(request, env);
-    if (auth) return seguranca(auth);
+    if (!env.APP_PASSWORD || !env.SESSION_SECRET) return seguranca(new Response("APP_PASSWORD ou SESSION_SECRET não configurado.", { status: 500 }));
     const url = new URL(request.url);
+    const caminho = url.pathname;
     try {
       let resp;
-      if (url.pathname === "/api/dados" && request.method === "GET") resp = await dados(env, url);
-      else if (url.pathname === "/api/atualizar" && request.method === "POST") {
+      if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
+      else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
+      else if (!(await sessaoValida(request, env))) {
+        resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
+      } else if (caminho === "/api/sair" && request.method === "POST") {
+        resp = mesmaOrigem(request, url) ? json({ ok: true }, 200, { "set-cookie": cookie("", 0) }) : json({ erro: "Origem não permitida" }, 403);
+      } else if (caminho === "/api/dados" && request.method === "GET") resp = await dados(env, url);
+      else if (caminho === "/api/historico" && request.method === "GET") resp = await historico(env);
+      else if (caminho === "/api/fatura" && request.method === "GET") resp = await fatura(env, url);
+      else if (/^\/api\/ajustes\/[^/]+$/.test(caminho) && request.method === "PUT") {
+        resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
+      } else if (caminho === "/api/atualizar" && request.method === "POST") {
         if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
         else {
           // waitUntil: se o navegador fechar no meio, a sincronização termina e o sync_log é fechado.
@@ -23,16 +33,16 @@ export default {
           ctx.waitUntil(tarefa);
           resp = json(await tarefa);
         }
-      } else if (url.pathname === "/api/ferramentas" && request.method === "GET") {
+      } else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
         const api = new ApiCliente(env);
         const [conexoes, endpoints] = await Promise.all([api.chamar("connections/list"), api.endpoints()]);
         resp = json({ conexoes, endpoints });
-      } else if (url.pathname.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
+      } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
       return seguranca(resp);
     } catch (e) {
-      console.error("Erro na requisição", url.pathname, e?.stack || e);
+      console.error("Erro na requisição", caminho, e?.stack || e);
       return seguranca(json({ erro: String(e?.message || e) }, 500));
     }
   },
@@ -44,21 +54,50 @@ export default {
 
 // ---------- Segurança ----------
 
-async function checarSenha(request, env) {
-  if (!env.APP_PASSWORD) return new Response("APP_PASSWORD não configurado.", { status: 500 });
-  const cab = request.headers.get("authorization") || "";
-  let senha = "";
-  if (cab.startsWith("Basic ")) {
-    try {
-      const dec = new TextDecoder().decode(Uint8Array.from(atob(cab.slice(6)), (c) => c.charCodeAt(0)));
-      senha = dec.slice(dec.indexOf(":") + 1); // usuário é ignorado
-    } catch {} // base64 inválido = senha vazia
+// Páginas e arquivos que o navegador precisa antes do login.
+const PUBLICO = /^\/(login|login\.html|manifest\.webmanifest|sw\.js|apple-touch-icon\.png|icons\/[\w.-]+)$/;
+const SESSAO_SEGUNDOS = 30 * 24 * 3600;
+
+// Cookie "sessao" = <expiraEm>.<HMAC-SHA256>. A chave usa SESSION_SECRET (aleatório: um cookie vazado não permite
+// adivinhar a senha offline) + APP_PASSWORD. Trocar qualquer um dos dois derruba todas as sessões.
+// A chave fica em memória por isolate; é refeita só se os secrets mudarem.
+let chaveSessao = null;
+async function chaveDe(senha) {
+  if (chaveSessao?.senha !== senha) {
+    const base = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("meu-banco:sessao:" + senha));
+    chaveSessao = { senha, chave: await crypto.subtle.importKey("raw", base, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]) };
   }
-  if (await iguais(senha, env.APP_PASSWORD)) return null;
-  return new Response("Senha necessária.", {
-    status: 401,
-    headers: { "www-authenticate": 'Basic realm="Meu Banco", charset="UTF-8"' },
-  });
+  return chaveSessao.chave;
+}
+
+async function assinar(expira, env) {
+  const chave = await chaveDe(env.SESSION_SECRET + ":" + env.APP_PASSWORD);
+  const assinatura = new Uint8Array(await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(String(expira))));
+  return btoa(String.fromCharCode(...assinatura)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+const cookie = (valor, segundos) => `sessao=${valor}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${segundos}`;
+
+async function sessaoValida(request, env) {
+  const m = /(?:^|;\s*)sessao=(\d+)\.([\w-]+)/.exec(request.headers.get("cookie") || "");
+  if (!m || Number(m[1]) < Date.now() / 1000) return false;
+  return iguais(m[2], await assinar(m[1], env));
+}
+
+async function entrar(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  // Limite por IP (binding de rate limit): 5 tentativas por minuto, além da espera de 1 s por erro.
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (env.LIMITE_LOGIN && !(await env.LIMITE_LOGIN.limit({ key: ip })).success) {
+    return json({ erro: "Muitas tentativas. Espere 1 minuto." }, 429);
+  }
+  const corpo = await request.json().catch(() => null);
+  if (!(await iguais(typeof corpo?.senha === "string" ? corpo.senha : "", env.APP_PASSWORD))) {
+    await new Promise((r) => setTimeout(r, 1000)); // freia tentativa em série
+    return json({ erro: "Senha incorreta" }, 401);
+  }
+  const expira = Math.floor(Date.now() / 1000) + SESSAO_SEGUNDOS;
+  return json({ ok: true }, 200, { "set-cookie": cookie(`${expira}.${await assinar(expira, env)}`, SESSAO_SEGUNDOS) });
 }
 
 // Comparação em tempo constante (compara os hashes, que têm o mesmo tamanho).
@@ -84,13 +123,13 @@ function seguranca(resp) {
   r.headers.set("cache-control", "private, no-store");
   r.headers.set(
     "content-security-policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
   );
   return r;
 }
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+function json(obj, status = 200, extra = {}) {
+  return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", ...extra } });
 }
 
 // ---------- Datas ----------
@@ -106,15 +145,17 @@ function somarDias(isoData, dias) {
 
 // ---------- API do painel ----------
 
+// Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
+const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
+const DE_TX = "FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id";
+
 async function dados(env, url) {
   const db = env.DB;
   const mesParam = url.searchParams.get("mes");
   const mes = /^\d{4}-\d{2}$/.test(mesParam || "") ? mesParam : hojeSP().slice(0, 7);
   const [contas, transacoes, meses, snaps, ultimaOk, ultima] = await db.batch([
     db.prepare("SELECT * FROM accounts ORDER BY type, name"),
-    db.prepare(
-      "SELECT id, account_id, date, description, amount, type, status, category, merchant, scheduled FROM transactions WHERE date >= ?1 AND date <= ?2 ORDER BY date DESC, id"
-    ).bind(mes + "-01", mes + "-31"),
+    db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1 AND t.date <= ?2 ORDER BY t.date DESC, t.id`).bind(mes + "-01", mes + "-31"),
     db.prepare("SELECT DISTINCT substr(date, 1, 7) AS mes FROM transactions ORDER BY mes DESC LIMIT 60"),
     db.prepare("SELECT key, data, updated_at FROM snapshots"),
     db.prepare("SELECT finished_at FROM sync_log WHERE ok = 1 ORDER BY id DESC LIMIT 1"),
@@ -131,6 +172,42 @@ async function dados(env, url) {
     ultimaAtualizacao: ultimaOk.results[0]?.finished_at ?? null,
     ultimaExecucao: ultima.results[0] ?? null,
   });
+}
+
+// Últimos 6 meses (campos mínimos) para os gráficos; o cliente aplica a regra de "não é gasto".
+async function historico(env) {
+  const hoje = hojeSP();
+  const de = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7) - 6, 1)).toISOString().slice(0, 10);
+  const { results } = await env.DB.prepare(
+    "SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id WHERE t.date >= ?1 AND t.scheduled = 0"
+  ).bind(de).all();
+  return json({ mesAtual: hoje.slice(0, 7), de, transacoes: results });
+}
+
+// Compras de um cartão numa janela de datas (a fatura), incluindo parcelas futuras.
+async function fatura(env, url) {
+  const [conta, de, ate] = ["conta", "de", "ate"].map((k) => url.searchParams.get(k) || "");
+  if (!conta || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return json({ erro: "Parâmetros inválidos" }, 400);
+  const { results } = await env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.account_id = ?1 AND t.date >= ?2 AND t.date <= ?3 ORDER BY t.date DESC, t.id`)
+    .bind(conta, de, ate).all();
+  return json({ transacoes: results });
+}
+
+async function salvarAjuste(request, env, idUrl) {
+  let id = "";
+  try { id = decodeURIComponent(idUrl); } catch {}
+  const c = await request.json().catch(() => null);
+  const category = c?.category ?? null;
+  const gasto = c?.gasto ?? null;
+  const valido = id && id.length <= 100 && (category === null || (typeof category === "string" && category && category.length <= 80)) && (gasto === null || gasto === 0 || gasto === 1);
+  if (!valido) return json({ erro: "Dados inválidos" }, 400);
+  if (category === null && gasto === null) await env.DB.prepare("DELETE FROM ajustes WHERE transaction_id = ?1").bind(id).run();
+  else {
+    await env.DB.prepare(
+      "INSERT INTO ajustes (transaction_id, category, gasto, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(transaction_id) DO UPDATE SET category = excluded.category, gasto = excluded.gasto, updated_at = excluded.updated_at"
+    ).bind(id, category, gasto, agora()).run();
+  }
+  return json({ ok: true });
 }
 
 // ---------- Sincronização ----------

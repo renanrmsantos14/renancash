@@ -45,3 +45,11 @@ CREATE TABLE IF NOT EXISTS sync_log (
   ok          INTEGER,                    -- NULL = rodando, 1 = ok, 0 = erro
   message     TEXT
 );
+
+-- Ajustes feitos no painel (categoria trocada e/ou "não é gasto"). A sincronização nunca mexe nesta tabela.
+CREATE TABLE IF NOT EXISTS ajustes (
+  transaction_id TEXT PRIMARY KEY,
+  category       TEXT,                    -- NULL = mantém a categoria original
+  gasto          INTEGER,                 -- NULL = regra automática | 1 = é gasto | 0 = não é gasto
+  updated_at     TEXT NOT NULL
+);

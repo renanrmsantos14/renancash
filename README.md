@@ -5,8 +5,12 @@ Usa a REST (e não o protocolo MCP) porque o MCP só aceita login OAuth, que nã
 Roda 100% no plano gratuito da Cloudflare: Workers + Workers Assets + D1 + Cron Triggers. Não usa IA.
 
 ```
-public/index.html   painel (HTML + JS puro, tema claro/escuro automático)
-src/index.js        Worker: senha, API do painel, sincronização (cron e botão)
+public/index.html   painel (HTML + JS puro, tema claro/escuro, gráficos SVG, detalhe da transação, faturas)
+public/login.html   tela de login
+public/sw.js        service worker (cache do shell e dos dados, modo offline)
+public/manifest.webmanifest, public/icons/, public/apple-touch-icon.png   PWA instalável
+scripts/icones.mjs  gera os PNG dos ícones (node scripts/icones.mjs)
+src/index.js        Worker: login por cookie, API do painel, sincronização (cron e botão)
 src/api.js          cliente da API REST do MCP.AI (com paginação e nova tentativa no 429)
 schema.sql          tabelas do D1
 mock/api-mock.mjs   API falsa (mesmo formato da real) para teste local
@@ -29,7 +33,7 @@ pnpm db:local                        # cria as tabelas no banco local
 
 Terminal 1: `pnpm mock` · Terminal 2: `pnpm dev`
 
-Abra http://localhost:8787 → usuário qualquer, senha `teste123` → clique **Atualizar**.
+Abra http://localhost:8787 → tela de login, senha `teste123` → clique **Atualizar**.
 Para testar o cron: abra http://localhost:8787/__scheduled no navegador.
 Para simular o banco pedindo novo login: pare o mock e rode `set MOCK_RECONNECT=1` (PowerShell: `$env:MOCK_RECONNECT=1`) antes de `pnpm mock`.
 
@@ -64,6 +68,7 @@ Edite o `wrangler.toml` e cole o `database_id`.
 pnpm db:remote                        # cria as tabelas no D1 da nuvem (--remote)
 npx wrangler secret put MCP_API_KEY      # cole a sk_live_… do MCP.AI (não aparece na tela)
 npx wrangler secret put APP_PASSWORD     # senha do painel: use 16+ caracteres
+node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | npx wrangler secret put SESSION_SECRET   # chave das sessões (aleatória)
 pnpm push                             # incrementa a versão e publica
 ```
 
@@ -72,14 +77,46 @@ Na primeira vez a Cloudflare pede para escolher o subdomínio `workers.dev`.
 
 ## 5. Primeiro acesso
 
-1. Abra `https://meu-banco.SEU-USUARIO.workers.dev/api/ferramentas` → usuário qualquer + `APP_PASSWORD`. Deve mostrar suas conexões (Banco Inter) e a lista de endpoints. Se der erro aqui, o problema é a API key.
+1. Entre em `https://meu-banco.SEU-USUARIO.workers.dev` com a `APP_PASSWORD`, depois abra `/api/ferramentas`. Deve mostrar suas conexões (Banco Inter) e a lista de endpoints. Se der erro aqui, o problema é a API key.
 2. Abra a raiz do site e clique **Atualizar**. A primeira carga busca 180 dias (`IMPORT_DAYS`) e pode levar até alguns minutos por causa do `force_sync`.
 3. Daí em diante o cron atualiza sozinho a cada 3 horas (minuto 7 das horas 0, 3, 6… UTC = 21h, 0h, 3h… em Brasília).
-4. No celular: abra o endereço e use "Adicionar à tela inicial".
+4. No celular, veja "Instalar no celular" abaixo.
+
+## Login
+
+O painel tem tela própria de login (não usa mais Basic Auth). A senha é o secret `APP_PASSWORD` (o mesmo de antes). Ao entrar, o Worker grava o cookie `sessao` (HttpOnly, Secure, SameSite=Strict, 30 dias), assinado com HMAC-SHA256 com chave formada pelo secret aleatório `SESSION_SECRET` + `APP_PASSWORD`: **trocar qualquer um dos dois encerra todas as sessões** (use isso se perder o celular). Senha errada espera 1 s e devolve 401; mais de 5 tentativas por minuto do mesmo IP dão 429 (na nuvem o contador da Cloudflare é aproximado, por local, então o bloqueio pode demorar algumas tentativas a mais). O botão **Sair** apaga o cookie e o cache de dados do aparelho.
+Sem sessão, páginas redirecionam para `/login` e `/api/*` devolve 401. Só `/login`, `POST /api/login`, `/manifest.webmanifest`, `/sw.js` e os ícones são públicos.
+
+## Instalar no celular
+
+- **iPhone (Safari)**: abra o endereço, toque em Compartilhar → **Adicionar à Tela de Início**. O painel mostra essa dica uma vez (dá para fechar).
+- **Android/desktop (Chrome)**: toque em **Instalar** no cabeçalho (ou no menu do navegador → Instalar app).
+- Sem internet, o app abre com a última cópia dos dados e mostra a faixa "Offline: dados de dd/mm HH:mm".
+
+## Migração do banco (tabela de ajustes)
+
+A tabela `ajustes` (categoria trocada e "não é gasto") foi adicionada ao `schema.sql` com `CREATE TABLE IF NOT EXISTS`, então não apaga nada. No banco já em uso, rode **uma vez** antes do deploy:
+
+```powershell
+pnpm db:remote
+```
+
+(Local: `pnpm db:local`.) A sincronização nunca altera `ajustes`.
+
+## Gráficos, ajustes e faturas
+
+- Gastos por mês (6 meses) e saldo da conta corrente (6 meses) usam `GET /api/historico`. O saldo é reconstruído de trás para frente (saldo atual menos as transações), não é saldo real gravado.
+- Tocar numa transação abre o detalhe: dá para trocar a categoria e marcar/desmarcar "Não é gasto" (`PUT /api/ajustes/:id`). O ajuste vale mais que a regra automática.
+- Tocar numa fatura lista as compras dela (`GET /api/fatura`). A API do MCP.AI **não** traz campo que ligue compra a fatura (as transações do cartão só têm id, data, descrição, valor, status, categoria) nem a data de fechamento. Por isso a fatura abrange as compras entre dois fechamentos **estimados em 7 dias antes do vencimento** (`CORTE_FATURA` em `public/index.html`); a fatura aberta inclui as parcelas futuras. O valor oficial é sempre o `totalAmount` da tabela. Se o seu cartão fecha em outro prazo, ajuste a constante.
 
 Opcional, camada extra: Cloudflare Zero Trust → Access → Applications → adicione o domínio `meu-banco.SEU-USUARIO.workers.dev` com política "e-mail = o seu" (gratuito até 50 usuários). A senha do Worker continua valendo.
 
 ## Se der erro
+
+- **Voltou para a tela de login sozinho**: a sessão expirou (30 dias) ou a `APP_PASSWORD` mudou. Entre de novo.
+- **Painel antigo no celular depois do deploy**: feche e abra o app; o service worker troca de versão no próximo acesso com internet.
+- **Botão Instalar não aparece**: só em Chrome/Android com HTTPS; no iPhone use Compartilhar → Adicionar à Tela de Início.
+- **"no such table: ajustes"**: faltou `pnpm db:remote`.
 
 A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 
@@ -100,7 +137,7 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 ## Segurança
 
 - A API key do MCP.AI só existe como secret no Worker; o navegador nunca a recebe e ela não está em nenhum arquivo do projeto. `.dev.vars` está no `.gitignore`.
-- Todas as rotas, inclusive o HTML, passam pela senha (`run_worker_first = true`). Comparação em tempo constante.
+- Todas as rotas, inclusive o HTML, exigem sessão (`run_worker_first = true`), exceto as públicas do login/PWA. Senha comparada em tempo constante; POST/PUT conferem o `Origin`.
 - Dados do banco são exibidos só com `textContent` (sem `innerHTML`), com CSP restrita e `no-store`.
 
 ## Regras do painel
