@@ -57,10 +57,12 @@ export default {
   },
 
   async scheduled(evento, env, ctx) {
-    // Crons em UTC (BRT = UTC-3): "0 10 * * *" = 07h, fim do silêncio; "0 23 * * SUN" = domingo 20h, resumo.
-    if (evento.cron === "0 10 * * *") ctx.waitUntil(enviarPendentes(env));
-    else if (evento.cron === "0 23 * * SUN") ctx.waitUntil(alertaSemanal(env));
-    else ctx.waitUntil(sincronizar(env, "cron"));
+    // Um cron só (plano gratuito: 5 por conta). Cada sincronização envia os alertas pendentes, então os retidos
+    // pelo silêncio saem no primeiro tick depois das 7h BRT (09h07). O tick de segunda 00h07 UTC (domingo 21h07 BRT)
+    // também manda o resumo semanal.
+    const t = new Date(evento.scheduledTime);
+    const resumo = t.getUTCDay() === 1 && t.getUTCHours() === 0;
+    ctx.waitUntil(sincronizar(env, "cron").finally(() => resumo && alertaSemanal(env)));
   },
 };
 

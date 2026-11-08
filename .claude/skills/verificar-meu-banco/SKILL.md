@@ -21,7 +21,7 @@ description: Verifica o Meu Banco localmente (Worker + D1 + mock da API do MCP.A
    - Limite **300** (não 500: a parcela de 750 do mock cai fora do ciclo, então 500 dá ~66%): `/api/atualizar` e `/api/ciclo` → `percentual` > 100. `wrangler d1 execute meu-banco --local --command "SELECT chave FROM notificacoes"` mostra `limite80:` e `limite100:`; repetir `/api/atualizar` não cria linhas novas.
    - `POST /api/push {"endpoint":"http://localhost:8788/push/abc"}` ok; `POST /api/push/teste` → `enviados:1`; `curl localhost:8788/push/_ultimo` → `total` ≥ 1, `authorization` começando com `vapid t=` e `ttl` `"86400"`. Endpoint `.../push/morto` + `/api/push/teste` → a linha some de `push_inscricoes`. Origin `https://mal.com` em `/api/push/teste` → **403**.
    - `POST /api/notificacoes/entregar` → até 5 notificações; a segunda chamada → lista vazia.
-   - `curl "localhost:8787/__scheduled?cron=0+23+*+*+SUN"` → 200 e uma linha `semana:<hoje>` em `notificacoes`.
+   - `curl "localhost:8787/cdn-cgi/handler/scheduled?cron=7+*/3+*+*+*&time=1794182820000"` (segunda 2026-11-09 00h07 UTC; o `/__scheduled` ignora `time`) → 200 e uma linha `semana:<hoje>` em `notificacoes`; com `time=1794193620000` (outra hora) não cria `semana:`.
    - `pnpm -s test` (= `node --test test/*.test.mjs`) sem falhas e `node --check src/index.js`.
 4. Reconexão: reinicie o mock com `MOCK_RECONNECT=1`, rode `/api/atualizar` e confira em `/api/dados` → `snapshots.avisos` com **1** item e `reconnect_url` https.
 5. Build: `pnpm exec wrangler deploy --dry-run` sem erro.

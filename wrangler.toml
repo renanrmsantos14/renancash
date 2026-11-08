@@ -17,7 +17,7 @@ database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 
 # Crons em UTC (BRT = UTC-3): sincronização a cada 3 h (minuto 7 para fugir do pico), 07h (fim do silêncio) e domingo 20h (resumo semanal).
 [triggers]
-crons = ["7 */3 * * *", "0 10 * * *", "0 23 * * SUN"]
+crons = ["7 */3 * * *"]
 
 # Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
 [dev]
@@ -31,7 +31,7 @@ enabled = true
 API_URL = "https://api.mcp.ai/api/openfinance"
 IMPORT_DAYS = "180"
 VAPID_ASSUNTO = "https://meu-banco.renanrmsantos14.workers.dev"
-VAPID_PUBLICA = ""
+VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"
 
 # Limite de tentativas de login por IP (5 por minuto).
 [[ratelimits]]

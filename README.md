@@ -83,7 +83,7 @@ Na primeira vez a Cloudflare pede para escolher o subdomínio `workers.dev`.
 
 1. Entre em `https://meu-banco.SEU-USUARIO.workers.dev` com a `APP_PASSWORD`, depois abra `/api/ferramentas`. Deve mostrar suas conexões (Banco Inter) e a lista de endpoints. Se der erro aqui, o problema é a API key.
 2. Abra a raiz do site e clique **Atualizar**. A primeira carga busca 180 dias (`IMPORT_DAYS`) e pode levar até alguns minutos por causa do `force_sync`.
-3. Daí em diante o cron atualiza sozinho a cada 3 horas (minuto 7 das horas 0, 3, 6… UTC = 21h, 0h, 3h… em Brasília). Há mais dois crons: o fim do silêncio (7h) e o resumo semanal (domingo 20h).
+3. Daí em diante o cron atualiza sozinho a cada 3 horas (minuto 7 das horas 0, 3, 6… UTC = 21h, 0h, 3h… em Brasília). O mesmo cron envia os alertas pendentes e, no domingo às 21h07, o resumo semanal.
 4. No celular, veja "Instalar no celular" abaixo.
 
 ## Login
@@ -146,8 +146,8 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
   - limite em 80% e em 100% (uma vez por ciclo cada);
   - gasto fora do padrão: compra acima de 2× a média da categoria nos últimos 6 meses, com mínimo de R$ 100 e pelo menos 3 compras de histórico, olhando só os últimos 3 dias;
   - banco pedindo reconexão (uma vez por dia enquanto durar);
-  - resumo semanal, domingo às 20h (cron `0 23 * * SUN`, UTC).
-- **Silêncio das 22h às 7h** (America/Sao_Paulo): o alerta é gravado e só sai às 7h (cron `0 10 * * *`). A sincronização continua a cada 3 horas.
+  - resumo semanal, domingo às 21h07 (no tick de segunda 00h07 UTC do cron de sincronização).
+- **Silêncio das 22h às 7h** (America/Sao_Paulo): o alerta é gravado e sai na primeira sincronização depois das 7h (09h07). Há um cron só, `7 */3 * * *` (o plano gratuito da Cloudflare permite 5 por conta).
 - **Push só com Chrome no Android** (PWA instalado ou não). No iPhone não há push. A notificação não leva conteúdo: o service worker busca o texto ao receber o aviso. Ative em **Ajustar → Ativar notificações** e use **Enviar notificação de teste** para conferir.
 
 ### Chaves VAPID (uma vez, na publicação)
