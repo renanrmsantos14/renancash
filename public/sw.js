@@ -3,7 +3,7 @@
 const VERSAO = "v0.0.4";
 const SHELL = "shell-" + VERSAO;
 const DADOS = "dados-" + VERSAO;
-const ARQUIVOS = ["/", "/login", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
+const ARQUIVOS = ["/", "/login", "/regras.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
 const ROTAS_DADOS = /^\/api\/(dados|historico|fatura)$/;
 
 self.addEventListener("install", (e) => {

@@ -165,7 +165,8 @@
 </div>
 <span id="versao">v0.0.4 · 08/11/2026 18:55</span>
 
-<script>
+<script type="module">
+import { CATEGORIAS, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe, valorParcela } from "/regras.js";
 "use strict";
 const $ = (id) => document.getElementById(id);
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -187,48 +188,6 @@ function h(tag, attrs, ...filhos) {
   return el;
 }
 
-const CATEGORIAS = {
-  "Income": "Receitas", "Salary": "Salário", "Retirement": "Aposentadoria", "Entrepreneurial activities": "Atividade empresarial",
-  "Government aid": "Auxílio do governo", "Non-recurring income": "Receita eventual", "Loans and financing": "Empréstimos e financiamentos",
-  "Late payment and overdraft costs": "Juros de atraso e cheque especial", "Interests charged": "Juros cobrados", "Financing": "Financiamento",
-  "Real estate financing": "Financiamento imobiliário", "Vehicle financing": "Financiamento de veículo", "Student loan": "Crédito estudantil",
-  "Loans": "Empréstimos", "Investments": "Investimentos", "Automatic investment": "Investimento automático", "Fixed income": "Renda fixa",
-  "Mutual funds": "Fundos de investimento", "Variable income": "Renda variável", "Margin": "Margem", "Proceeds interests and dividends": "Rendimentos e dividendos",
-  "Pension": "Previdência", "Savings": "Poupança", "Same person transfer": "Transferência entre minhas contas", "Transfers": "Transferências",
-  "Transfer - Bank Slip": "Transferência - boleto", "Transfer - Cash": "Transferência - dinheiro", "Transfer - Check": "Transferência - cheque",
-  "Transfer - DOC": "Transferência - DOC", "Transfer - Foreign Exchange": "Transferência - câmbio", "Transfer - Internal": "Transferência interna",
-  "Transfer - PIX": "Pix", "Transfer - TED": "TED", "Third party transfers": "Transferência para terceiros",
-  "Third party transfer - Bank Slip": "Boleto para terceiros", "Third party transfer - Debit Card": "Débito para terceiros",
-  "Third party transfer - DOC": "DOC para terceiros", "Third party transfer - PIX": "Pix para terceiros", "Third party transfer - TED": "TED para terceiros",
-  "Credit card payment": "Pagamento de fatura", "Legal obligations": "Obrigações legais", "Blocked balances": "Saldo bloqueado", "Alimony": "Pensão alimentícia",
-  "Services": "Serviços", "Telecommunications": "Telecomunicações", "Internet": "Internet", "Mobile": "Celular", "TV": "TV",
-  "Education": "Educação", "Online courses": "Cursos online", "University": "Faculdade", "School": "Escola", "Kindergarten": "Creche",
-  "Wellness and fitness": "Bem-estar e academia", "Gyms and fitness centers": "Academia", "Sports practice": "Esportes", "Wellness": "Bem-estar",
-  "Tickets": "Ingressos", "Stadiums and arenas": "Estádios e arenas", "Landmarks and museums": "Museus e atrações", "Cinema, theater and concerts": "Cinema, teatro e shows",
-  "Shopping": "Compras", "Online shopping": "Compras online", "Electronics": "Eletrônicos", "Pet supplies and vet": "Pet e veterinário",
-  "Clothing": "Roupas", "Kids and toys": "Infantil e brinquedos", "Bookstore": "Livraria", "Sports goods": "Artigos esportivos", "Office supplies": "Papelaria",
-  "Cashback": "Cashback", "Digital services": "Serviços digitais", "Gaming": "Jogos", "Video streaming": "Streaming de vídeo", "Music streaming": "Streaming de música",
-  "Groceries": "Supermercado", "Food and drinks": "Alimentação", "Eating out": "Restaurantes", "Food delivery": "Delivery",
-  "Travel": "Viagem", "Airport and airlines": "Aéreo", "Accommodation": "Hospedagem", "Mileage programs": "Programas de milhas", "Bus tickets": "Passagens de ônibus",
-  "Donations": "Doações", "Gambling": "Apostas", "Lottery": "Loteria", "Online bet": "Apostas online",
-  "Taxes": "Impostos", "Income taxes": "Imposto de renda", "Taxes on investments": "Impostos sobre investimentos", "Tax on financial operations": "IOF",
-  "Bank fees": "Tarifas bancárias", "Account fees": "Tarifa de conta", "Wire transfer fees and ATM fees": "Tarifas de transferência e saque", "Credit card fees": "Tarifas do cartão",
-  "Housing": "Moradia", "Rent": "Aluguel", "Utilities": "Contas da casa", "Water": "Água", "Electricity": "Energia", "Gas": "Gás", "Houseware": "Casa e utilidades",
-  "Urban land and building tax": "IPTU", "Healthcare": "Saúde", "Dentist": "Dentista", "Pharmacy": "Farmácia", "Optometry": "Ótica",
-  "Hospital clinics and labs": "Hospitais, clínicas e exames", "Transportation": "Transporte", "Taxi and ride-hailing": "Táxi e aplicativos",
-  "Public transportation": "Transporte público", "Car rental": "Aluguel de carro", "Bicycle": "Bicicleta", "Automotive": "Automotivo",
-  "Gas stations": "Combustível", "Parking": "Estacionamento", "Tolls and in vehicle payment": "Pedágio e tag", "Vehicle ownership taxes and fees": "IPVA e taxas do veículo",
-  "Vehicle maintenance": "Manutenção do veículo", "Traffic tickets": "Multas de trânsito", "Insurance": "Seguros", "Life insurance": "Seguro de vida",
-  "Home insurance": "Seguro residencial", "Health insurance": "Plano de saúde", "Vehicle insurance": "Seguro do veículo", "Leisure": "Lazer", "Other": "Outros",
-};
-const traduzir = (c) => (c ? CATEGORIAS[c] || c : "Sem categoria");
-
-// Não é gasto: pagamento de fatura, investimentos/poupança e transferência entre minhas contas.
-const CAT_FORA = /credit card payment|same person transfer|investment|fixed income|mutual funds|variable income|savings|pension|margin/i;
-const DESC_FORA = /pagamento (de |da )?fatura|pgto\.? ?fatura|pagamento recebido|aplica[cç][aã]o|resgate|\bcdb\b|\blci\b|\blca\b|poupan[cç]a|porquinho|tesouro direto/i;
-const regraAuto = (t) => CAT_FORA.test(t.category || "") || DESC_FORA.test(t.description || "");
-// O ajuste feito no painel (gasto = 1 ou 0) vale mais que a regra automática, nos dois sentidos.
-const naoEhGasto = (t) => (t.ajuste_gasto == null ? regraAuto(t) : !t.ajuste_gasto);
 const aplicarAjuste = (t) => { t.cat_orig = t.category; if (t.ajuste_categoria) t.category = t.ajuste_categoria; return t; };
 
 const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
@@ -239,8 +198,7 @@ let D = null; // /api/dados
 let H = null; // /api/historico
 let porId = {};
 const ehCartao = (t) => porId[t.account_id]?.type === "CREDIT";
-// Gasto de uma transação: débitos da conta e compras do cartão, sem parcelas futuras nem o que "não é gasto".
-const valorGasto = (t) => (t.scheduled || naoEhGasto(t) ? 0 : ehCartao(t) ? t.amount : t.amount < 0 ? -t.amount : 0);
+const valorGasto = (t) => gastoDe(t, ehCartao(t));
 
 function somarDias(iso, n) {
   const d = new Date(iso + "T12:00:00Z");
