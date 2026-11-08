@@ -1,5 +1,5 @@
 import { ApiCliente } from "./api.js";
-import { resumoCiclo, normalizar } from "./ciclo.js";
+import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { enviarPush } from "./push.js";
 
@@ -8,6 +8,7 @@ const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâ
 const TAM_PAGINA = 500; // máximo da API
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
 const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status que pede novo login (OUTDATED = só falha temporária)
+const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
@@ -148,12 +149,6 @@ function json(obj, status = 200, extra = {}) {
 const agora = () => new Date().toISOString();
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 
-function somarDias(isoData, dias) {
-  const d = new Date(isoData + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
-}
-
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
@@ -281,6 +276,8 @@ async function inscreverPush(request, env, url) {
   return json({ ok: true });
 }
 
+const validadeAlerta = () => new Date(Date.now() - VALIDADE_ALERTA_MS).toISOString();
+
 function gravarAlertas(db, alertas) {
   if (!alertas.length) return null;
   return db.batch(alertas.map((a) =>
@@ -290,7 +287,7 @@ function gravarAlertas(db, alertas) {
 // Um push (sem conteúdo) por inscrição quando há alerta não enviado. Respeita o silêncio das 22h às 7h.
 async function enviarPendentes(env, ignorarSilencio = false) {
   if (!env.VAPID_PRIVADA || (!ignorarSilencio && emSilencio(new Date()))) return 0;
-  const pend = await env.DB.prepare("SELECT COUNT(*) n FROM notificacoes WHERE enviada_em IS NULL").first();
+  const pend = await env.DB.prepare("SELECT COUNT(*) n FROM notificacoes WHERE enviada_em IS NULL AND criada > ?1").bind(validadeAlerta()).first();
   if (!pend.n) return 0;
   const { results } = await env.DB.prepare("SELECT endpoint FROM push_inscricoes").all();
   let enviados = 0;
@@ -325,8 +322,8 @@ async function testePush(request, env, url) {
 async function entregarNotificacoes(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
   const { results } = await env.DB.prepare(
-    "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL ORDER BY criada DESC LIMIT 5) RETURNING chave, titulo, corpo"
-  ).bind(agora()).all();
+    "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 5) RETURNING chave, titulo, corpo"
+  ).bind(agora(), validadeAlerta()).all();
   return json({ notificacoes: results });
 }
 

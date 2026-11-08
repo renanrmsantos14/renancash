@@ -243,7 +243,7 @@ async function carregar(mes, comHistorico = true) {
   const [dados, hist, ciclo] = await Promise.all([
     api("/api/dados" + (mes ? "?mes=" + encodeURIComponent(mes) : "")),
     comHistorico ? api("/api/historico").catch(() => null) : H,
-    api("/api/ciclo").catch(() => null),
+    comHistorico ? api("/api/ciclo").catch(() => null) : C, // trocar de mês não muda o ciclo
   ]);
   D = dados;
   C = ciclo;
@@ -513,6 +513,7 @@ function abrirConfigCiclo(gatilho) {
       await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ limite: v }) });
       C = await api("/api/ciclo"); renderCiclo();
       sheet.salvando = false; fecharSheet();
+      $("cicloConfig")?.focus(); // renderCiclo trocou o botão "Ajustar": devolve o foco ao novo
     } catch (e) { sheet.salvando = false; salvar.disabled = false; falhar(e); }
   });
 
