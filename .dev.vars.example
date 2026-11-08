@@ -3,3 +3,9 @@ API_URL=http://localhost:8788/api/openfinance
 MCP_API_KEY=sk_live_teste
 APP_PASSWORD=teste123
 SESSION_SECRET=segredo-local-de-teste
+# Push local: permite endpoints http://localhost (o mock em 8788 simula o serviço de push).
+PUSH_HTTP_LOCAL=1
+# Para testar o envio, gere um par SÓ de teste (não é a chave de produção) e preencha:
+#   node scripts/vapid.mjs vapid-local.txt > vapid-local.json
+#   VAPID_PUBLICA=<conteúdo de vapid-local.txt>
+#   VAPID_PRIVADA=<conteúdo de vapid-local.json em uma linha>

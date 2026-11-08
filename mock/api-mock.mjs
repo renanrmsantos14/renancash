@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 
 const PORTA = Number(process.env.PORT || 8788);
 const TOKEN = process.env.MOCK_TOKEN || "sk_live_teste";
+let ultimoPush = { total: 0, authorization: null, ttl: null }; // último push recebido (para a verificação)
 const PEDIR_LOGIN = process.env.MOCK_RECONNECT === "1"; // simula banco pedindo novo login
 
 const dia = (delta) => {
@@ -89,6 +90,12 @@ createServer(async (req, res) => {
   const enviar = (status, obj) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
   const rota = req.url.replace(/^\/api\/openfinance\//, "").split("?")[0];
   if (req.method === "GET" && rota === "_endpoints") return enviar(200, { endpoints: Object.keys(rotas).map((r) => ({ id: r })) });
+  // Simula o serviço de push do navegador: /push/morto responde 410 (inscrição expirada); GET devolve o último push.
+  if (req.url.startsWith("/push/")) {
+    if (req.method === "GET") return enviar(200, ultimoPush);
+    ultimoPush = { total: ultimoPush.total + 1, authorization: req.headers.authorization || null, ttl: req.headers.ttl || null };
+    return enviar(req.url.includes("morto") ? 410 : 201, {});
+  }
   if (req.method !== "POST") return enviar(405, { error: { code: "method_not_allowed" } });
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return enviar(401, { error: { code: "unauthorized", message: "invalid api key" } });
   const fn = rotas[rota];

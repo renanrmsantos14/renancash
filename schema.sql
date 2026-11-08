@@ -53,3 +53,24 @@ CREATE TABLE IF NOT EXISTS ajustes (
   gasto          INTEGER,                 -- NULL = regra automática | 1 = é gasto | 0 = não é gasto
   updated_at     TEXT NOT NULL
 );
+
+-- Configuração do ciclo: chave "limite" (número) e "salario" (descrição normalizada do crédito do salário).
+CREATE TABLE IF NOT EXISTS config (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
+-- Inscrições de Web Push do navegador (só o endpoint: o push vai sem conteúdo).
+CREATE TABLE IF NOT EXISTS push_inscricoes (
+  endpoint TEXT PRIMARY KEY,
+  criada   TEXT NOT NULL
+);
+-- Alertas. A chave única evita repetir (ex.: limite80:2026-11-05). enviada_em = push enviado; entregue_em = mostrado pelo service worker.
+CREATE TABLE IF NOT EXISTS notificacoes (
+  chave       TEXT PRIMARY KEY,
+  titulo      TEXT NOT NULL,
+  corpo       TEXT NOT NULL,
+  criada      TEXT NOT NULL,
+  enviada_em  TEXT,
+  entregue_em TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notif_criada ON notificacoes(criada);

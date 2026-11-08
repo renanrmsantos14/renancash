@@ -15,9 +15,9 @@ binding = "DB"
 database_name = "meu-banco"
 database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 
-# Atualização automática a cada 3 horas (horário UTC; minuto 7 para fugir do pico).
+# Crons em UTC (BRT = UTC-3): sincronização a cada 3 h (minuto 7 para fugir do pico), 07h (fim do silêncio) e domingo 20h (resumo semanal).
 [triggers]
-crons = ["7 */3 * * *"]
+crons = ["7 */3 * * *", "0 10 * * *", "0 23 * * SUN"]
 
 # Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
 [dev]
@@ -30,6 +30,8 @@ enabled = true
 [vars]
 API_URL = "https://api.mcp.ai/api/openfinance"
 IMPORT_DAYS = "180"
+VAPID_ASSUNTO = "https://meu-banco.renanrmsantos14.workers.dev"
+VAPID_PUBLICA = ""
 
 # Limite de tentativas de login por IP (5 por minuto).
 [[ratelimits]]
