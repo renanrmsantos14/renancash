@@ -102,6 +102,24 @@
   dl.det dt { color: var(--suave); } dl.det dd { margin: 0; overflow-wrap: anywhere; }
   .campo { display: block; margin-top: 12px; font-size: 13px; color: var(--suave); font-weight: 600; }
   .campo select { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--texto); }
+  #ciclo { margin-bottom: 12px; }
+  #ciclo .barra { height: 10px; margin: 10px 0 8px; }
+  #ciclo .barra span { display: block; height: 100%; border-radius: inherit; background: var(--verde); transform-origin: left; transform: scaleX(var(--p, 0));
+    transition: transform .6s cubic-bezier(.23, 1, .32, 1), background-color .2s ease-out; }
+  #ciclo .barra.alerta span { background: var(--laranja); }
+  #ciclo .barra.estourado span { background: var(--vermelho); }
+  #ciclo .sub { color: var(--suave); font-size: 13px; }
+  #ciclo b { font-variant-numeric: tabular-nums; }
+  #ciclo p { margin: 6px 0; }
+  .ciclo-topo { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ciclo-topo h2 { margin: 0; }
+  .ciclo-topo .ghost { margin-left: auto; min-height: 44px; }
+  .alertas { padding-left: 18px; margin: 6px 0; }
+  .alertas li + li { margin-top: 6px; }
+  .campo input { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--texto); }
+  button { transition: transform .16s cubic-bezier(.23, 1, .32, 1); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  @media (prefers-reduced-motion: reduce) { #ciclo .barra span, button { transition: none; } }
   .marca { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; }
   .marca input { width: 20px; height: 20px; min-height: 0; }
   @media (max-width: 640px) {
@@ -132,6 +150,7 @@
     <button id="fecharDica" class="ghost" type="button" aria-label="Fechar dica">×</button>
   </div>
   <div id="avisos"></div>
+  <section class="card" id="ciclo" aria-live="polite"></section>
   <div class="grid" id="cards"></div>
   <div class="duas">
     <section class="card"><h2>Gastos por mês</h2><div id="varGastos"></div><div id="graficoGastos"></div></section>
@@ -195,6 +214,7 @@ const STATUS_TX = { POSTED: "Lançada", PENDING: "Pendente" };
 const CORTE_FATURA = 7; // a API não traz o fechamento nem liga a compra à fatura: estima-se o fechamento 7 dias antes do vencimento
 
 let D = null; // /api/dados
+let C = null; // /api/ciclo
 let H = null; // /api/historico
 let porId = {};
 const ehCartao = (t) => porId[t.account_id]?.type === "CREDIT";
@@ -221,11 +241,13 @@ async function api(url, opts) {
 }
 
 async function carregar(mes, comHistorico = true) {
-  const [dados, hist] = await Promise.all([
+  const [dados, hist, ciclo] = await Promise.all([
     api("/api/dados" + (mes ? "?mes=" + encodeURIComponent(mes) : "")),
     comHistorico ? api("/api/historico").catch(() => null) : H,
+    api("/api/ciclo").catch(() => null),
   ]);
   D = dados;
+  C = ciclo;
   D.transacoes.forEach(aplicarAjuste);
   if (comHistorico) hist?.transacoes.forEach(aplicarAjuste); // H reaproveitado já tem o ajuste aplicado
   H = hist;
@@ -286,6 +308,7 @@ function render() {
   $("cards").replaceChildren(...cards);
 
   renderGraficos();
+  renderCiclo();
 
   // Gastos por categoria
   const porCat = {};
@@ -416,6 +439,126 @@ function graficoLinha(meses, valores) {
   return svg;
 }
 
+// ---------- Ciclo do salário ----------
+
+// Começa no valor anterior (0 na primeira pintura) e desliza até o novo no frame seguinte.
+function barraPreenchida(p, de = "0") {
+  const s = h("span", {});
+  s.style.setProperty("--p", de);
+  requestAnimationFrame(() => requestAnimationFrame(() => s.style.setProperty("--p", String(p / 100))));
+  return s;
+}
+
+function renderCiclo() {
+  const el = $("ciclo");
+  const de = el.querySelector(".barra span")?.style.getPropertyValue("--p") || "0";
+  if (!C) return el.replaceChildren();
+  const c = C.ciclo;
+  const p = c.percentual == null ? null : Math.min(c.percentual, 100);
+  const nivel = c.percentual >= 100 ? "estourado" : c.percentual >= 80 ? "alerta" : "";
+  const ajustar = h("button", { type: "button", class: "ghost", id: "cicloConfig" }, "Ajustar");
+  ajustar.addEventListener("click", () => abrirConfigCiclo(ajustar));
+  const partes = [
+    h("div", { class: "ciclo-topo" },
+      h("h2", {}, "Ciclo " + dataBR(c.inicio).slice(0, 5) + " → " + dataBR(c.fim).slice(0, 5)),
+      h("span", { class: "sub" }, c.diasRestantes === 1 ? "falta 1 dia" : "faltam " + c.diasRestantes + " dias"),
+      ajustar),
+    c.semSalario ? h("div", { class: "aviso" }, "Usando o mês do calendário. Para seguir o salário, abra o crédito do salário na lista e toque em \"Este é o meu salário\".") : null,
+    c.limite == null
+      ? h("p", {}, "Gasto no ciclo: ", h("b", {}, moeda(c.consumido)), ". Defina um limite em Ajustar.")
+      : h("div", {},
+          h("div", { class: "barra " + nivel, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.round(p), "aria-label": "Uso do limite do ciclo" },
+            barraPreenchida(p, de)),
+          h("p", {}, h("b", {}, moeda(c.consumido)), " de " + moeda(c.limite) + " (" + Math.floor(c.percentual) + "%) · ",
+            c.falta >= 0 ? "falta " + moeda(c.falta) : h("b", { class: "neg" }, moeda(-c.falta) + " acima"))),
+    c.parcelasCiclo || c.parcelasDepois
+      ? h("p", { class: "sub" }, "Inclui " + moeda(c.parcelasCiclo) + " de parcelas que caem neste ciclo · " + moeda(c.parcelasDepois) + " já comprometidos nos próximos")
+      : null,
+    C.notificacoes.length
+      ? h("details", {}, h("summary", {}, "Últimos alertas"),
+          h("ul", { class: "alertas" }, C.notificacoes.map((n) => h("li", {}, h("b", {}, n.titulo), " " + n.corpo, h("span", { class: "sub" }, " · " + dataHora(n.criada))))))
+      : null,
+  ];
+  el.replaceChildren(...partes.filter(Boolean)); // replaceChildren converteria null em texto
+}
+
+const b64uParaBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+async function inscricaoAtual() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  return (await navigator.serviceWorker.ready).pushManager.getSubscription();
+}
+
+async function abrirConfigCiclo(gatilho) {
+  const ini = C.ciclo.limite == null ? "" : String(C.ciclo.limite);
+  const inp = h("input", { id: "cfgLimite", type: "number", inputmode: "decimal", min: "1", step: "0.01", placeholder: "Ex.: 4000" });
+  inp.value = ini;
+  const erro = h("div", { class: "aviso erro", role: "alert", hidden: true });
+  const status = h("p", { class: "sub", role: "status" });
+  const salvar = h("button", { type: "button" }, "Salvar limite");
+  const pushBtn = h("button", { type: "button", class: "sec" });
+  const teste = h("button", { type: "button", class: "ghost", hidden: true }, "Enviar notificação de teste");
+  const sujo = () => inp.value !== ini;
+  const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+
+  const sub = await inscricaoAtual().catch(() => null);
+  const suportado = "PushManager" in window && C.push.publica;
+  pushBtn.textContent = sub ? "Desativar notificações" : "Ativar notificações";
+  pushBtn.hidden = !suportado;
+  teste.hidden = !sub;
+  status.textContent = !suportado ? "Notificações indisponíveis neste navegador." : Notification.permission === "denied" ? "Notificações bloqueadas: libere nas configurações do navegador." : "";
+
+  salvar.addEventListener("click", async () => {
+    if (!sujo()) return fecharSheet();
+    const v = inp.value.trim() === "" ? null : Number(inp.value);
+    if (v !== null && !(v > 0)) return falhar(new Error("Informe um valor maior que zero, ou deixe vazio para remover."));
+    sheet.salvando = true; salvar.disabled = true; erro.hidden = true;
+    try {
+      await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ limite: v }) });
+      C = await api("/api/ciclo"); renderCiclo();
+      sheet.salvando = false; fecharSheet();
+    } catch (e) { sheet.salvando = false; salvar.disabled = false; falhar(e); }
+  });
+
+  pushBtn.addEventListener("click", async () => {
+    pushBtn.disabled = true; erro.hidden = true; status.textContent = "";
+    try {
+      const atual = await inscricaoAtual();
+      if (atual) {
+        await api("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: atual.endpoint }) });
+        await atual.unsubscribe();
+        pushBtn.textContent = "Ativar notificações"; teste.hidden = true; status.textContent = "Notificações desativadas.";
+      } else {
+        if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão negada. Libere as notificações nas configurações do navegador.");
+        const nova = await (await navigator.serviceWorker.ready).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uParaBytes(C.push.publica) });
+        await api("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: nova.endpoint }) });
+        pushBtn.textContent = "Desativar notificações"; teste.hidden = false; status.textContent = "Notificações ativadas neste aparelho.";
+      }
+    } catch (e) { falhar(e); }
+    pushBtn.disabled = false;
+  });
+
+  teste.addEventListener("click", async () => {
+    teste.disabled = true; erro.hidden = true;
+    try {
+      const r = await api("/api/push/teste", { method: "POST" });
+      status.textContent = r.enviados ? "Teste enviado; deve chegar em alguns segundos." : "Nenhum aparelho recebeu. Desative e ative de novo.";
+    } catch (e) { falhar(e); }
+    teste.disabled = false;
+  });
+
+  abrirSheet({
+    titulo: "Ciclo e alertas", gatilho, sujo,
+    corpo: h("div", {},
+      h("label", { class: "campo", for: "cfgLimite" }, "Limite total do ciclo (R$)", inp),
+      h("p", { class: "sub" }, C.ciclo.salario ? "Salário: " + C.ciclo.salario : "Salário ainda não marcado."),
+      erro,
+      h("div", { class: "botoes" }, salvar, pushBtn, teste),
+      status,
+      h("p", { class: "sub" }, "Alertas: 80% e 100% do limite, gasto acima do normal, banco pedindo reconexão e resumo no domingo às 20h. Silêncio das 22h às 7h.")),
+  });
+}
+
 // ---------- Lista de transações (usada no painel e na fatura) ----------
 
 function ativar(el, fn) {
@@ -519,6 +662,16 @@ function abrirDetalhe(t, gatilho) {
   const cancelar = h("button", { type: "button", class: "sec" }, "Cancelar");
   const sujo = () => sel.value !== catIni || chk.checked !== gastoIni;
   const campos = [salvar, cancelar, sel, chk, $("sheetX")];
+  const ehSalario = !cartao && t.amount > 0 && !t.scheduled;
+  const marcarSalario = ehSalario ? h("button", { type: "button", class: "ghost" }, "Este é o meu salário") : null;
+  marcarSalario?.addEventListener("click", async () => {
+    marcarSalario.disabled = true; erro.hidden = true;
+    try {
+      await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ salario_id: t.id }) });
+      C = await api("/api/ciclo"); renderCiclo();
+      marcarSalario.textContent = "Salário marcado ✓";
+    } catch (e) { erro.textContent = e.message; erro.hidden = false; marcarSalario.disabled = false; }
+  });
 
   cancelar.addEventListener("click", tentarFechar);
   salvar.addEventListener("click", async () => {
@@ -556,7 +709,7 @@ function abrirDetalhe(t, gatilho) {
       h("label", { class: "campo", for: "detCategoria" }, "Categoria", sel),
       h("label", { class: "marca", for: "detNaoGasto" }, chk, "Não é gasto (fora dos gráficos e do total)"),
       erro,
-      h("div", { class: "botoes" }, salvar, cancelar)),
+      h("div", { class: "botoes" }, salvar, cancelar, marcarSalario)),
   });
 }
 
