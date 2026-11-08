@@ -44,7 +44,6 @@ export const naoEhGasto = (t) => (t.ajuste_gasto == null ? regraAuto(t) : !t.aju
 
 // Valor que entra nos totais de gasto. Cartão: compra positiva, estorno negativo. Conta: só saída (amount < 0).
 // Parcela futura (scheduled) fica fora: ela entra pelo valorParcela no ciclo em que cai.
-export const valorGasto = (t, cartao) =>
-  t.scheduled || naoEhGasto(t) ? 0 : cartao ? t.amount : t.amount < 0 ? -t.amount : 0;
-export const valorParcela = (t, cartao) =>
-  !t.scheduled || naoEhGasto(t) ? 0 : cartao ? t.amount : t.amount < 0 ? -t.amount : 0;
+const valorBruto = (t, cartao) => (cartao ? t.amount : t.amount < 0 ? -t.amount : 0);
+export const valorGasto = (t, cartao) => (t.scheduled || naoEhGasto(t) ? 0 : valorBruto(t, cartao));
+export const valorParcela = (t, cartao) => (!t.scheduled || naoEhGasto(t) ? 0 : valorBruto(t, cartao));

@@ -1,6 +1,8 @@
 // src/ciclo.js — ciclo do salário e consumo do limite (funções puras, testadas em test/ciclo.test.mjs).
 import { valorGasto, valorParcela } from "../public/regras.js";
 
+export const idsCartao = (contas) => new Set(contas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+
 export const normalizar = (d) =>
   (d || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -36,7 +38,7 @@ const dias = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 864000
 const centavos = (v) => Math.round(v * 100) / 100;
 
 export function resumoCiclo({ transacoes, contas, config, hoje }) {
-  const cartao = new Set(contas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+  const cartao = idsCartao(contas);
   const { inicio, fim, semSalario } = cicloAtual(transacoes, contas, config.salario || null, hoje);
   let gasto = 0, parcelasCiclo = 0, parcelasDepois = 0;
   for (const t of transacoes) {

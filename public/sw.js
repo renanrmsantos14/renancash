@@ -61,7 +61,7 @@ async function mostrarAlertas() {
   let lista = [];
   try {
     const r = await fetch("/api/notificacoes/entregar", { method: "POST" });
-    if (r.ok) lista = (await r.json()).notificacoes;
+    if (r.ok) lista = (await r.json()).notificacoes || [];
   } catch {}
   const icone = "/icons/icon-192.png";
   if (!lista.length) return self.registration.showNotification("Meu Banco", { body: "Você tem alertas novos. Abra o app para ver.", icon: icone, tag: "meu-banco" });

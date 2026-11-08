@@ -185,8 +185,7 @@
 <span id="versao">v0.0.4 · 08/11/2026 18:55</span>
 
 <script type="module">
-import { CATEGORIAS, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe, valorParcela } from "/regras.js";
-"use strict";
+import { CATEGORIAS, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe } from "/regras.js";
 const $ = (id) => document.getElementById(id);
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const moeda = (v) => (v == null || isNaN(v) ? "—" : brl.format(v));
@@ -670,12 +669,13 @@ function abrirDetalhe(t, gatilho) {
   const ehSalario = !cartao && t.amount > 0 && !t.scheduled;
   const marcarSalario = ehSalario ? h("button", { type: "button", class: "ghost" }, "Este é o meu salário") : null;
   marcarSalario?.addEventListener("click", async () => {
-    marcarSalario.disabled = true; erro.hidden = true;
+    marcarSalario.disabled = true; erro.hidden = true; sheet.salvando = true;
     try {
       await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ salario_id: t.id }) });
       C = await api("/api/ciclo"); renderCiclo();
       marcarSalario.textContent = "Salário marcado ✓";
     } catch (e) { erro.textContent = e.message; erro.hidden = false; marcarSalario.disabled = false; }
+    sheet.salvando = false;
   });
 
   cancelar.addEventListener("click", tentarFechar);

@@ -1,6 +1,6 @@
 // src/alertas.js — quais alertas gerar (funções puras). Chave única por alerta evita repetir.
 import { valorGasto, traduzir } from "../public/regras.js";
-import { somarDias } from "./ciclo.js";
+import { somarDias, idsCartao } from "./ciclo.js";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dm = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
@@ -9,7 +9,7 @@ const horaBRT = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo"
 export const emSilencio = (data) => { const h = Number(horaBRT.format(data)); return h >= 22 || h < 7; };
 
 export function foraDoPadrao(transacoes, contas, hoje) {
-  const cartao = new Set(contas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+  const cartao = idsCartao(contas);
   const recente = somarDias(hoje, -3), desde = somarDias(hoje, -180);
   const cat = (t) => t.ajuste_categoria || t.category || "";
   const valor = (t) => valorGasto(t, cartao.has(t.account_id));
@@ -37,20 +37,17 @@ export function gerarAlertas({ resumo, transacoes, contas, avisos, hoje }) {
     out.push({ chave: `limite100:${inicio}`, titulo: "Limite do ciclo estourado",
       corpo: `Você usou ${brl.format(consumido)} de ${brl.format(limite)}: ${brl.format(consumido - limite)} acima.` });
   }
-  const cartao = new Set(contas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+  const cartao = idsCartao(contas);
   for (const { t, media } of foraDoPadrao(transacoes, contas, hoje)) {
     out.push({ chave: `fora:${t.id}`, titulo: "Gasto acima do normal",
       corpo: `${brl.format(valorGasto(t, cartao.has(t.account_id)))} em ${t.description} (${traduzir(t.ajuste_categoria || t.category)}): mais que o dobro da sua média (${brl.format(media)}).` });
   }
-  for (const a of avisos) {
-    out.push({ chave: `reconexao:${hoje}`, titulo: `${a.banco} pediu nova conexão`, corpo: a.mensagem });
-    break; // um por dia basta
-  }
+  if (avisos[0]) out.push({ chave: `reconexao:${hoje}`, titulo: `${avisos[0].banco} pediu nova conexão`, corpo: avisos[0].mensagem }); // um por dia basta
   return out;
 }
 
 export function resumoSemanal({ resumo, transacoes, contas, hoje }) {
-  const cartao = new Set(contas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+  const cartao = idsCartao(contas);
   const desde = somarDias(hoje, -6);
   const semana = transacoes.filter((t) => t.date >= desde && t.date <= hoje).reduce((s, t) => s + valorGasto(t, cartao.has(t.account_id)), 0);
   const ciclo = resumo.limite == null

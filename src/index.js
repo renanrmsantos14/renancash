@@ -61,7 +61,6 @@ export default {
     else if (evento.cron === "0 23 * * SUN") ctx.waitUntil(alertaSemanal(env));
     else ctx.waitUntil(sincronizar(env, "cron"));
   },
-
 };
 
 // ---------- Segurança ----------
