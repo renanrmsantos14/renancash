@@ -489,7 +489,7 @@ async function inscricaoAtual() {
   return (await navigator.serviceWorker.ready).pushManager.getSubscription();
 }
 
-async function abrirConfigCiclo(gatilho) {
+function abrirConfigCiclo(gatilho) {
   const ini = C.ciclo.limite == null ? "" : String(C.ciclo.limite);
   const inp = h("input", { id: "cfgLimite", type: "number", inputmode: "decimal", min: "1", step: "0.01", placeholder: "Ex.: 4000" });
   inp.value = ini;
@@ -501,11 +501,8 @@ async function abrirConfigCiclo(gatilho) {
   const sujo = () => inp.value !== ini;
   const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
 
-  const sub = await inscricaoAtual().catch(() => null);
   const suportado = "PushManager" in window && C.push.publica;
-  pushBtn.textContent = sub ? "Desativar notificações" : "Ativar notificações";
-  pushBtn.hidden = !suportado;
-  teste.hidden = !sub;
+  pushBtn.hidden = true; // aparece quando o estado do push for conhecido
   status.textContent = !suportado ? "Notificações indisponíveis neste navegador." : Notification.permission === "denied" ? "Notificações bloqueadas: libere nas configurações do navegador." : "";
 
   salvar.addEventListener("click", async () => {
@@ -557,6 +554,14 @@ async function abrirConfigCiclo(gatilho) {
       status,
       h("p", { class: "sub" }, "Alertas: 80% e 100% do limite, gasto acima do normal, banco pedindo reconexão e resumo no domingo às 20h. Silêncio das 22h às 7h.")),
   });
+  // O estado do push vem depois: se o service worker não responder, o resto do sheet funciona.
+  if (suportado) {
+    inscricaoAtual().then((sub) => {
+      pushBtn.textContent = sub ? "Desativar notificações" : "Ativar notificações";
+      pushBtn.hidden = false;
+      teste.hidden = !sub;
+    }).catch(() => {});
+  }
 }
 
 // ---------- Lista de transações (usada no painel e na fatura) ----------
