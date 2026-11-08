@@ -64,7 +64,7 @@ Edite o `wrangler.toml` e cole o `database_id`.
 pnpm db:remote                        # cria as tabelas no D1 da nuvem (--remote)
 npx wrangler secret put MCP_API_KEY      # cole a sk_live_… do MCP.AI (não aparece na tela)
 npx wrangler secret put APP_PASSWORD     # senha do painel: use 16+ caracteres
-pnpm deploy                           # incrementa a versão e publica
+pnpm push                             # incrementa a versão e publica
 ```
 
 O deploy mostra o endereço, algo como `https://meu-banco.SEU-USUARIO.workers.dev`.

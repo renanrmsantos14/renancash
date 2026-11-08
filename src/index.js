@@ -4,7 +4,7 @@ const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
 const TAM_PAGINA = 500; // máximo da API
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
-const PROBLEMA = /LOGIN_ERROR|OUTDATED|WAITING_USER/; // status de conexão que pede novo login
+const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status que pede novo login (OUTDATED = só falha temporária)
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
@@ -172,10 +172,14 @@ async function sincronizar(env, origem) {
       if (x) porItem.set(x.item_id, { connector_name: porItem.get(x.item_id)?.connector_name, ...x });
     }
     const reconectar = [...porItem.values()]
-      .filter((x) => x.needs_action || x.reconnect_url || PROBLEMA.test(x.status || ""))
+      .filter((x) => x.needs_action || PROBLEMA.test(x.status || "")) // reconnect_url vem sempre, mesmo com a conexão ok
       .map((x) => ({
         banco: x.bank || x.connector_name || x.name || "Banco",
-        mensagem: x.message || "O banco pede um novo login (" + (x.status || "ação necessária") + ").",
+        mensagem:
+          x.message ||
+          `O banco não atualizou (${x.executionStatus || x.status || "ação necessária"})` +
+            (x.lastUpdatedAt ? `; dados de ${String(x.lastUpdatedAt).slice(8, 10)}/${String(x.lastUpdatedAt).slice(5, 7)}` : "") +
+            ". Reconecte e confirme no app do banco.",
         reconnect_url: /^https:\/\//.test(x.reconnect_url || "") ? x.reconnect_url : null,
       }));
     await salvarSnapshot(db, "avisos", reconectar);

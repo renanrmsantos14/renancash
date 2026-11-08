@@ -13,7 +13,7 @@ run_worker_first = true
 [[d1_databases]]
 binding = "DB"
 database_name = "meu-banco"
-database_id = "COLE_AQUI_O_DATABASE_ID"
+database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 
 # Atualização automática a cada 3 horas (horário UTC; minuto 7 para fugir do pico).
 [triggers]

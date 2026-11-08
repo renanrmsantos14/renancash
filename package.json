@@ -1,6 +1,6 @@
 {
   "name": "meu-banco",
-  "version": "0.0.0",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "db:local": "wrangler d1 execute meu-banco --local --file=schema.sql",
     "db:remote": "wrangler d1 execute meu-banco --remote --file=schema.sql",
     "dev": "wrangler dev --test-scheduled",
-    "deploy": "node scripts/versao.mjs && wrangler deploy",
+    "push": "node scripts/versao.mjs && wrangler deploy",
     "logs": "wrangler tail"
   },
   "devDependencies": {

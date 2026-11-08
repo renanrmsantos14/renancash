@@ -25,8 +25,9 @@ export class ApiCliente {
       headers: { "content-type": "application/json", authorization: `Bearer ${this.chave}` },
       body: JSON.stringify(args),
     });
-    if (resp.status === 429 && tentativa < 2) {
-      const espera = Math.min(5, Number(resp.headers.get("retry-after")) || 1);
+    // 429 do provedor (Pluggy: 2 req/s compartilhado) pede ~6 s; espera até 10 s, 3 vezes.
+    if (resp.status === 429 && tentativa < 3) {
+      const espera = Math.min(10, Number(resp.headers.get("retry-after")) || 6);
       await resp.body?.cancel(); // libera a conexão antes de tentar de novo
       await new Promise((r) => setTimeout(r, espera * 1000));
       return this.chamar(caminho, args, tentativa + 1);
