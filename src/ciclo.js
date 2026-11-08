@@ -2,7 +2,7 @@
 import { valorGasto, valorParcela } from "../public/regras.js";
 
 export const normalizar = (d) =>
-  (d || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+  (d || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
 
 export function somarDias(iso, n) {
