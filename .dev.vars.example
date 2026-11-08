@@ -1,0 +1,4 @@
+# Copie para .dev.vars (só para "wrangler dev"; nunca vai para o Git nem para a nuvem)
+API_URL=http://localhost:8788/api/openfinance
+MCP_API_KEY=sk_live_teste
+APP_PASSWORD=teste123

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Meu Banco</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --texto: #16181d; --suave: #626a77; --borda: #e3e6eb;
+    --verde: #0f8a4b; --vermelho: #c62f2f; --laranja: #ff7a00; --azul: #2563eb; --barra: #eceef2;
+    --aviso-bg: #fff4e5; --aviso-borda: #f5b45b; --erro-bg: #fdecec; --erro-borda: #e58a8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #181b21; --texto: #eceef2; --suave: #9aa3b2; --borda: #2a2f38;
+      --verde: #3ccf7f; --vermelho: #ff6b6b; --laranja: #ff9a3c; --azul: #6aa0ff; --barra: #262b33;
+      --aviso-bg: #2d2210; --aviso-borda: #8a5a14; --erro-bg: #2d1515; --erro-borda: #8a2f2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--texto);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 16px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 16px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  header .sub { color: var(--suave); font-size: 13px; flex: 1 1 200px; }
+  header .acoes { display: flex; gap: 8px; }
+  select, input, button { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--borda);
+    border-radius: 10px; padding: 8px 12px; min-height: 40px; }
+  button { background: var(--laranja); border-color: var(--laranja); color: #fff; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  :focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; min-width: 0; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .valor { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .linha { display: flex; justify-content: space-between; gap: 8px; color: var(--suave); font-size: 13px; margin-top: 6px; }
+  .linha b { color: var(--texto); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--verde); } .neg { color: var(--vermelho); }
+  .barra { height: 8px; background: var(--barra); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .barra > i { display: block; height: 100%; background: var(--laranja); border-radius: 99px; }
+  section { margin-top: 12px; }
+  .cat { display: grid; grid-template-columns: minmax(90px, 180px) 1fr auto; gap: 10px; align-items: center; margin: 8px 0; font-size: 14px; }
+  .cat .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat .barra { margin: 0; }
+  .cat .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .filtros { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .filtros input { flex: 1 1 200px; }
+  .tx { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+  .tx:last-child { border-bottom: 0; }
+  .tx .data { color: var(--suave); font-size: 13px; width: 44px; flex: none; font-variant-numeric: tabular-nums; }
+  .tx .meio { flex: 1; min-width: 0; }
+  .tx .desc { overflow-wrap: anywhere; }
+  .tx .info { color: var(--suave); font-size: 12px; margin-top: 2px; }
+  .tx .v { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--borda); margin-left: 4px; color: var(--suave); }
+  .tag.cartao { border-color: var(--laranja); color: var(--laranja); }
+  .tag.futura { border-color: var(--azul); color: var(--azul); }
+  .aviso { border: 1px solid var(--aviso-borda); background: var(--aviso-bg); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .aviso.erro { border-color: var(--erro-borda); background: var(--erro-bg); }
+  .aviso a { color: inherit; font-weight: 700; }
+  .vazio { color: var(--suave); font-size: 14px; padding: 8px 0; }
+  .duas { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  #versao { position: fixed; right: 8px; bottom: 6px; font-size: 11px; color: var(--suave); opacity: .7; pointer-events: none; user-select: none; }
+  @media (max-width: 420px) { .valor { font-size: 22px; } .cat { grid-template-columns: 100px 1fr auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Meu Banco</h1>
+    <div class="sub" id="atualizado">Carregando…</div>
+    <div class="acoes">
+      <select id="mes" aria-label="Mês"></select>
+      <button id="atualizar" type="button">Atualizar</button>
+    </div>
+  </header>
+  <div id="avisos"></div>
+  <div class="grid" id="cards"></div>
+  <div class="duas">
+    <section class="card"><h2>Gastos por categoria</h2><div id="categorias"></div></section>
+    <section class="card"><h2>Faturas do cartão</h2><div id="faturas"></div></section>
+  </div>
+  <section class="card">
+    <h2>Transações do mês</h2>
+    <div class="filtros">
+      <input id="busca" type="search" placeholder="Buscar descrição, categoria…" aria-label="Buscar">
+      <select id="filtroConta" aria-label="Conta"><option value="">Todas as contas</option></select>
+    </div>
+    <div id="transacoes"></div>
+  </section>
+</div>
+<span id="versao">v0.0.0 · dev</span>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const moeda = (v) => (v == null || isNaN(v) ? "—" : brl.format(v));
+const dataBR = (s) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
+const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+const fmtMes = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+const dataHora = (iso) => (iso ? fmtDataHora.format(new Date(iso)) : "nunca");
+const nomeMes = (m) => { const [a, n] = m.split("-").map(Number); return fmtMes.format(Date.UTC(a, n - 1, 15)); };
+
+// Monta elementos com textContent (nunca innerHTML com dados do banco).
+function h(tag, attrs, ...filhos) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v; else if (k === "style") el.style.cssText = v; else el.setAttribute(k, v);
+  }
+  for (const f of filhos.flat()) if (f != null && f !== false) el.append(f instanceof Node ? f : String(f));
+  return el;
+}
+
+const CATEGORIAS = {
+  "Income": "Receitas", "Salary": "Salário", "Retirement": "Aposentadoria", "Entrepreneurial activities": "Atividade empresarial",
+  "Government aid": "Auxílio do governo", "Non-recurring income": "Receita eventual", "Loans and financing": "Empréstimos e financiamentos",
+  "Late payment and overdraft costs": "Juros de atraso e cheque especial", "Interests charged": "Juros cobrados", "Financing": "Financiamento",
+  "Real estate financing": "Financiamento imobiliário", "Vehicle financing": "Financiamento de veículo", "Student loan": "Crédito estudantil",
+  "Loans": "Empréstimos", "Investments": "Investimentos", "Automatic investment": "Investimento automático", "Fixed income": "Renda fixa",
+  "Mutual funds": "Fundos de investimento", "Variable income": "Renda variável", "Margin": "Margem", "Proceeds interests and dividends": "Rendimentos e dividendos",
+  "Pension": "Previdência", "Savings": "Poupança", "Same person transfer": "Transferência entre minhas contas", "Transfers": "Transferências",
+  "Transfer - Bank Slip": "Transferência - boleto", "Transfer - Cash": "Transferência - dinheiro", "Transfer - Check": "Transferência - cheque",
+  "Transfer - DOC": "Transferência - DOC", "Transfer - Foreign Exchange": "Transferência - câmbio", "Transfer - Internal": "Transferência interna",
+  "Transfer - PIX": "Pix", "Transfer - TED": "TED", "Third party transfers": "Transferência para terceiros",
+  "Third party transfer - Bank Slip": "Boleto para terceiros", "Third party transfer - Debit Card": "Débito para terceiros",
+  "Third party transfer - DOC": "DOC para terceiros", "Third party transfer - PIX": "Pix para terceiros", "Third party transfer - TED": "TED para terceiros",
+  "Credit card payment": "Pagamento de fatura", "Legal obligations": "Obrigações legais", "Blocked balances": "Saldo bloqueado", "Alimony": "Pensão alimentícia",
+  "Services": "Serviços", "Telecommunications": "Telecomunicações", "Internet": "Internet", "Mobile": "Celular", "TV": "TV",
+  "Education": "Educação", "Online courses": "Cursos online", "University": "Faculdade", "School": "Escola", "Kindergarten": "Creche",
+  "Wellness and fitness": "Bem-estar e academia", "Gyms and fitness centers": "Academia", "Sports practice": "Esportes", "Wellness": "Bem-estar",
+  "Tickets": "Ingressos", "Stadiums and arenas": "Estádios e arenas", "Landmarks and museums": "Museus e atrações", "Cinema, theater and concerts": "Cinema, teatro e shows",
+  "Shopping": "Compras", "Online shopping": "Compras online", "Electronics": "Eletrônicos", "Pet supplies and vet": "Pet e veterinário",
+  "Clothing": "Roupas", "Kids and toys": "Infantil e brinquedos", "Bookstore": "Livraria", "Sports goods": "Artigos esportivos", "Office supplies": "Papelaria",
+  "Cashback": "Cashback", "Digital services": "Serviços digitais", "Gaming": "Jogos", "Video streaming": "Streaming de vídeo", "Music streaming": "Streaming de música",
+  "Groceries": "Supermercado", "Food and drinks": "Alimentação", "Eating out": "Restaurantes", "Food delivery": "Delivery",
+  "Travel": "Viagem", "Airport and airlines": "Aéreo", "Accommodation": "Hospedagem", "Mileage programs": "Programas de milhas", "Bus tickets": "Passagens de ônibus",
+  "Donations": "Doações", "Gambling": "Apostas", "Lottery": "Loteria", "Online bet": "Apostas online",
+  "Taxes": "Impostos", "Income taxes": "Imposto de renda", "Taxes on investments": "Impostos sobre investimentos", "Tax on financial operations": "IOF",
+  "Bank fees": "Tarifas bancárias", "Account fees": "Tarifa de conta", "Wire transfer fees and ATM fees": "Tarifas de transferência e saque", "Credit card fees": "Tarifas do cartão",
+  "Housing": "Moradia", "Rent": "Aluguel", "Utilities": "Contas da casa", "Water": "Água", "Electricity": "Energia", "Gas": "Gás", "Houseware": "Casa e utilidades",
+  "Urban land and building tax": "IPTU", "Healthcare": "Saúde", "Dentist": "Dentista", "Pharmacy": "Farmácia", "Optometry": "Ótica",
+  "Hospital clinics and labs": "Hospitais, clínicas e exames", "Transportation": "Transporte", "Taxi and ride-hailing": "Táxi e aplicativos",
+  "Public transportation": "Transporte público", "Car rental": "Aluguel de carro", "Bicycle": "Bicicleta", "Automotive": "Automotivo",
+  "Gas stations": "Combustível", "Parking": "Estacionamento", "Tolls and in vehicle payment": "Pedágio e tag", "Vehicle ownership taxes and fees": "IPVA e taxas do veículo",
+  "Vehicle maintenance": "Manutenção do veículo", "Traffic tickets": "Multas de trânsito", "Insurance": "Seguros", "Life insurance": "Seguro de vida",
+  "Home insurance": "Seguro residencial", "Health insurance": "Plano de saúde", "Vehicle insurance": "Seguro do veículo", "Leisure": "Lazer", "Other": "Outros",
+};
+const traduzir = (c) => (c ? CATEGORIAS[c] || c : "Sem categoria");
+
+// Não é gasto: pagamento de fatura, investimentos/poupança e transferência entre minhas contas.
+const CAT_FORA = /credit card payment|same person transfer|investment|fixed income|mutual funds|variable income|savings|pension|margin/i;
+const DESC_FORA = /pagamento (de |da )?fatura|pgto\.? ?fatura|pagamento recebido|aplica[cç][aã]o|resgate|\bcdb\b|\blci\b|\blca\b|poupan[cç]a|porquinho|tesouro direto/i;
+const naoEhGasto = (t) => CAT_FORA.test(t.category || "") || DESC_FORA.test(t.description || "");
+
+const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
+
+let D = null;
+let porId = {};
+const ehCartao = (t) => porId[t.account_id]?.type === "CREDIT";
+
+async function carregar(mes) {
+  const r = await fetch("/api/dados" + (mes ? "?mes=" + encodeURIComponent(mes) : ""), { cache: "no-store" });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || "HTTP " + r.status);
+  D = await r.json();
+  porId = Object.fromEntries(D.contas.map((c) => [c.id, c]));
+  render();
+}
+
+function render() {
+  // Cabeçalho
+  $("atualizado").textContent = "Atualizado em " + dataHora(D.ultimaAtualizacao);
+  const meses = new Set(D.meses); meses.add(D.mes);
+  $("mes").replaceChildren(...[...meses].sort().reverse().map((m) => h("option", { value: m, selected: m === D.mes }, nomeMes(m))));
+
+  // Avisos
+  const avisos = [];
+  for (const a of D.snapshots.avisos || []) {
+    avisos.push(h("div", { class: "aviso" }, h("b", {}, a.banco + ": "), a.mensagem + " ",
+      a.reconnect_url ? h("a", { href: a.reconnect_url, target: "_blank", rel: "noopener noreferrer" }, "Reconectar o banco") : null));
+  }
+  const ex = D.ultimaExecucao;
+  if (ex && ex.ok === 0) avisos.push(h("div", { class: "aviso erro" }, h("b", {}, "A última atualização falhou (" + dataHora(ex.started_at) + "): "), ex.message));
+  else if (ex && ex.ok === 1 && ex.message && ex.message !== "OK") avisos.push(h("div", { class: "aviso" }, h("b", {}, "Atualização com avisos: "), ex.message));
+  $("avisos").replaceChildren(...avisos);
+
+  // Cards
+  const bancos = D.contas.filter((c) => c.type !== "CREDIT");
+  const cartoes = D.contas.filter((c) => c.type === "CREDIT");
+  const txConta = D.transacoes.filter((t) => !ehCartao(t) && !t.scheduled);
+  const entradas = txConta.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const saidas = txConta.filter((t) => t.amount < 0).reduce((s, t) => s - t.amount, 0);
+
+  const cards = [];
+  cards.push(h("div", { class: "card" }, h("h2", {}, "Conta corrente"),
+    h("div", { class: "valor" }, moeda(bancos.reduce((s, c) => s + (c.balance || 0), 0))),
+    bancos.map((c) => h("div", { class: "linha" }, c.name || "Conta", h("b", {}, moeda(c.balance))))));
+
+  for (const c of cartoes) {
+    const f = D.snapshots["faturas:" + c.id] || {};
+    const aberta = f.open_bill || {};
+    const valorAberta = aberta.total_amount != null ? Number(aberta.total_amount) : c.balance;
+    const usado = c.credit_limit != null && c.available_limit != null ? c.credit_limit - c.available_limit : null;
+    const pct = c.credit_limit ? Math.min(100, Math.max(0, (usado / c.credit_limit) * 100)) : 0;
+    cards.push(h("div", { class: "card" }, h("h2", {}, c.name || "Cartão"),
+      h("div", { class: "valor" }, moeda(valorAberta)),
+      h("div", { class: "linha" }, "Fatura aberta · vence", h("b", {}, dataBR(aberta.due_date || c.due_date))),
+      h("div", { class: "barra", role: "progressbar", "aria-valuenow": Math.round(pct), "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": "Limite usado" }, h("i", { style: "width:" + pct.toFixed(1) + "%" })),
+      h("div", { class: "linha" }, "Disponível", h("b", {}, moeda(c.available_limit) + " de " + moeda(c.credit_limit)))));
+  }
+
+  cards.push(h("div", { class: "card" }, h("h2", {}, "Conta no mês"),
+    h("div", { class: "linha" }, "Entradas", h("b", { class: "pos" }, moeda(entradas))),
+    h("div", { class: "linha" }, "Saídas", h("b", { class: "neg" }, moeda(saidas))),
+    h("div", { class: "linha" }, "Resultado", h("b", { class: entradas - saidas >= 0 ? "pos" : "neg" }, moeda(entradas - saidas)))));
+  $("cards").replaceChildren(...cards);
+
+  // Gastos por categoria (débitos da conta + compras do cartão, sem parcelas futuras)
+  const porCat = {};
+  for (const t of D.transacoes) {
+    if (t.scheduled || naoEhGasto(t)) continue;
+    const v = ehCartao(t) ? t.amount : t.amount < 0 ? -t.amount : 0;
+    if (!v) continue;
+    const k = traduzir(t.category);
+    porCat[k] = (porCat[k] || 0) + v;
+  }
+  const lista = Object.entries(porCat).filter(([, v]) => v > 0.004).sort((a, b) => b[1] - a[1]);
+  const maior = lista[0]?.[1] || 1;
+  const total = lista.reduce((s, [, v]) => s + v, 0);
+  $("categorias").replaceChildren(...(lista.length ? [
+    h("div", { class: "linha", style: "margin:0 0 8px" }, "Total do mês", h("b", {}, moeda(total))),
+    ...lista.map(([k, v]) => h("div", { class: "cat" }, h("span", { class: "nome", title: k }, k),
+      h("div", { class: "barra" }, h("i", { style: "width:" + ((v / maior) * 100).toFixed(1) + "%" })),
+      h("span", { class: "v" }, moeda(v)))),
+  ] : [h("div", { class: "vazio" }, "Nenhum gasto neste mês.")]));
+
+  // Faturas
+  const blocos = [];
+  for (const c of cartoes) {
+    const f = D.snapshots["faturas:" + c.id];
+    if (!f) { blocos.push(h("div", { class: "vazio" }, c.name + ": faturas ainda não carregadas.")); continue; }
+    const fech = [...(f.results || [])].sort((a, b) => String(b.dueDate).localeCompare(String(a.dueDate))).slice(0, 8);
+    if (cartoes.length > 1) blocos.push(h("div", { class: "linha", style: "margin-top:12px" }, h("b", {}, c.name)));
+    blocos.push(h("div", { class: "linha", style: "margin:0 0 8px" }, "Saldo devedor total", h("b", { class: "neg" }, moeda(Number(f.total_pending_debt)))));
+    blocos.push(h("table", {},
+      h("thead", {}, h("tr", {}, h("th", {}, "Vencimento"), h("th", {}, "Situação"), h("th", { class: "num" }, "Valor"))),
+      h("tbody", {}, fech.length ? fech.map((b) => h("tr", {}, h("td", {}, dataBR(b.dueDate)),
+        h("td", { class: /PAST_DUE/.test(b.payment_status) ? "neg" : "" }, SITUACAO[b.payment_status] || b.payment_status || "—"),
+        h("td", { class: "num" }, moeda(Number(b.totalAmount))))) : h("tr", {}, h("td", { colspan: 3, class: "vazio" }, "Sem faturas fechadas.")))));
+  }
+  $("faturas").replaceChildren(...(blocos.length ? blocos : [h("div", { class: "vazio" }, "Nenhum cartão encontrado.")]));
+
+  // Filtro de contas
+  const sel = $("filtroConta"), atual = sel.value;
+  sel.replaceChildren(h("option", { value: "" }, "Todas as contas"), ...D.contas.map((c) => h("option", { value: c.id, selected: c.id === atual }, c.name || c.id)));
+  renderTransacoes();
+}
+
+function renderTransacoes() {
+  const q = $("busca").value.trim().toLowerCase();
+  const conta = $("filtroConta").value;
+  const lista = D.transacoes.filter((t) => (!conta || t.account_id === conta) &&
+    (!q || [t.description, t.merchant, t.category, traduzir(t.category)].some((x) => (x || "").toLowerCase().includes(q))));
+  $("transacoes").replaceChildren(...(lista.length ? lista.map((t) => {
+    const cartao = ehCartao(t);
+    const v = cartao ? -t.amount : t.amount; // no cartão, valor positivo = compra (saída)
+    return h("div", { class: "tx" },
+      h("div", { class: "data" }, dataBR(t.date).slice(0, 5)),
+      h("div", { class: "meio" },
+        h("div", { class: "desc" }, t.description || "—"),
+        h("div", { class: "info" }, traduzir(t.category),
+          cartao ? h("span", { class: "tag cartao" }, "cartão") : null,
+          t.scheduled ? h("span", { class: "tag futura" }, "futura") : null,
+          t.status === "PENDING" ? h("span", { class: "tag" }, "pendente") : null)),
+      h("div", { class: "v " + (v >= 0 ? "pos" : "neg") }, moeda(v)));
+  }) : [h("div", { class: "vazio" }, "Nenhuma transação encontrada.")]));
+}
+
+$("mes").addEventListener("change", (e) => carregar(e.target.value).catch(mostrarErro));
+$("busca").addEventListener("input", () => D && renderTransacoes());
+$("filtroConta").addEventListener("change", () => D && renderTransacoes());
+$("atualizar").addEventListener("click", async () => {
+  const b = $("atualizar");
+  b.disabled = true; b.textContent = "Atualizando…";
+  try {
+    const r = await fetch("/api/atualizar", { method: "POST" });
+    const j = await r.json().catch(() => ({}));
+    await carregar(D?.mes);
+    if (!r.ok || !j.ok) mostrarErro(new Error(j.mensagem || j.erro || "HTTP " + r.status));
+  } catch (e) { mostrarErro(e); }
+  finally { b.disabled = false; b.textContent = "Atualizar"; }
+});
+
+function mostrarErro(e) {
+  $("avisos").prepend(h("div", { class: "aviso erro", role: "alert" }, h("b", {}, "Erro: "), e.message));
+}
+
+carregar().catch(mostrarErro);
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+name = "meu-banco"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true
+
+# Front-end estático. run_worker_first = true faz TODA requisição passar pelo Worker (checagem de senha).
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# Banco D1. Cole aqui o database_id que o comando "wrangler d1 create meu-banco" mostrar.
+[[d1_databases]]
+binding = "DB"
+database_name = "meu-banco"
+database_id = "COLE_AQUI_O_DATABASE_ID"
+
+# Atualização automática a cada 3 horas (horário UTC; minuto 7 para fugir do pico).
+[triggers]
+crons = ["7 */3 * * *"]
+
+# Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
+[dev]
+port = 8787
+
+[observability]
+enabled = true
+
+# Variáveis NÃO secretas. A API key do MCP.AI vai com "wrangler secret put MCP_API_KEY".
+[vars]
+API_URL = "https://api.mcp.ai/api/openfinance"
+IMPORT_DAYS = "180"
