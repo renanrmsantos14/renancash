@@ -246,3 +246,11 @@ Push local: no `apps/worker/.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de tes
 - Valores das faturas vêm do `totalAmount` do banco (não da soma das transações).
 - O ciclo do salário, o limite e os alertas estão na seção "Ciclo, limite e alertas".
 - Parcelas futuras e transações pendentes são apagadas e regravadas a cada sincronização, para não duplicar.
+
+### Migração da Fase 2 (`accounts.closing_date`)
+
+Em banco já existente, rode **uma vez** (o SQLite não tem `ADD COLUMN IF NOT EXISTS`; repetir só falha com "duplicate column name", sem efeito):
+
+```powershell
+pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=scripts/migrar-fase2.sql
+```

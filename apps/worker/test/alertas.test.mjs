@@ -49,8 +49,8 @@ test("orçamento: ciclo usa o período do resumo, mensal usa o mês de hoje; cha
   assert.equal(r[0].titulo, "80% do orçamento Mercado");
   assert.match(r[0].corpo, /05\/11 a 04\/12/);
   assert.deepEqual(alertasOrcamentos(entrada("ciclo", 1000)).map((a) => a.chave), r.map((a) => a.chave));
-  assert.deepEqual(alertasOrcamentos(entrada("mensal", 800)).map((a) => a.chave), ["orc80:o1:2026-11-01", "orc100:o1:2026-11-01"]);
-  assert.equal(alertasOrcamentos(entrada("mensal", 800)).at(-1).titulo, "Orçamento Mercado estourado");
+  assert.deepEqual(alertasOrcamentos(entrada("mensal", 800)).map((a) => a.chave), ["orc100:o1:2026-11-01"]);
+  assert.equal(alertasOrcamentos(entrada("mensal", 800))[0].titulo, "Orçamento Mercado estourado");
   assert.deepEqual(alertasOrcamentos(entrada("ciclo", 5000)), []);
   const todas = alertasOrcamentos({ ...entrada("mensal", 1000), orcamentos: [{ id: "o2", nome: "Geral", valor: 1000, categoria_ids: [], periodo: "mensal" }] });
   assert.deepEqual(todas.map((a) => a.chave), ["orc80:o2:2026-11-01"]); // lista vazia = todas (950 de 1000)
@@ -93,4 +93,14 @@ test("gerarAlertas concatena os alertas novos a partir de registros", () => {
   const registros = [{ tabela: "assinaturas", id: "s1", dados: { nome: "Netflix", valor: 39.9, dia: 21, status: "confirmada" } }];
   const a = gerarAlertas({ resumo: { ...base, limite: null, percentual: null }, transacoes: [], contas, avisos: [], hoje: "2026-11-20", registros });
   assert.deepEqual(a.map((x) => x.chave), ["assinatura:s1:2026-11-21"]);
+});
+
+test("textos sem nome ou descrição não viram undefined/null", () => {
+  const todos = [
+    ...alertasOrcamentos({ orcamentos: [{ id: "o", valor: 10, categoria_ids: [], periodo: "mensal" }], ctx: ctxCat, transacoes: [gasto("a", "2026-11-02", 50, "x")], contas, resumo: base, hoje: "2026-11-20" }),
+    ...alertasAssinaturas({ assinaturas: [{ id: "s", valor: 5, dia: 20, status: "confirmada" }], hoje: "2026-11-20" }),
+    ...alertasReceita({ transacoes: [{ id: "r", account_id: "cc", date: "2026-11-20", description: null, amount: 10, scheduled: 0 }], contas: [{ id: "cc", type: "BANK", name: "Inter" }], hoje: "2026-11-20" }),
+  ];
+  assert.equal(todos.length, 3);
+  for (const a of todos) assert.doesNotMatch(a.titulo + a.corpo, /undefined|null/);
 });

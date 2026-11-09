@@ -3,7 +3,7 @@ import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
-import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
@@ -254,7 +254,9 @@ async function baseCiclo(env) {
     env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
   ]);
   const transacoes = tx.results;
-  const registros = regs.results.map((r) => ({ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }));
+  const registros = regs.results.flatMap((r) => {
+    try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; }
+  });
   return { hoje, transacoes, contas: contas.results, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
 }
 
@@ -299,12 +301,6 @@ async function inscreverPush(request, env, url) {
 }
 
 const validadeAlerta = () => new Date(Date.now() - VALIDADE_ALERTA_MS).toISOString();
-
-function gravarAlertas(db, alertas) {
-  if (!alertas.length) return null;
-  return db.batch(alertas.map((a) =>
-    db.prepare("INSERT OR IGNORE INTO notificacoes (chave, titulo, corpo, criada) VALUES (?1, ?2, ?3, ?4)").bind(a.chave, a.titulo, a.corpo, agora())));
-}
 
 // Um push (sem conteúdo) por inscrição quando há alerta não enviado. Respeita o silêncio das 22h às 7h.
 async function enviarPendentes(env, ignorarSilencio = false) {

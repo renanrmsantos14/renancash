@@ -44,8 +44,9 @@ export function alertasOrcamentos({ orcamentos, ctx, transacoes, contas, resumo,
       .reduce((s, t) => s + valorGasto(t, cartao.has(t.account_id)), 0);
     const pct = o.valor > 0 ? (gasto / o.valor) * 100 : 0;
     const resto = `Você usou ${brl.format(gasto)} de ${brl.format(o.valor)} (${dm(inicio)} a ${dm(fim)}).`;
-    if (pct >= 80) out.push({ chave: `orc80:${o.id}:${inicio}`, titulo: `80% do orçamento ${o.nome}`, corpo: resto });
-    if (pct > 100) out.push({ chave: `orc100:${o.id}:${inicio}`, titulo: `Orçamento ${o.nome} estourado`, corpo: `${resto} ${brl.format(gasto - o.valor)} acima.` });
+    const nome = o.nome || "sem nome";
+    if (pct > 100) out.push({ chave: `orc100:${o.id}:${inicio}`, titulo: `Orçamento ${nome} estourado`, corpo: `${resto} ${brl.format(gasto - o.valor)} acima.` });
+    else if (pct >= 80) out.push({ chave: `orc80:${o.id}:${inicio}`, titulo: `80% do orçamento ${nome}`, corpo: resto });
   }
   return out;
 }
@@ -68,7 +69,7 @@ export function alertasReceita({ transacoes, contas, hoje }) {
   const desde = somarDias(hoje, -2);
   return transacoes
     .filter((t) => bancos.has(t.account_id) && t.amount > 0 && !t.scheduled && !naoEhGasto(t) && t.date >= desde)
-    .map((t) => ({ chave: `receita:${t.id}`, titulo: "Entrou dinheiro", corpo: `${brl.format(t.amount)} de ${t.description} em ${bancos.get(t.account_id).name}` }));
+    .map((t) => ({ chave: `receita:${t.id}`, titulo: "Entrou dinheiro", corpo: `${brl.format(t.amount)} de ${t.description || "origem não informada"} em ${bancos.get(t.account_id).name}` }));
 }
 
 export function alertasAssinaturas({ assinaturas, hoje }) {
@@ -85,9 +86,16 @@ export function alertasAssinaturas({ assinaturas, hoje }) {
     const proxima = atual >= hoje ? atual : dataDoMes(a, m + 1, s.dia);
     const n = dias(hoje, proxima);
     if (n > 1) continue;
-    out.push({ chave: `assinatura:${s.id}:${proxima}`, titulo: `${s.nome} cobra ${n === 0 ? "hoje" : "amanhã"}`, corpo: brl.format(s.valor) });
+    out.push({ chave: `assinatura:${s.id}:${proxima}`, titulo: `${s.nome || "Assinatura"} cobra ${n === 0 ? "hoje" : "amanhã"}`, corpo: brl.format(s.valor) });
   }
   return out;
+}
+
+// `criada` única por alerta (base + 1 ms cada): o cursor do app (criada > ?) não pula alertas além do corte do LIMIT.
+export function gravarAlertas(db, alertas, base = Date.now()) {
+  if (!alertas.length) return null;
+  return db.batch(alertas.map((a, i) =>
+    db.prepare("INSERT OR IGNORE INTO notificacoes (chave, titulo, corpo, criada) VALUES (?1, ?2, ?3, ?4)").bind(a.chave, a.titulo, a.corpo, new Date(base + i).toISOString())));
 }
 
 const doTipo = (registros, tabela) => registros.filter((r) => r.tabela === tabela && r.dados).map((r) => ({ id: r.id, ...r.dados }));
