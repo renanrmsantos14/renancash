@@ -109,3 +109,18 @@ test("sincronizar com D1 vazio e sem secret grava as contas descobertas via /v2/
   assert.equal((await r.json()).ok, true);
   assert.equal(await env.DB.prepare("SELECT item_id FROM accounts WHERE id = 'conta-1'").first("item_id"), ID_A);
 });
+
+test("POST /api/pluggy/items antes da 1ª sincronização mantém as conexões do secret e as descobertas", async () => {
+  const doSecret = criarAmbiente({ ...PLUGGY, PLUGGY_ITEM_IDS: ID_A });
+  simularPluggy(() => ({ results: [] }));
+  const post = async (amb) => amb.pedir("/api/pluggy/items", { method: "POST", headers: { authorization: "Bearer " + (await criarAparelho(amb.env)), "content-type": "application/json" }, body: JSON.stringify({ itemId: ID_B }) });
+  assert.equal((await post(doSecret)).status, 201);
+  await doSecret.esperar();
+  assert.deepEqual((await idsConexoes(doSecret.env.DB, {}, T)).sort(), [ID_A, ID_B]);
+
+  const descoberta = criarAmbiente(PLUGGY);
+  simularPluggy((u) => (u.pathname === "/v2/items" ? { results: [{ id: ID_A }] } : { results: [] }));
+  assert.equal((await post(descoberta)).status, 201);
+  await descoberta.esperar();
+  assert.deepEqual((await idsConexoes(descoberta.env.DB, {}, T)).sort(), [ID_A, ID_B]);
+});

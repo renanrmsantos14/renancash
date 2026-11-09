@@ -13,6 +13,8 @@ const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
 const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
+const TRAVA_MS = 10 * 60 * 1000; // sync_log aberto há menos que isso = sincronização em andamento
+const MSG_OCUPADO = "Já existe uma atualização em andamento. Tente em alguns minutos.";
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
@@ -378,7 +380,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   if (rota === "POST /api/pluggy/items") {
     const itemId = (await request.json().catch(() => null))?.itemId;
     if (!(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
-    await registrarItem(env.DB, itemId, ts);
+    await adicionarItem(env, itemId, ts);
     ctx.waitUntil(sincronizar(env, "app").catch((e) => console.error("Sincronização após conectar", e?.stack || e)));
     return json({ ok: true }, 201);
   }
@@ -395,10 +397,24 @@ async function webhookPluggy(request, env, url, ctx) {
     const ts = agora();
     const tarefa = acao === "remover"
       ? removerItem(env.DB, ev.itemId, ts)
-      : (acao === "registrar" ? registrarItem(env.DB, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
+      : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
     ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
   }
   return json({ ok: true });
+}
+
+// A 1ª linha em pluggy_items desliga o secret e a descoberta via /v2/items: antes de gravá-la, copia as conexões que já
+// existem, senão só a nova seria sincronizada.
+async function adicionarItem(env, id, ts) {
+  const db = env.DB;
+  if (!(await idsConexoes(db, env, ts)).length && !(await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"))) {
+    try {
+      for (const existente of await new ApiCliente(env).listarIds()) await registrarItem(db, existente, ts);
+    } catch (e) {
+      console.warn("Descoberta das conexões antes de registrar", e?.message || e); // sem /v2/items: fica só a nova
+    }
+  }
+  await registrarItem(db, id, ts);
 }
 
 const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
@@ -407,7 +423,11 @@ const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2
 // Pluggy já tem; quando o banco terminar, o webhook item/updated faz a leitura final.
 async function atualizarAgora(env, origem, ctx) {
   const db = env.DB;
-  const ultimo = await db.prepare("SELECT MAX(started_at) AS t FROM sync_log WHERE origem IN ('botao', 'app')").first("t");
+  // Com outra sincronização em andamento, sincronizar() recusaria sem gravar no sync_log: nem pede ao banco nem libera o limite.
+  const { ultimo, ocupado } = await db.prepare(
+    "SELECT MAX(CASE WHEN origem IN ('botao', 'app') THEN started_at END) AS ultimo, MAX(ok IS NULL AND started_at > ?1) AS ocupado FROM sync_log"
+  ).bind(new Date(Date.now() - TRAVA_MS).toISOString()).first();
+  if (ocupado) return json({ ok: false, mensagem: MSG_OCUPADO });
   const espera = esperaAtualizar(ultimo, Date.now());
   if (espera > 0) {
     const liberado = Date.now() + espera;
@@ -415,8 +435,8 @@ async function atualizarAgora(env, origem, ctx) {
     return json({ ok: false, erro: mensagem, mensagem, liberado_em: new Date(liberado).toISOString() }, 429);
   }
   const tarefa = (async () => {
-    const ids = await idsConexoes(db, env, agora());
-    const api = new ApiCliente(env, ids);
+    const api = await clientePluggy(db, env, agora());
+    const ids = await api.listarIds().catch(() => []); // falha de credencial ou descoberta aparece na sincronização abaixo
     const pedidos = await Promise.allSettled(ids.map((id) => api.atualizarItem(id)));
     const falhas = pedidos.flatMap((p, i) => (p.status === "rejected" ? [`Conexão ${ids[i]}: ${p.reason?.message || p.reason}`] : []));
     for (const f of falhas) console.warn("Atualizar no banco falhou", f);
@@ -483,14 +503,14 @@ async function sincronizar(env, origem) {
   const db = env.DB;
 
   // Evita duas sincronizações ao mesmo tempo (cron + botão): checagem e registro num comando só (atômico no D1).
-  const limite = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const limite = new Date(Date.now() - TRAVA_MS).toISOString();
   const log = await db
     .prepare(
       "INSERT INTO sync_log (origem, started_at) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM sync_log WHERE ok IS NULL AND started_at > ?3) RETURNING id"
     )
     .bind(origem, agora(), limite)
     .first();
-  if (!log) return { ok: false, mensagem: "Já existe uma atualização em andamento. Tente em alguns minutos." };
+  if (!log) return { ok: false, mensagem: MSG_OCUPADO };
   const avisos = [];
   let ok = 1;
 

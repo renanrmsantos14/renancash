@@ -3,6 +3,7 @@ const TZ = "America/Sao_Paulo";
 const id = (pk) => "cashew:" + pk;
 const dataSP = (segundos) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(segundos * 1000));
 const sem = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== "")); // tira opcionais vazios (0 fica)
+const curto = (v) => (typeof v === "string" ? v.slice(0, 200) : v); // "texto" do core aceita até 200; mais que isso descartaria o registro
 const lista = (texto) => { try { const v = JSON.parse(texto ?? "[]"); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } };
 
 export function converterCashew({ categorias, orcamentos, objetivos, transacoes, carteiras }, agoraIso) {
@@ -15,7 +16,7 @@ export function converterCashew({ categorias, orcamentos, objetivos, transacoes,
 
   return [
     ...categorias.map((c) => reg("categorias", c.category_pk, sem({
-      nome: c.name, tipo: c.income ? "receita" : "despesa", cor: c.colour, icone: c.icon_name,
+      nome: curto(c.name), tipo: c.income ? "receita" : "despesa", cor: c.colour, icone: c.icon_name,
       pai_id: c.main_category_pk != null ? id(c.main_category_pk) : null, ordem: Number(c.order ?? 0),
     }))),
     ...orcamentos.filter((b) => !b.archived).map((b) => reg("orcamentos", b.budget_pk, {
@@ -25,8 +26,8 @@ export function converterCashew({ categorias, orcamentos, objetivos, transacoes,
       ? reg("dividas", o.objective_pk, { tipo: "emprestimo", nome: o.name, sentido: o.income ? "me_devem" : "devo", valor_total: Number(o.amount), pago: progresso(o.objective_pk) })
       : reg("metas", o.objective_pk, sem({ nome: o.name, valor_alvo: Number(o.amount), valor_atual: progresso(o.objective_pk), prazo: o.end_date != null ? dataSP(Number(o.end_date)) : null }))),
     ...proprias.map((t) => reg("lancamentos", t.transaction_pk, sem({
-      data: dataSP(Number(t.date_created)), descricao: t.name?.trim() || "Sem descrição", valor: Number(t.amount),
-      categoria_id: t.category_fk != null ? id(t.category_fk) : null, carteira: carteira.get(String(t.wallet_fk)), nota: t.note?.trim(),
+      data: dataSP(Number(t.date_created)), descricao: curto(t.name?.trim() || "Sem descrição"), valor: Number(t.amount),
+      categoria_id: t.category_fk != null ? id(t.category_fk) : null, carteira: carteira.get(String(t.wallet_fk)), nota: curto(t.note?.trim()),
     }))),
   ];
 }

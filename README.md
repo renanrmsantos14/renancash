@@ -76,7 +76,7 @@ O Pluggy avisa o Worker quando uma conexão muda (`item/updated`, `item/error`, 
 
 1. Crie um segredo aleatório e guarde como secret: `node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_WEBHOOK_SECRET`.
 2. Logado no painel, registre o webhook (uma vez): `POST /api/pluggy/webhooks`. Ele aponta para `https://<seu-worker>/api/pluggy/webhook` e o Pluggy envia o segredo no cabeçalho `x-webhook-secret`. Sem `PLUGGY_WEBHOOK_SECRET` essa rota responde **500** ("PLUGGY_WEBHOOK_SECRET ausente"), e o webhook recusa tudo com 401.
-3. **Rotação do secret**: `criarWebhook` só compara a URL. Se já existe um webhook para ela, ele não é atualizado, então o Pluggy continua enviando o segredo antigo e passa a levar 401. Depois de trocar o secret, apague o webhook no Pluggy (ou recrie-o) e chame `POST /api/pluggy/webhooks` de novo, para o cabeçalho novo valer.
+3. **Rotação do secret**: depois de trocar o `PLUGGY_WEBHOOK_SECRET`, chame `POST /api/pluggy/webhooks` de novo. Se já existe um webhook para a mesma URL, ele é atualizado (`PATCH /webhooks/:id`) com o cabeçalho novo; sem isso, o Pluggy continuaria enviando o segredo antigo e levaria 401.
 
 As conexões ativas ficam na tabela `pluggy_items` do D1: na primeira sincronização ela copia o `PLUGGY_ITEM_IDS`, e depois o D1 manda (o secret deixa de valer). `item/created` registra a conexão, `item/deleted` a marca como removida.
 

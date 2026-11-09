@@ -57,3 +57,10 @@ test("histórico continua lendo o ajuste pela view", async () => {
   const j = await (await pedir("/api/historico", { headers: { cookie } })).json();
   assert.equal(j.transacoes.find((t) => t.id === "t1")?.ajuste_categoria, "Farmácia");
 });
+
+test("v_ajustes usa o relógio do servidor e mantém a exclusão visível ao pull incremental", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(SCHEMA);
+  db.exec("INSERT INTO registros VALUES ('ajustes','t1',NULL,'2026-11-01T10:00:00.000Z','2026-11-01T10:00:00.000Z','2026-11-09T12:00:00.000Z')");
+  assert.deepEqual({ ...db.prepare("SELECT category, gasto, updated_at FROM v_ajustes WHERE transaction_id = 't1'").get() }, { category: null, gasto: null, updated_at: "2026-11-09T12:00:00.000Z" });
+});

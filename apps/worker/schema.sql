@@ -61,9 +61,12 @@ CREATE TABLE IF NOT EXISTS registros (
 CREATE INDEX IF NOT EXISTS idx_registros_server ON registros(server_at);
 
 -- Ajustes no formato antigo (category/gasto) para as consultas do painel. A sincronização do Pluggy nunca mexe aqui.
-CREATE VIEW IF NOT EXISTS v_ajustes AS
-  SELECT id AS transaction_id, json_extract(dados, '$.category') AS category, json_extract(dados, '$.gasto') AS gasto, updated_at
-  FROM registros WHERE tabela = 'ajustes' AND deleted_at IS NULL;
+-- updated_at = server_at (o cursor de /api/app/transacoes é do servidor); excluído fica com category/gasto NULL (dados NULL)
+-- para a exclusão também chegar ao pull incremental. DROP + CREATE: rodar o schema de novo atualiza a view.
+DROP VIEW IF EXISTS v_ajustes;
+CREATE VIEW v_ajustes AS
+  SELECT id AS transaction_id, json_extract(dados, '$.category') AS category, json_extract(dados, '$.gasto') AS gasto, server_at AS updated_at
+  FROM registros WHERE tabela = 'ajustes';
 
 -- Conexões do Pluggy (items). Substitui o secret PLUGGY_ITEM_IDS, copiado daqui na primeira sincronização.
 CREATE TABLE IF NOT EXISTS pluggy_items (

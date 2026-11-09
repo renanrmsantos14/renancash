@@ -89,7 +89,10 @@ export class ApiCliente {
   // Webhook único para todos os items (event "all"). Não duplica se já houver um para a mesma URL.
   async criarWebhook(url, secret) {
     const igual = ((await this.obter("/webhooks"))?.results || []).find((w) => w.url === url);
-    if (igual) return { id: igual.id, criado: false };
+    if (igual) { // regrava o cabeçalho: com o PLUGGY_WEBHOOK_SECRET trocado, o antigo seria recusado com 401 para sempre
+      await this.#autenticado("PATCH", `/webhooks/${encodeURIComponent(igual.id)}`, { corpo: { headers: { "x-webhook-secret": secret } } });
+      return { id: igual.id, criado: false };
+    }
     const r = await this.#autenticado("POST", "/webhooks", { corpo: { event: "all", url, headers: { "x-webhook-secret": secret } } });
     return { id: r?.id, criado: true };
   }
