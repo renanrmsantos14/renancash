@@ -4,22 +4,22 @@ Painel pessoal com saldo, cartão, faturas e transações de todos os bancos con
 Roda 100% no plano gratuito da Cloudflare: Workers + Workers Assets + D1 + Cron Triggers. Não usa IA.
 
 ```
-public/index.html   painel (HTML + JS puro, tema claro/escuro, gráficos SVG, detalhe da transação, faturas)
-public/login.html   tela de login
-public/sw.js        service worker (cache do shell e dos dados, modo offline)
-public/manifest.webmanifest, public/icons/, public/apple-touch-icon.png   PWA instalável
-scripts/icones.mjs  gera os PNG dos ícones (node scripts/icones.mjs)
-src/index.js        Worker: login por cookie, API do painel, sincronização (cron e botão)
-src/api.js          cliente da API do Pluggy (autenticação, paginação, nova tentativa no 429)
-src/mapa.js         traduz contas, transações e faturas do Pluggy para o formato interno
-src/ciclo.js        ciclo do salário, limite e parcelas comprometidas
-src/alertas.js      decide quais alertas gerar (limite, gasto fora do padrão, reconexão, resumo semanal)
-src/push.js         envio de Web Push (VAPID) sem biblioteca
-scripts/vapid.mjs   gera o par de chaves VAPID
-schema.sql          tabelas do D1
+apps/worker/public/index.html   painel (HTML + JS puro, tema claro/escuro, gráficos SVG, detalhe da transação, faturas)
+apps/worker/public/login.html   tela de login
+apps/worker/public/sw.js        service worker (cache do shell e dos dados, modo offline)
+apps/worker/public/manifest.webmanifest, apps/worker/public/icons/, apps/worker/public/apple-touch-icon.png   PWA instalável
+apps/worker/scripts/icones.mjs  gera os PNG dos ícones (node apps/worker/scripts/icones.mjs)
+apps/worker/src/index.js        Worker: login por cookie, API do painel, sincronização (cron e botão)
+apps/worker/src/api.js          cliente da API do Pluggy (autenticação, paginação, nova tentativa no 429)
+apps/worker/src/mapa.js         traduz contas, transações e faturas do Pluggy para o formato interno
+apps/worker/src/ciclo.js        ciclo do salário, limite e parcelas comprometidas
+apps/worker/src/alertas.js      decide quais alertas gerar (limite, gasto fora do padrão, reconexão, resumo semanal)
+apps/worker/src/push.js         envio de Web Push (VAPID) sem biblioteca
+apps/worker/scripts/vapid.mjs   gera o par de chaves VAPID
+apps/worker/schema.sql          tabelas do D1
 mock/api-mock.mjs   Pluggy falso (2 conexões: Inter e Santander) para teste local
-scripts/reimportar.sql  apaga contas/transações/faturas importadas, para reimportar do zero
-scripts/versao.mjs  incrementa a versão mostrada no canto do painel a cada deploy
+apps/worker/scripts/reimportar.sql  apaga contas/transações/faturas importadas, para reimportar do zero
+apps/worker/scripts/versao.mjs  incrementa a versão mostrada no canto do painel a cada deploy
 ```
 
 ## 1. Preparar o PC (uma vez)
@@ -65,35 +65,35 @@ Como o Pluggy vira o formato interno:
 - **Faturas**: `GET /bills` lista as faturas fechadas; a aberta vem do saldo e do vencimento da conta (`creditData`). O Pluggy não informa se a fatura foi paga, então todas aparecem como "Fechada".
 - **Conexão com problema** (`LOGIN_ERROR`, `WAITING_USER_INPUT`...): aviso amarelo no painel, com link para o Meu Pluggy. `OUTDATED` é falha temporária e não avisa.
 
-Custo: o uso pessoal com o conector **MeuPluggy** é gratuito segundo https://pluggy.ai/pricing (limite de 5 conexões ativas por titular, sem SLA, sem contrato; o plano pago "Dados" começa em R$ 2.500/mês). Esse conector só enxerga o que você conectou no Meu Pluggy. Não confirmei com o Pluggy se as credenciais da sua conta valem para esse uso; a cobrança por requisição só se aplica a planos pagos. Cada atualização faz 1 `/auth`, 2 por conexão (`items` e `accounts`), 1+ por conta (`transactions`) e 1 por cartão (`bills`): cerca de 12 chamadas com 2 bancos; a cada 3 horas são ~100 por dia. Se mudar de plano, mude o cron no `wrangler.toml`.
+Custo: o uso pessoal com o conector **MeuPluggy** é gratuito segundo https://pluggy.ai/pricing (limite de 5 conexões ativas por titular, sem SLA, sem contrato; o plano pago "Dados" começa em R$ 2.500/mês). Esse conector só enxerga o que você conectou no Meu Pluggy. Não confirmei com o Pluggy se as credenciais da sua conta valem para esse uso; a cobrança por requisição só se aplica a planos pagos. Cada atualização faz 1 `/auth`, 2 por conexão (`items` e `accounts`), 1+ por conta (`transactions`) e 1 por cartão (`bills`): cerca de 12 chamadas com 2 bancos; a cada 3 horas são ~100 por dia. Se mudar de plano, mude o cron no `apps/worker/wrangler.toml`.
 
 ## Reimportar do zero (troca de fonte de dados)
 
 Os ids de conta e de transação do Pluggy são diferentes dos antigos; para não misturar as duas fontes, apague o que foi importado e sincronize de novo. **Faça backup antes** e confira o alvo (`--remote` é o banco real):
 
 ```powershell
-npx wrangler d1 export meu-banco --remote --output=backup-AAAA-MM-DD.sql
-npx wrangler d1 execute meu-banco --remote --file=scripts/reimportar.sql
+pnpm --filter @meu-banco/worker exec wrangler d1 export meu-banco --remote --output=backup-AAAA-MM-DD.sql
+pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=scripts/reimportar.sql
 ```
 
-O `scripts/reimportar.sql` apaga só `transactions`, `accounts`, `snapshots` (faturas e avisos) e `sync_log`. Preserva `config` (limite e salário do ciclo), `app_tokens`, `push_inscricoes`, `notificacoes` e as sessões (cookie assinado, não fica no banco). Os `ajustes` também ficam, mas ficam órfãos: a categoria/"não é gasto" que você marcou em transações antigas não vale para as novas (ids novos). Depois, clique **Atualizar** no painel: a primeira carga busca 180 dias (`IMPORT_DAYS`).
+O `apps/worker/scripts/reimportar.sql` apaga só `transactions`, `accounts`, `snapshots` (faturas e avisos) e `sync_log`. Preserva `config` (limite e salário do ciclo), `app_tokens`, `push_inscricoes`, `notificacoes` e as sessões (cookie assinado, não fica no banco). Os `ajustes` também ficam, mas ficam órfãos: a categoria/"não é gasto" que você marcou em transações antigas não vale para as novas (ids novos). Depois, clique **Atualizar** no painel: a primeira carga busca 180 dias (`IMPORT_DAYS`).
 
 ## 4. Publicar na Cloudflare
 
 ```powershell
-npx wrangler login                       # abre o navegador; autorize a conta nova
-npx wrangler d1 create meu-banco         # copie o "database_id" mostrado
+pnpm --filter @meu-banco/worker exec wrangler login                       # abre o navegador; autorize a conta nova
+pnpm --filter @meu-banco/worker exec wrangler d1 create meu-banco         # copie o "database_id" mostrado
 ```
 
-Edite o `wrangler.toml` e cole o `database_id`.
+Edite o `apps/worker/wrangler.toml` e cole o `database_id`.
 
 ```powershell
 pnpm db:remote                        # cria as tabelas no D1 da nuvem (--remote)
-npx wrangler secret put PLUGGY_CLIENT_ID       # Client ID do Pluggy (não aparece na tela)
-npx wrangler secret put PLUGGY_CLIENT_SECRET   # Client Secret do Pluggy
-npx wrangler secret put PLUGGY_ITEM_IDS        # ids das conexões do Meu Pluggy, separados por vírgula
-npx wrangler secret put APP_PASSWORD     # senha do painel: use 16+ caracteres
-node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | npx wrangler secret put SESSION_SECRET   # chave das sessões (aleatória)
+pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_CLIENT_ID       # Client ID do Pluggy (não aparece na tela)
+pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_CLIENT_SECRET   # Client Secret do Pluggy
+pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_ITEM_IDS        # ids das conexões do Meu Pluggy, separados por vírgula
+pnpm --filter @meu-banco/worker exec wrangler secret put APP_PASSWORD     # senha do painel: use 16+ caracteres
+node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | pnpm --filter @meu-banco/worker exec wrangler secret put SESSION_SECRET   # chave das sessões (aleatória)
 pnpm push                             # incrementa a versão e publica
 ```
 
@@ -120,7 +120,7 @@ Sem sessão, páginas redirecionam para `/login` e `/api/*` devolve 401. Só `/l
 
 ## Migração do banco (tabela de ajustes)
 
-A tabela `ajustes` (categoria trocada e "não é gasto") foi adicionada ao `schema.sql` com `CREATE TABLE IF NOT EXISTS`, então não apaga nada. No banco já em uso, rode **uma vez** antes do deploy:
+A tabela `ajustes` (categoria trocada e "não é gasto") foi adicionada ao `apps/worker/schema.sql` com `CREATE TABLE IF NOT EXISTS`, então não apaga nada. No banco já em uso, rode **uma vez** antes do deploy:
 
 ```powershell
 pnpm db:remote
@@ -132,7 +132,7 @@ pnpm db:remote
 
 - Gastos por mês (6 meses) e saldo da conta corrente (6 meses) usam `GET /api/historico`. O saldo é reconstruído de trás para frente (saldo atual menos as transações), não é saldo real gravado.
 - Tocar numa transação abre o detalhe: dá para trocar a categoria e marcar/desmarcar "Não é gasto" (`PUT /api/ajustes/:id`). O ajuste vale mais que a regra automática.
-- Tocar numa fatura lista as compras dela (`GET /api/fatura`). A API do Pluggy não usa um campo que o painel consiga ligar à fatura (o app não lê o `billId` das compras) nem informa a data de fechamento. Por isso a fatura abrange as compras entre dois fechamentos **estimados em 7 dias antes do vencimento** (`CORTE_FATURA` em `public/index.html`); a fatura aberta inclui as parcelas futuras. O valor oficial é sempre o `totalAmount` da tabela. Se o seu cartão fecha em outro prazo, ajuste a constante.
+- Tocar numa fatura lista as compras dela (`GET /api/fatura`). A API do Pluggy não usa um campo que o painel consiga ligar à fatura (o app não lê o `billId` das compras) nem informa a data de fechamento. Por isso a fatura abrange as compras entre dois fechamentos **estimados em 7 dias antes do vencimento** (`CORTE_FATURA` em `apps/worker/public/index.html`); a fatura aberta inclui as parcelas futuras. O valor oficial é sempre o `totalAmount` da tabela. Se o seu cartão fecha em outro prazo, ajuste a constante.
 
 Opcional, camada extra: Cloudflare Zero Trust → Access → Applications → adicione o domínio `meu-banco.SEU-USUARIO.workers.dev` com política "e-mail = o seu" (gratuito até 50 usuários). A senha do Worker continua valendo.
 
@@ -145,7 +145,7 @@ Opcional, camada extra: Cloudflare Zero Trust → Access → Applications → ad
 
 A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 
-- **401**: Client ID/Secret errados ou expirados. Refaça `npx wrangler secret put PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (não precisa novo deploy).
+- **401**: Client ID/Secret errados ou expirados. Refaça `pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (não precisa novo deploy).
 - **403**: sem permissão no Pluggy (credenciais de outra aplicação, ou recurso não liberado na conta).
 - **404**: id de conexão errado ou apagado em `PLUGGY_ITEM_IDS`. Confira em `/api/ferramentas`.
 - **"Defina PLUGGY_ITEM_IDS"**: o Pluggy não listou as conexões; crie o secret com os ids (seção 3).
@@ -156,7 +156,7 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 - **"no such table"**: faltou `pnpm db:remote`.
 - **"mais de 10 páginas de transações"**: reduza `IMPORT_DAYS`.
 - **Ver logs ao vivo**: `pnpm logs` (`wrangler tail`) e clique Atualizar. Também no painel Cloudflare → Workers → meu-banco → Logs. O histórico de execuções fica na tabela `sync_log`:
-  `npx wrangler d1 execute meu-banco --remote --command "SELECT * FROM sync_log ORDER BY id DESC LIMIT 5"`
+  `pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --command "SELECT * FROM sync_log ORDER BY id DESC LIMIT 5"`
 
 ## Ciclo, limite e alertas
 
@@ -173,10 +173,10 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 ### Chaves VAPID (uma vez, na publicação)
 
 ```powershell
-node scripts/vapid.mjs vapid-publica.txt | npx wrangler secret put VAPID_PRIVADA
+node scripts/vapid.mjs vapid-publica.txt | pnpm --filter @meu-banco/worker exec wrangler secret put VAPID_PRIVADA
 ```
 
-A chave privada só sai pelo pipe e vira secret (nunca em arquivo nem na tela). Copie o conteúdo de `vapid-publica.txt` para `VAPID_PUBLICA` no `wrangler.toml`, apague o arquivo e rode `pnpm push`. **Trocar as chaves VAPID exige reativar as notificações no celular** (as inscrições antigas deixam de valer).
+A chave privada só sai pelo pipe e vira secret (nunca em arquivo nem na tela). Copie o conteúdo de `vapid-publica.txt` para `VAPID_PUBLICA` no `apps/worker/wrangler.toml`, apague o arquivo e rode `pnpm push`. **Trocar as chaves VAPID exige reativar as notificações no celular** (as inscrições antigas deixam de valer).
 
 Push local: no `.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de teste gerado fora do repositório (`node scripts/vapid.mjs <pasta-temporaria>/vapid-local.txt > <pasta-temporaria>/vapid-local.json`); o mock (porta 8788) simula o serviço de push.
 

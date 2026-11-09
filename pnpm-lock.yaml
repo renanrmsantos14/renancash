@@ -164,7 +164,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/worker:
     devDependencies:
       wrangler:
         specifier: ^4.40.0
