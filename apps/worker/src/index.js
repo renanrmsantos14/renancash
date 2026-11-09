@@ -5,7 +5,7 @@ import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
-import { autenticarAparelho, puxar, enviar } from "./sync.js";
+import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
@@ -41,13 +41,7 @@ export default {
         else if (!env.PLUGGY_WEBHOOK_SECRET) resp = json({ erro: "PLUGGY_WEBHOOK_SECRET ausente" }, 500);
         else resp = json(await new ApiCliente(env).criarWebhook(url.origin + "/api/pluggy/webhook", env.PLUGGY_WEBHOOK_SECRET));
       } else if (caminho === "/api/atualizar" && request.method === "POST") {
-        if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
-        else {
-          // waitUntil: se o navegador fechar no meio, a sincronização termina e o sync_log é fechado.
-          const tarefa = sincronizar(env, "botao");
-          ctx.waitUntil(tarefa);
-          resp = json(await tarefa);
-        }
+        resp = mesmaOrigem(request, url) ? await atualizarAgora(env, "botao", ctx) : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/ciclo" && request.method === "GET") resp = await ciclo(env);
       else if (caminho === "/api/config" && request.method === "PUT") resp = await salvarConfig(request, env, url);
       else if (caminho === "/api/push" && (request.method === "POST" || request.method === "DELETE")) resp = await inscreverPush(request, env, url);
@@ -345,7 +339,7 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/sync", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTAS_APARELHO = new Set(["/api/sync", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
@@ -364,6 +358,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     const r = await enviar(env.DB, await request.json().catch(() => null), ts);
     return json(r.corpo, r.status);
   }
+  if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
   if (rota === "POST /api/pluggy/connect-token") {
     const itemId = (await request.json().catch(() => null))?.itemId ?? null;
     if (itemId !== null && !(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
@@ -398,6 +393,31 @@ async function webhookPluggy(request, env, url, ctx) {
   return json({ ok: true });
 }
 
+
+const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
+
+// Botão Atualizar (painel e apps): no máximo 1 a cada 30 min. Pede ao banco dados novos (PATCH no item) e lê o que o
+// Pluggy já tem; quando o banco terminar, o webhook item/updated faz a leitura final.
+async function atualizarAgora(env, origem, ctx) {
+  const db = env.DB;
+  const ultimo = await db.prepare("SELECT MAX(started_at) AS t FROM sync_log WHERE origem IN ('botao', 'app')").first("t");
+  const espera = esperaAtualizar(ultimo, Date.now());
+  if (espera > 0) {
+    const liberado = Date.now() + espera;
+    const mensagem = `Atualizado há pouco. Tente de novo às ${horaSP(liberado)}.`;
+    return json({ ok: false, erro: mensagem, mensagem, liberado_em: new Date(liberado).toISOString() }, 429);
+  }
+  const tarefa = (async () => {
+    const ids = await idsConexoes(db, env, agora());
+    const api = new ApiCliente(env, ids);
+    const pedidos = await Promise.allSettled(ids.map((id) => api.atualizarItem(id)));
+    const falhas = pedidos.flatMap((p, i) => (p.status === "rejected" ? [`Conexão ${ids[i]}: ${p.reason?.message || p.reason}`] : []));
+    for (const f of falhas) console.warn("Atualizar no banco falhou", f);
+    return { ...(await sincronizar(env, origem)), pedidos: ids.length - falhas.length, falhas };
+  })();
+  ctx.waitUntil(tarefa.catch(() => {})); // se o cliente fechar no meio, a sincronização termina e o sync_log é fechado
+  return json(await tarefa);
+}
 
 async function listarTokens(env) {
   const { results } = await env.DB.prepare("SELECT id, nome, criado, ultimo_uso, revogado FROM app_tokens ORDER BY criado DESC").all();
