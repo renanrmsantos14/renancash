@@ -54,3 +54,12 @@ test("POST /api/pluggy/webhooks registra o webhook uma vez, com o secret no cabe
   const post = chamadas.find((c) => c.metodo === "POST" && c.caminho === "/webhooks");
   assert.deepEqual(post.corpo, { event: "all", url: ORIGEM + "/api/pluggy/webhook", headers: { "x-webhook-secret": "wh-secreto" } });
 });
+
+test("POST /api/pluggy/webhooks sem PLUGGY_WEBHOOK_SECRET responde 500 e não chama o Pluggy", async () => {
+  const { pedir } = criarAmbiente({ ...ENV, PLUGGY_WEBHOOK_SECRET: "" });
+  const cookie = await entrarComSenha(pedir);
+  const { chamadas } = simularPluggy(() => ({}));
+  const r = await pedir("/api/pluggy/webhooks", { method: "POST", headers: { cookie, origin: ORIGEM } });
+  assert.equal(r.status, 500);
+  assert.equal(chamadas.length, 0);
+});

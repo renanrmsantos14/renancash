@@ -37,9 +37,9 @@ export default {
       else if (/^\/api\/ajustes\/[^/]+$/.test(caminho) && request.method === "PUT") {
         resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/pluggy/webhooks" && request.method === "POST") {
-        resp = mesmaOrigem(request, url)
-          ? json(await new ApiCliente(env).criarWebhook(url.origin + "/api/pluggy/webhook", env.PLUGGY_WEBHOOK_SECRET || ""))
-          : json({ erro: "Origem não permitida" }, 403);
+        if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
+        else if (!env.PLUGGY_WEBHOOK_SECRET) resp = json({ erro: "PLUGGY_WEBHOOK_SECRET ausente" }, 500);
+        else resp = json(await new ApiCliente(env).criarWebhook(url.origin + "/api/pluggy/webhook", env.PLUGGY_WEBHOOK_SECRET));
       } else if (caminho === "/api/atualizar" && request.method === "POST") {
         if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
         else {
