@@ -5,6 +5,7 @@ import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
+import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 
@@ -70,7 +71,12 @@ export default {
     // também manda o resumo semanal.
     const t = new Date(evento.scheduledTime);
     const resumo = t.getUTCDay() === 1 && t.getUTCHours() === 0;
-    ctx.waitUntil(sincronizar(env, "cron").finally(() => resumo && alertaSemanal(env)));
+    const backup = t.getUTCHours() === 6 && env.BACKUP; // tick das 06h07 UTC = 03h07 BRT
+    ctx.waitUntil(sincronizar(env, "cron").finally(async () => {
+      if (resumo) await alertaSemanal(env);
+      // O backup nunca derruba a sincronização: em falha, só registra o erro (sem segredos).
+      if (backup) await salvarBackup(env, t).then((k) => console.log("Backup salvo", k), (e) => console.error("Backup falhou", e?.message || e));
+    }));
   },
 };
 

@@ -15,6 +15,11 @@ binding = "DB"
 database_name = "meu-banco"
 database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 
+# Backup diário do D1 (JSON gzip). O bucket é criado à parte; retenção de 30 dias por regra de ciclo de vida.
+[[r2_buckets]]
+binding = "BACKUP"
+bucket_name = "meu-banco-backups"
+
 # Crons em UTC (BRT = UTC-3): sincronização a cada 3 h (minuto 7 para fugir do pico), 07h (fim do silêncio) e domingo 20h (resumo semanal).
 [triggers]
 crons = ["7 */3 * * *"]
