@@ -261,7 +261,8 @@ Banco novo (`pnpm db:remote`) já nasce com a coluna. Use `-- --local` para o D1
 
 O Worker serve o build web do Meu Cashew em `/app/`, só com sessão (cookie). Sem sessão, vai para `/login?volta=/app/` e volta ao app depois do login. O app usa a mesma origem e o cookie, sem token `mb_`.
 
-- **Gerar o build** (no repositório meu-cashew): `scripts/compilar.sh web <este-repo>/apps/worker/public/app`. A pasta `apps/worker/public/app/` não é versionada.
+- **Deploy pelo GitHub Actions** (`.github/workflows/deploy.yml`): a cada push no main deste repo, a cada push no main do meu-cashew (aviso via `repository_dispatch`) ou manualmente (**Actions → Deploy Worker → Run workflow**). Compila o web do Meu Cashew, roda testes e typecheck, aplica `migrar:fase2 -- --remote` (idempotente), roda `pnpm push` e grava a versão publicada no main com `[skip ci]`. Secrets: `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, D1: Edit) e `CLOUDFLARE_ACCOUNT_ID`; no meu-cashew, `MEU_BANCO_DISPATCH_TOKEN` (PAT fine-grained no meu-banco, Contents: Read and write).
+- **Build local** (no repositório meu-cashew): `scripts/compilar.sh web <este-repo>/apps/worker/public/app`. A pasta `apps/worker/public/app/` não é versionada.
 - **Renderer**: CanvasKit (padrão do Flutter 3.24). Se der tela branca ou erro de wasm no console, o plano B é `--web-renderer html` em `scripts/compilar.sh`.
 - **CSP própria** em `/app/`: acrescenta `'wasm-unsafe-eval'` e `base-uri 'self'` (o painel mantém `base-uri 'none'`).
 - `pnpm push` falha com instrução se `public/app/index.html` não existir.
