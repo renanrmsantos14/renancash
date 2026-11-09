@@ -3,7 +3,7 @@ import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
-import { REGEX_ITEM, idsConexoes, registrarItem, atualizarStatus } from "./pluggy.js";
+import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { autenticarAparelho, puxar, enviar } from "./sync.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
@@ -23,6 +23,7 @@ export default {
     try {
       let resp;
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
+      else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
       else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
@@ -35,6 +36,10 @@ export default {
       else if (caminho === "/api/fatura" && request.method === "GET") resp = await fatura(env, url);
       else if (/^\/api\/ajustes\/[^/]+$/.test(caminho) && request.method === "PUT") {
         resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
+      } else if (caminho === "/api/pluggy/webhooks" && request.method === "POST") {
+        resp = mesmaOrigem(request, url)
+          ? json(await new ApiCliente(env).criarWebhook(url.origin + "/api/pluggy/webhook", env.PLUGGY_WEBHOOK_SECRET || ""))
+          : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/atualizar" && request.method === "POST") {
         if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
         else {
@@ -375,6 +380,22 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
+}
+
+// Webhook do Pluggy: responde na hora (o Pluggy espera 2xx em poucos segundos) e trabalha em waitUntil.
+// Se outra sincronização estiver rodando, a trava do sync_log descarta esta; o cron cobre o que faltar.
+async function webhookPluggy(request, env, url, ctx) {
+  if (!(await webhookValido(request, url, env))) return json({ erro: "Não autorizado" }, 401);
+  const ev = await request.json().catch(() => null);
+  const acao = acaoWebhook(ev);
+  if (acao) {
+    const ts = agora();
+    const tarefa = acao === "remover"
+      ? removerItem(env.DB, ev.itemId, ts)
+      : (acao === "registrar" ? registrarItem(env.DB, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
+    ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
+  }
+  return json({ ok: true });
 }
 
 
