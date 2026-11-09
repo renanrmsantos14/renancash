@@ -80,7 +80,7 @@ function transacoes(conta) {
 
 const faturas = () => ["a", "b", "c", "d", "e", "f"].map((k, i) => ({ id: `fat-${k}`, dueDate: dia(-(i + 1) * 30 + 12), totalAmount: 1400 + i * 37.5, minimumPaymentAmount: 200, allowsInstallments: true }));
 
-// Mesmos caminhos e formato do Pluggy: POST /auth, GET /items/:id, /accounts, /transactions, /bills (X-API-KEY).
+// Mesmos caminhos e formato do Pluggy: POST /auth, GET e PATCH /items/:id, /accounts, /transactions, /bills (X-API-KEY).
 const CHAVE = "chave-mock-" + Date.now();
 function rota(caminho, q) {
   const id = /^\/items\/([^/]+)$/.exec(caminho)?.[1];
@@ -124,7 +124,8 @@ createServer(async (req, res) => {
     if (c.clientId !== CLIENT_ID || c.clientSecret !== CLIENT_SECRET) return enviar(401, { code: 401, message: "Invalid credentials" });
     return enviar(200, { apiKey: CHAVE });
   }
-  if (req.method !== "GET") return enviar(405, { message: "method not allowed" });
+  // PATCH /items/:id (botão Atualizar) devolve o item, como o Pluggy.
+  if (req.method !== "GET" && !(req.method === "PATCH" && url.pathname.startsWith("/items/"))) return enviar(405, { message: "method not allowed" });
   if (req.headers["x-api-key"] !== CHAVE) return enviar(401, { code: 401, message: "Invalid API key" });
   console.log("←", req.url);
   const [status, obj] = rota(url.pathname, url.searchParams);

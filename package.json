@@ -1,19 +1,15 @@
 {
   "name": "meu-banco",
-  "version": "0.0.7",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "mock": "node mock/api-mock.mjs",
-    "db:local": "wrangler d1 execute meu-banco --local --file=schema.sql",
-    "db:remote": "wrangler d1 execute meu-banco --remote --file=schema.sql",
-    "dev": "wrangler dev --test-scheduled",
-    "push": "node scripts/versao.mjs && wrangler deploy",
-    "logs": "wrangler tail"
-  },
-  "devDependencies": {
-    "wrangler": "^4.40.0"
+    "test": "pnpm -r test",
+    "mock": "pnpm --filter @meu-banco/worker mock",
+    "dev": "pnpm --filter @meu-banco/worker dev",
+    "push": "pnpm --filter @meu-banco/worker push",
+    "logs": "pnpm --filter @meu-banco/worker logs",
+    "db:local": "pnpm --filter @meu-banco/worker db:local",
+    "db:remote": "pnpm --filter @meu-banco/worker db:remote"
   },
   "packageManager": "pnpm@12.18.0"
 }

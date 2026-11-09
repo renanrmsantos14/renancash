@@ -1,12 +1,13 @@
 // src/push.js — Web Push sem conteúdo: só o JWT VAPID (RFC 8292). O service worker busca o texto em /api/notificacoes/entregar.
-const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const parte = (obj) => b64u(new TextEncoder().encode(JSON.stringify(obj)));
+import { base64url } from "./app.js";
+
+const parte = (obj) => base64url(new TextEncoder().encode(JSON.stringify(obj)));
 
 export async function jwtVapid(audiencia, assunto, jwkPrivada, agoraS) {
   const chave = await crypto.subtle.importKey("jwk", jwkPrivada, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
   const corpo = `${parte({ typ: "JWT", alg: "ES256" })}.${parte({ aud: audiencia, exp: agoraS + 12 * 3600, sub: assunto })}`;
   const assinatura = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, chave, new TextEncoder().encode(corpo));
-  return `${corpo}.${b64u(assinatura)}`;
+  return `${corpo}.${base64url(new Uint8Array(assinatura))}`;
 }
 
 export async function enviarPush(endpoint, env) {
