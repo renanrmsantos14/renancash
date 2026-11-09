@@ -19,7 +19,8 @@ export class ApiCliente {
     this.base = (env.PLUGGY_API_URL || BASE_PADRAO).replace(/\/+$/, "");
     this.clientId = env.PLUGGY_CLIENT_ID;
     this.clientSecret = env.PLUGGY_CLIENT_SECRET;
-    this.itemIds = ids?.length ? ids : (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    this.doD1 = ids != null; // lista vazia do D1 = nada a sincronizar (o secret só vale sem lista)
+    this.itemIds = ids ?? (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
     this.semV2 = false;
     this.chave = null; // Promise da apiKey (compartilhada entre chamadas simultâneas)
   }
@@ -96,7 +97,7 @@ export class ApiCliente {
   // Ids das conexões (items): os de PLUGGY_ITEM_IDS ou, se vazio, GET /v2/items (opt-in na conta; o Pluggy não lista items por padrão).
   async listarIds() {
     await this.#autenticar(); // credenciais erradas falham aqui, uma vez só, e não em cada conexão
-    if (this.itemIds.length) return this.itemIds;
+    if (this.itemIds.length || this.doD1) return this.itemIds;
     const ids = [];
     let proximo = "";
     try {

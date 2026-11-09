@@ -1,7 +1,7 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { criarD1 } from "./d1.mjs";
-import { criarAmbiente, criarAparelho, simularPluggy, restaurarFetch } from "./ambiente.mjs";
+import { criarAmbiente, criarAparelho, entrarComSenha, simularPluggy, restaurarFetch } from "./ambiente.mjs";
 import { idsConexoes, registrarItem, removerItem } from "../src/pluggy.js";
 import { ApiCliente } from "../src/api.js";
 
@@ -23,7 +23,8 @@ test("idsConexoes copia PLUGGY_ITEM_IDS uma vez e depois usa só o D1", async ()
 test("ApiCliente usa os ids do D1 antes do secret", async () => {
   simularPluggy(() => ({}));
   assert.deepEqual(await new ApiCliente({ ...PLUGGY, PLUGGY_ITEM_IDS: "x" }, [ID_A]).listarIds(), [ID_A]);
-  assert.deepEqual(await new ApiCliente({ ...PLUGGY, PLUGGY_ITEM_IDS: "x" }, []).listarIds(), ["x"]);
+  assert.deepEqual(await new ApiCliente({ ...PLUGGY, PLUGGY_ITEM_IDS: "x" }, []).listarIds(), [], "lista vazia do D1 não volta ao secret");
+  assert.deepEqual(await new ApiCliente({ ...PLUGGY, PLUGGY_ITEM_IDS: "x" }).listarIds(), ["x"]);
 });
 
 test("connect-token pede o accessToken ao Pluggy; itemId desconhecido é 404", async () => {
@@ -41,6 +42,9 @@ test("connect-token pede o accessToken ao Pluggy; itemId desconhecido é 404", a
   assert.equal((await post({ itemId: ID_A })).status, 404);
   await registrarItem(env.DB, ID_A, T);
   assert.equal((await post({ itemId: ID_A })).status, 200);
+  await removerItem(env.DB, ID_A, T);
+  assert.equal((await post({ itemId: ID_A })).status, 404);
+  await registrarItem(env.DB, ID_A, T);
   assert.equal(chamadas.filter((c) => c.caminho === "/connect_token").at(-1).corpo.itemId, ID_A);
 });
 
@@ -55,4 +59,21 @@ test("POST /api/pluggy/items registra o item e dispara a sincronização", async
   await esperar();
   assert.deepEqual(await env.DB.prepare("SELECT id, status, conector FROM pluggy_items").first(), { id: ID_A, status: "UPDATED", conector: "Inter" });
   assert.equal(await env.DB.prepare("SELECT origem FROM sync_log").first("origem"), "app");
+});
+
+test("connect-token aceita itemId que só existe no secret (instalação nova)", async () => {
+  const { env, pedir } = criarAmbiente({ ...PLUGGY, PLUGGY_ITEM_IDS: ID_B });
+  const token = await criarAparelho(env);
+  simularPluggy((u) => (u.pathname === "/connect_token" ? { accessToken: "ct" } : {}));
+  const r = await pedir("/api/pluggy/connect-token", { method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify({ itemId: ID_B }) });
+  assert.equal(r.status, 200);
+});
+
+test("sincronizar com todas as conexões removidas não busca os ids do secret", async () => {
+  const { env, pedir } = criarAmbiente({ ...PLUGGY, PLUGGY_ITEM_IDS: ID_A });
+  await idsConexoes(env.DB, env, T);
+  await removerItem(env.DB, ID_A, T);
+  const { chamadas } = simularPluggy(() => ({ results: [] }));
+  await pedir("/api/atualizar", { method: "POST", headers: { origin: "https://meu-banco.test", cookie: await entrarComSenha(pedir) } });
+  assert.equal(chamadas.filter((c) => c.caminho.startsWith("/items/") || c.caminho === "/accounts").length, 0);
 });

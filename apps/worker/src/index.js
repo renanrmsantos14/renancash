@@ -362,7 +362,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   if (rota === "POST /api/pluggy/connect-token") {
     const itemId = (await request.json().catch(() => null))?.itemId ?? null;
     if (itemId !== null && !(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
-    if (itemId && !(await env.DB.prepare("SELECT 1 FROM pluggy_items WHERE id = ?1 AND removido IS NULL").bind(itemId).first())) {
+    if (itemId && !(await idsConexoes(env.DB, env, ts)).includes(itemId)) {
       return json({ erro: "Conexão não encontrada" }, 404);
     }
     return json({ accessToken: await new ApiCliente(env).connectToken(itemId) });
