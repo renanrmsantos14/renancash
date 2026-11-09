@@ -507,9 +507,14 @@ function abrirConfigCiclo(gatilho) {
   const pushBtn = h("button", { type: "button", class: "sec" });
   const teste = h("button", { type: "button", class: "ghost", hidden: true }, "Enviar notificação de teste");
   const apps = h("button", { type: "button", class: "ghost", id: "abrirApps" }, "Apps conectados");
-  apps.addEventListener("click", () => abrirApps(apps));
   const sujo = () => inp.value !== ini;
   const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+  // Abrir "Apps conectados" substitui este sheet: não pode perder um limite não salvo nem cortar um salvamento em curso.
+  apps.addEventListener("click", () => {
+    if (sheet.salvando) return;
+    if (sujo()) return falhar(new Error("Salve o limite antes de abrir Apps conectados."));
+    abrirApps(apps);
+  });
 
   const suportado = "PushManager" in window && C.push.publica;
   pushBtn.hidden = true; // aparece quando o estado do push for conhecido
@@ -624,6 +629,7 @@ function abrirApps(gatilho) {
   criar.addEventListener("click", async () => {
     const n = nome.value.trim();
     if (!n) return falhar(new Error("Informe o nome do aparelho."));
+    if (novo && !copiado) return falhar(new Error("Copie o token atual antes de criar outro: ele não aparece de novo."));
     sheet.salvando = true; criar.disabled = true; nome.disabled = true; erro.hidden = true; status.textContent = "";
     try {
       const r = await api("/api/app/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nome: n }) });
@@ -631,7 +637,7 @@ function abrirApps(gatilho) {
       const campo = h("input", { id: "appToken", readonly: "", value: novo, "aria-label": "Token do aparelho " + r.nome });
       const copiar = h("button", { type: "button", id: "appCopiar" }, "Copiar");
       copiar.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(novo); } catch { campo.select(); document.execCommand?.("copy"); }
+        try { await navigator.clipboard.writeText(novo); } catch { campo.select(); return falhar(new Error("Não foi possível copiar. Selecione o token e copie manualmente.")); }
         copiado = true; copiar.textContent = "Copiado ✓";
       });
       campo.addEventListener("focus", () => campo.select());

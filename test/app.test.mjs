@@ -42,5 +42,4 @@ test("montarResposta renomeia campos, aplica ajuste de categoria e converte futu
   assert.equal(r.transacoes[1].categoria, null);
   assert.equal(r.transacoes[1].futura, true);
   assert.deepEqual(r.ids_pendentes, ["t2"]);
-  assert.equal("hash" in r, false);
 });

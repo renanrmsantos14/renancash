@@ -2,7 +2,7 @@ import { ApiCliente } from "./api.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { enviarPush } from "./push.js";
-import { gerarToken, hashToken, tokenDoCabecalho, normalizarDesde, montarResposta } from "./app.js";
+import { base64url, gerarToken, hashToken, tokenDoCabecalho, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -17,6 +17,7 @@ export default {
     if (!env.APP_PASSWORD || !env.SESSION_SECRET) return seguranca(new Response("APP_PASSWORD ou SESSION_SECRET não configurado.", { status: 500 }));
     const url = new URL(request.url);
     const caminho = url.pathname;
+    const idToken = /^\/api\/app\/tokens\/([^/]+)$/.exec(caminho)?.[1];
     try {
       let resp;
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
@@ -46,7 +47,7 @@ export default {
       else if (caminho === "/api/notificacoes/entregar" && request.method === "POST") resp = await entregarNotificacoes(request, env, url);
       else if (caminho === "/api/app/tokens" && request.method === "GET") resp = await listarTokens(env);
       else if (caminho === "/api/app/tokens" && request.method === "POST") resp = await criarToken(request, env, url);
-      else if (/^\/api\/app\/tokens\/[^/]+$/.test(caminho) && request.method === "DELETE") resp = await revogarToken(env, request, url, caminho.slice(16));
+      else if (request.method === "DELETE" && idToken) resp = await revogarToken(request, env, url, idToken);
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
         const api = new ApiCliente(env);
@@ -91,8 +92,7 @@ async function chaveDe(senha) {
 
 async function assinar(expira, env) {
   const chave = await chaveDe(env.SESSION_SECRET + ":" + env.APP_PASSWORD);
-  const assinatura = new Uint8Array(await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(String(expira))));
-  return btoa(String.fromCharCode(...assinatura)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(String(expira)))));
 }
 
 const cookie = (valor, segundos) => `sessao=${valor}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${segundos}`;
@@ -354,7 +354,7 @@ async function criarToken(request, env, url) {
   return json({ id, nome: limpo, token }, 201);
 }
 
-async function revogarToken(env, request, url, idUrl) {
+async function revogarToken(request, env, url, idUrl) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
   let id = "";
   try { id = decodeURIComponent(idUrl); } catch {}
@@ -364,8 +364,9 @@ async function revogarToken(env, request, url, idUrl) {
   return json({ ok: true });
 }
 
-// Dados para o app: só leitura, autenticado por Bearer. `agora` é lido antes da consulta e vira o próximo `desde`
-// (linhas gravadas durante a consulta têm updated_at >= agora e voltam na rodada seguinte).
+// Dados para o app: só leitura, autenticado por Bearer. `agora` vira o próximo `desde`. Limite conhecido: uma
+// sincronização em andamento grava com o `ts` do início (< agora) e essas linhas podem escapar do filtro; a releitura de
+// DIAS_REIMPORTAR dias a cada sincronização as traz de volta na rodada seguinte.
 async function appTransacoes(request, env, url) {
   const token = tokenDoCabecalho(request.headers.get("authorization"));
   const reg = token && await env.DB.prepare("SELECT id FROM app_tokens WHERE hash = ?1 AND revogado IS NULL").bind(await hashToken(token)).first();
@@ -375,13 +376,13 @@ async function appTransacoes(request, env, url) {
   const agoraIso = agora();
   const db = env.DB;
   const [contas, tx, pend] = await db.batch([
-    db.prepare("SELECT * FROM accounts ORDER BY type, name"),
+    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
     db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
     db.prepare("UPDATE app_tokens SET ultimo_uso = ?1 WHERE id = ?2 AND (ultimo_uso IS NULL OR ultimo_uso < ?3)")
       .bind(agoraIso, reg.id, new Date(Date.now() - USO_TOKEN_MS).toISOString()),
   ]);
-  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }), 200, { "cache-control": "no-store" });
+  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
 }
 
 // ---------- Sincronização ----------
