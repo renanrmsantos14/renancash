@@ -15,6 +15,11 @@ binding = "DB"
 database_name = "meu-banco"
 database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 
+# Backup diário do D1 (JSON gzip). O bucket é criado à parte; retenção de 30 dias por regra de ciclo de vida.
+[[r2_buckets]]
+binding = "BACKUP"
+bucket_name = "meu-banco-backups"
+
 # Crons em UTC (BRT = UTC-3): sincronização a cada 3 h (minuto 7 para fugir do pico), 07h (fim do silêncio) e domingo 20h (resumo semanal).
 [triggers]
 crons = ["7 */3 * * *"]
@@ -26,9 +31,9 @@ port = 8787
 [observability]
 enabled = true
 
-# Variáveis NÃO secretas. A API key do MCP.AI vai com "wrangler secret put MCP_API_KEY".
+# Variáveis NÃO secretas. Credenciais do Pluggy vão com "wrangler secret put PLUGGY_CLIENT_ID" e "PLUGGY_CLIENT_SECRET".
+# Se o Pluggy não listar suas conexões, defina também o secret PLUGGY_ITEM_IDS (ids do Meu Pluggy, separados por vírgula).
 [vars]
-API_URL = "https://api.mcp.ai/api/openfinance"
 IMPORT_DAYS = "180"
 VAPID_ASSUNTO = "https://meu-banco.renanrmsantos14.workers.dev"
 VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"

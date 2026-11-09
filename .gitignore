@@ -4,3 +4,4 @@ node_modules/
 .env
 vapid-*.txt
 vapid-*.json
+.worktrees/

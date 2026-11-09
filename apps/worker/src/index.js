@@ -1,14 +1,20 @@
+import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
+import { salvarBackup } from "./backup.js";
+import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
+import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
-const TAM_PAGINA = 500; // máximo da API
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
-const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status que pede novo login (OUTDATED = só falha temporária)
 const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
+const TRAVA_MS = 10 * 60 * 1000; // sync_log aberto há menos que isso = sincronização em andamento
+const MSG_OCUPADO = "Já existe uma atualização em andamento. Tente em alguns minutos.";
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
@@ -16,10 +22,14 @@ export default {
     if (!env.APP_PASSWORD || !env.SESSION_SECRET) return seguranca(new Response("APP_PASSWORD ou SESSION_SECRET não configurado.", { status: 500 }));
     const url = new URL(request.url);
     const caminho = url.pathname;
+    const idToken = /^\/api\/app\/tokens\/([^/]+)$/.exec(caminho)?.[1];
     try {
       let resp;
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
+      else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
+      else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
+      else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
       } else if (caminho === "/api/sair" && request.method === "POST") {
@@ -29,24 +39,25 @@ export default {
       else if (caminho === "/api/fatura" && request.method === "GET") resp = await fatura(env, url);
       else if (/^\/api\/ajustes\/[^/]+$/.test(caminho) && request.method === "PUT") {
         resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
-      } else if (caminho === "/api/atualizar" && request.method === "POST") {
+      } else if (caminho === "/api/pluggy/webhooks" && request.method === "POST") {
         if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
-        else {
-          // waitUntil: se o navegador fechar no meio, a sincronização termina e o sync_log é fechado.
-          const tarefa = sincronizar(env, "botao");
-          ctx.waitUntil(tarefa);
-          resp = json(await tarefa);
-        }
+        else if (!env.PLUGGY_WEBHOOK_SECRET) resp = json({ erro: "PLUGGY_WEBHOOK_SECRET ausente" }, 500);
+        else resp = json(await new ApiCliente(env).criarWebhook(url.origin + "/api/pluggy/webhook", env.PLUGGY_WEBHOOK_SECRET));
+      } else if (caminho === "/api/atualizar" && request.method === "POST") {
+        resp = mesmaOrigem(request, url) ? await atualizarAgora(env, "botao", ctx) : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/ciclo" && request.method === "GET") resp = await ciclo(env);
       else if (caminho === "/api/config" && request.method === "PUT") resp = await salvarConfig(request, env, url);
       else if (caminho === "/api/push" && (request.method === "POST" || request.method === "DELETE")) resp = await inscreverPush(request, env, url);
       else if (caminho === "/api/push/teste" && request.method === "POST") resp = await testePush(request, env, url);
       else if (caminho === "/api/notificacoes/entregar" && request.method === "POST") resp = await entregarNotificacoes(request, env, url);
+      else if (caminho === "/api/app/tokens" && request.method === "GET") resp = await listarTokens(env);
+      else if (caminho === "/api/app/tokens" && request.method === "POST") resp = await criarToken(request, env, url);
+      else if (request.method === "DELETE" && idToken) resp = await revogarToken(request, env, url, idToken);
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
-        // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
-        const api = new ApiCliente(env);
-        const [conexoes, endpoints] = await Promise.all([api.chamar("connections/list"), api.endpoints()]);
-        resp = json({ conexoes, endpoints });
+        // Diagnóstico: testa as credenciais do Pluggy e mostra o status de cada conexão.
+        const api = await clientePluggy(env.DB, env, agora());
+        const itens = await Promise.all((await api.listarIds()).map((id) => api.item(id).then((i) => ({ id, conector: i.connector?.name, status: i.status, executionStatus: i.executionStatus, lastUpdatedAt: i.lastUpdatedAt }), (e) => ({ id, erro: e.message }))));
+        resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
       return seguranca(resp);
@@ -62,7 +73,12 @@ export default {
     // também manda o resumo semanal.
     const t = new Date(evento.scheduledTime);
     const resumo = t.getUTCDay() === 1 && t.getUTCHours() === 0;
-    ctx.waitUntil(sincronizar(env, "cron").finally(() => resumo && alertaSemanal(env)));
+    const backup = t.getUTCHours() === 6 && env.BACKUP; // tick das 06h07 UTC = 03h07 BRT
+    ctx.waitUntil(sincronizar(env, "cron").finally(async () => {
+      if (resumo) await alertaSemanal(env);
+      // O backup nunca derruba a sincronização: em falha, só registra o erro (sem segredos).
+      if (backup) await salvarBackup(env, t).then((k) => console.log("Backup salvo", k), (e) => console.error("Backup falhou", e?.message || e));
+    }));
   },
 };
 
@@ -86,8 +102,7 @@ async function chaveDe(senha) {
 
 async function assinar(expira, env) {
   const chave = await chaveDe(env.SESSION_SECRET + ":" + env.APP_PASSWORD);
-  const assinatura = new Uint8Array(await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(String(expira))));
-  return btoa(String.fromCharCode(...assinatura)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(String(expira)))));
 }
 
 const cookie = (valor, segundos) => `sessao=${valor}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${segundos}`;
@@ -151,11 +166,14 @@ function json(obj, status = 200, extra = {}) {
 const agora = () => new Date().toISOString();
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 
+// Segmento de URL malformado (%) vira "", que as rotas já tratam como id inválido.
+const decodificar = (segmento) => { try { return decodeURIComponent(segmento); } catch { return ""; } };
+
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
 const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
-const DE_TX = "FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id";
+const DE_TX = "FROM transactions t LEFT JOIN v_ajustes a ON a.transaction_id = t.id";
 
 async function dados(env, url) {
   const db = env.DB;
@@ -187,7 +205,7 @@ async function historico(env) {
   const hoje = hojeSP();
   const de = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7) - 6, 1)).toISOString().slice(0, 10);
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id WHERE t.date >= ?1 AND t.scheduled = 0"
+    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto ${DE_TX} WHERE t.date >= ?1 AND t.scheduled = 0`
   ).bind(de).all();
   return json({ mesAtual: hoje.slice(0, 7), de, transacoes: results });
 }
@@ -202,19 +220,18 @@ async function fatura(env, url) {
 }
 
 async function salvarAjuste(request, env, idUrl) {
-  let id = "";
-  try { id = decodeURIComponent(idUrl); } catch {}
+  const id = decodificar(idUrl);
   const c = await request.json().catch(() => null);
   const category = c?.category ?? null;
   const gasto = c?.gasto ?? null;
   const valido = id && id.length <= 100 && (category === null || (typeof category === "string" && category && category.length <= 80)) && (gasto === null || gasto === 0 || gasto === 1);
   if (!valido) return json({ erro: "Dados inválidos" }, 400);
-  if (category === null && gasto === null) await env.DB.prepare("DELETE FROM ajustes WHERE transaction_id = ?1").bind(id).run();
-  else {
-    await env.DB.prepare(
-      "INSERT INTO ajustes (transaction_id, category, gasto, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(transaction_id) DO UPDATE SET category = excluded.category, gasto = excluded.gasto, updated_at = excluded.updated_at"
-    ).bind(id, category, gasto, agora()).run();
-  }
+  // Merge-patch (RFC 7396): null remove a chave; campos gravados pelo app (ex.: nota) ficam. O painel sempre vence.
+  const ts = agora();
+  await env.DB.prepare(
+    "INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES ('ajustes', ?1, json_patch('{}', ?2), ?3, NULL, ?3) " +
+      "ON CONFLICT(tabela, id) DO UPDATE SET dados = json_patch(COALESCE(registros.dados, '{}'), ?2), updated_at = ?3, deleted_at = NULL, server_at = ?3"
+  ).bind(id, JSON.stringify({ category, gasto }), ts).run();
   return json({ ok: true });
 }
 
@@ -329,79 +346,202 @@ async function entregarNotificacoes(request, env, url) {
   return json({ notificacoes: results });
 }
 
+// ---------- App Android (token de aparelho) ----------
+
+// Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
+const ROTAS_APARELHO = new Set(["/api/sync", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+
+async function rotaAparelho(request, env, url, caminho, ctx) {
+  const ts = agora();
+  const aparelho = await autenticarAparelho(request, env.DB, ts);
+  if (!aparelho) {
+    if (!(await sessaoValida(request, env))) return json({ erro: "Token ou sessão necessários" }, 401, { "www-authenticate": "Bearer" });
+    if (request.method !== "GET" && !mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  }
+  const rota = `${request.method} ${caminho}`;
+  if (rota === "GET /api/sync") {
+    const desde = normalizarDesde(url.searchParams.get("desde"));
+    if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+    return json(await puxar(env.DB, desde, ts));
+  }
+  if (rota === "POST /api/sync") {
+    const r = await enviar(env.DB, await request.json().catch(() => null), ts);
+    return json(r.corpo, r.status);
+  }
+  if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
+  if (rota === "POST /api/pluggy/connect-token") {
+    const itemId = (await request.json().catch(() => null))?.itemId ?? null;
+    if (itemId !== null && !(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
+    if (itemId && !(await idsConexoes(env.DB, env, ts)).includes(itemId)) {
+      return json({ erro: "Conexão não encontrada" }, 404);
+    }
+    return json({ accessToken: await new ApiCliente(env).connectToken(itemId) });
+  }
+  if (rota === "POST /api/pluggy/items") {
+    const itemId = (await request.json().catch(() => null))?.itemId;
+    if (!(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
+    await adicionarItem(env, itemId, ts);
+    ctx.waitUntil(sincronizar(env, "app").catch((e) => console.error("Sincronização após conectar", e?.stack || e)));
+    return json({ ok: true }, 201);
+  }
+  return json({ erro: "Método não permitido" }, 405);
+}
+
+// Webhook do Pluggy: responde na hora (o Pluggy espera 2xx em poucos segundos) e trabalha em waitUntil.
+// Se outra sincronização estiver rodando, a trava do sync_log descarta esta; o cron cobre o que faltar.
+async function webhookPluggy(request, env, url, ctx) {
+  if (!(await webhookValido(request, url, env))) return json({ erro: "Não autorizado" }, 401);
+  const ev = await request.json().catch(() => null);
+  const acao = acaoWebhook(ev);
+  if (acao) {
+    const ts = agora();
+    const tarefa = acao === "remover"
+      ? removerItem(env.DB, ev.itemId, ts)
+      : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
+    ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
+  }
+  return json({ ok: true });
+}
+
+// A 1ª linha em pluggy_items desliga o secret e a descoberta via /v2/items: antes de gravá-la, copia as conexões que já
+// existem, senão só a nova seria sincronizada.
+async function adicionarItem(env, id, ts) {
+  const db = env.DB;
+  if (!(await idsConexoes(db, env, ts)).length && !(await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"))) {
+    try {
+      for (const existente of await new ApiCliente(env).listarIds()) await registrarItem(db, existente, ts);
+    } catch (e) {
+      console.warn("Descoberta das conexões antes de registrar", e?.message || e); // sem /v2/items: fica só a nova
+    }
+  }
+  await registrarItem(db, id, ts);
+}
+
+const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
+
+// Botão Atualizar (painel e apps): no máximo 1 a cada 30 min. Pede ao banco dados novos (PATCH no item) e lê o que o
+// Pluggy já tem; quando o banco terminar, o webhook item/updated faz a leitura final.
+async function atualizarAgora(env, origem, ctx) {
+  const db = env.DB;
+  // Com outra sincronização em andamento, sincronizar() recusaria sem gravar no sync_log: nem pede ao banco nem libera o limite.
+  const { ultimo, ocupado } = await db.prepare(
+    "SELECT MAX(CASE WHEN origem IN ('botao', 'app') THEN started_at END) AS ultimo, MAX(ok IS NULL AND started_at > ?1) AS ocupado FROM sync_log"
+  ).bind(new Date(Date.now() - TRAVA_MS).toISOString()).first();
+  if (ocupado) return json({ ok: false, mensagem: MSG_OCUPADO });
+  const espera = esperaAtualizar(ultimo, Date.now());
+  if (espera > 0) {
+    const liberado = Date.now() + espera;
+    const mensagem = `Atualizado há pouco. Tente de novo às ${horaSP(liberado)}.`;
+    return json({ ok: false, erro: mensagem, mensagem, liberado_em: new Date(liberado).toISOString() }, 429);
+  }
+  const tarefa = (async () => {
+    const api = await clientePluggy(db, env, agora());
+    const ids = await api.listarIds().catch(() => []); // falha de credencial ou descoberta aparece na sincronização abaixo
+    const pedidos = await Promise.allSettled(ids.map((id) => api.atualizarItem(id)));
+    const falhas = pedidos.flatMap((p, i) => (p.status === "rejected" ? [`Conexão ${ids[i]}: ${p.reason?.message || p.reason}`] : []));
+    for (const f of falhas) console.warn("Atualizar no banco falhou", f);
+    return { ...(await sincronizar(env, origem)), pedidos: ids.length - falhas.length, falhas };
+  })();
+  // O erro já chega ao cliente por `await tarefa`; o catch só evita rejeição não tratada quando o cliente desconecta e a tarefa segue.
+  ctx.waitUntil(tarefa.catch(() => {}));
+  return json(await tarefa);
+}
+
+async function listarTokens(env) {
+  const { results } = await env.DB.prepare("SELECT id, nome, criado, ultimo_uso, revogado FROM app_tokens ORDER BY criado DESC").all();
+  return json({ tokens: results });
+}
+
+async function criarToken(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const nome = (await request.json().catch(() => null))?.nome;
+  const limpo = typeof nome === "string" ? nome.trim() : "";
+  if (!limpo || limpo.length > 40) return json({ erro: "Informe um nome de 1 a 40 caracteres" }, 400);
+  const token = gerarToken();
+  const id = crypto.randomUUID();
+  await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agora()).run();
+  const link = `meubanco://parear?u=${encodeURIComponent(url.origin)}&t=${token}`;
+  return json({ id, nome: limpo, token, link, qr: renderSVG(link, { border: 2 }) }, 201);
+}
+
+async function revogarToken(request, env, url, idUrl) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const id = decodificar(idUrl);
+  const t = await env.DB.prepare("SELECT revogado FROM app_tokens WHERE id = ?1").bind(id).first();
+  if (!t) return json({ erro: "Token não encontrado" }, 404);
+  if (!t.revogado) await env.DB.prepare("UPDATE app_tokens SET revogado = ?1 WHERE id = ?2").bind(agora(), id).run();
+  return json({ ok: true });
+}
+
+// Dados para o app: só leitura, autenticado por Bearer. `agora` vira o próximo `desde`. Limite conhecido: uma
+// sincronização em andamento grava com o `ts` do início (< agora) e essas linhas podem escapar do filtro; a releitura de
+// DIAS_REIMPORTAR dias a cada sincronização as traz de volta na rodada seguinte.
+async function appTransacoes(request, env, url) {
+  const agoraIso = agora();
+  if (!(await autenticarAparelho(request, env.DB, agoraIso))) return json({ erro: "Token inválido" }, 401, { "www-authenticate": "Bearer" });
+  const desde = normalizarDesde(url.searchParams.get("desde"));
+  if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+  const db = env.DB;
+  const [contas, tx, pend] = await db.batch([
+    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
+    db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
+    db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
+  ]);
+  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
+}
+
 // ---------- Sincronização ----------
+
+// D1 nunca semeado (sem secret): mantém a descoberta via /v2/items; com linhas, o D1 manda (lista vazia = nada a sincronizar).
+async function clientePluggy(db, env, ts) {
+  const conexoes = await idsConexoes(db, env, ts);
+  const semeado = conexoes.length || (await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"));
+  return new ApiCliente(env, semeado ? conexoes : undefined);
+}
 
 async function sincronizar(env, origem) {
   const db = env.DB;
 
   // Evita duas sincronizações ao mesmo tempo (cron + botão): checagem e registro num comando só (atômico no D1).
-  const limite = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const limite = new Date(Date.now() - TRAVA_MS).toISOString();
   const log = await db
     .prepare(
       "INSERT INTO sync_log (origem, started_at) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM sync_log WHERE ok IS NULL AND started_at > ?3) RETURNING id"
     )
     .bind(origem, agora(), limite)
     .first();
-  if (!log) return { ok: false, mensagem: "Já existe uma atualização em andamento. Tente em alguns minutos." };
+  if (!log) return { ok: false, mensagem: MSG_OCUPADO };
   const avisos = [];
   let ok = 1;
 
   try {
-    const api = new ApiCliente(env);
+    const ts = agora();
+    const api = await clientePluggy(db, env, ts);
 
-    // 1) Conexões (bancos ligados no MCP.AI)
-    const rconn = await api.chamar("connections/list");
-    const conexoes = rconn?.connections || [];
-    if (!conexoes.length) throw new Error("Nenhum banco conectado no MCP.AI");
-
-    // 2) Força o banco a atualizar. Se falhar, segue com os dados atuais.
-    let sync = null;
-    try {
-      sync = await api.chamar("connections/sync", { items: conexoes.map((c) => c.item_id), wait: true });
-    } catch (e) {
-      avisos.push("force_sync falhou: " + e.message);
-      console.warn("force_sync falhou", e.message);
-    }
-    // Um status por banco; o resultado do sync (pós-atualização) prevalece sobre o connections/list (pré).
-    const porItem = new Map();
-    for (const x of [...conexoes, ...(Array.isArray(sync?.results) ? sync.results : [])]) {
-      if (x) porItem.set(x.item_id, { connector_name: porItem.get(x.item_id)?.connector_name, ...x });
-    }
-    const reconectar = [...porItem.values()]
-      .filter((x) => x.needs_action || PROBLEMA.test(x.status || "")) // reconnect_url vem sempre, mesmo com a conexão ok
-      .map((x) => ({
-        banco: x.bank || x.connector_name || x.name || "Banco",
-        mensagem:
-          x.message ||
-          `O banco não atualizou (${x.executionStatus || x.status || "ação necessária"})` +
-            (x.lastUpdatedAt ? `; dados de ${String(x.lastUpdatedAt).slice(8, 10)}/${String(x.lastUpdatedAt).slice(5, 7)}` : "") +
-            ". Reconecte e confirme no app do banco.",
-        reconnect_url: /^https:\/\//.test(x.reconnect_url || "") ? x.reconnect_url : null,
-      }));
-    await salvarSnapshot(db, "avisos", reconectar);
-
-    // 3) Contas de cada conexão
+    // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
+    const ids = await api.listarIds();
     const linhasContas = [];
-    for (const conn of conexoes) {
-      const rc = await api.chamar("accounts/list", { item: conn.item_id });
-      for (const c of rc?.results || []) {
-        linhasContas.push({
-          id: String(c.id),
-          type: c.type,
-          subtype: c.subtype ?? null,
-          name: c.name ?? null,
-          number: c.number ?? null,
-          balance: num(c.balance),
-          credit_limit: num(c.creditData?.creditLimit),
-          available_limit: num(c.creditData?.availableCreditLimit),
-          due_date: c.creditData?.balanceDueDate ? String(c.creditData.balanceDueDate).slice(0, 10) : null,
-          bank: rc.bank ?? conn.connector_name ?? null,
-          item_id: rc.item_id ?? conn.item_id,
-          updated_at: agora(),
-        });
+    const brutas = new Map(); // id da conta → conta do Pluggy (faturas)
+    const reconectar = [];
+    for (const id of ids) {
+      try {
+        const [item, contas] = await Promise.all([api.item(id), api.contas(id)]);
+        await atualizarStatus(db, { ...item, id }, ts);
+        const banco = bancoDoItem(item);
+        const aviso = avisoItem(item, banco);
+        if (aviso) reconectar.push(aviso);
+        for (const c of contas) {
+          brutas.set(String(c.id), c);
+          linhasContas.push(mapearConta(c, banco, id, ts));
+        }
+      } catch (e) {
+        avisos.push(`Conexão ${id}: ${e.message}`);
+        console.error("Erro conexão", id, e.message);
       }
     }
-    if (!linhasContas.length) throw new Error("accounts/list não retornou contas");
+    if (!avisos.length) await salvarSnapshot(db, "avisos", reconectar); // conexão que falhou na leitura mantém os avisos anteriores
+    desambiguar(linhasContas);
+    if (!linhasContas.length) throw new Error("Nenhuma conta encontrada nas conexões do Pluggy");
     await db.prepare(upsertSql("accounts", Object.keys(linhasContas[0]))).bind(JSON.stringify(linhasContas)).run();
 
     // 4) Transações e 5) faturas, conta por conta
@@ -417,8 +557,9 @@ async function sincronizar(env, origem) {
       }
       if (conta.type === "CREDIT") {
         try {
-          const f = await api.chamar("credit-card-bills/list", { account_id: conta.id, include_open_bill: true, page_size: 24 });
-          await salvarSnapshot(db, "faturas:" + conta.id, f);
+          // Sem a lista de faturas (ex.: conta sem acesso a /bills) o painel ainda mostra a fatura aberta.
+          const bills = await api.faturas(conta.id).catch((e) => { console.warn("Faturas indisponíveis", conta.id, e.message); return []; });
+          await salvarSnapshot(db, "faturas:" + conta.id, mapearFaturas(brutas.get(conta.id), bills));
         } catch (e) {
           avisos.push(`Faturas de ${conta.name}: ${e.message}`);
           console.error("Erro faturas", conta.id, e.message);
@@ -449,35 +590,10 @@ async function sincronizarConta(db, api, conta, hoje, diasImport) {
     .first();
   let de = ultima?.d ? somarDias(ultima.d, -DIAS_REIMPORTAR) : somarDias(hoje, -diasImport);
   if (ultima?.p && ultima.p < de) de = ultima.p; // relê pendentes antigas para não duplicarem quando forem postadas
-  const args = { account_id: conta.id, from: de };
-  if (conta.type !== "CREDIT") args.to = hoje; // cartão sem "to" para trazer parcelas futuras
-
-  // A REST pagina: busca até vir página vazia, menor que a primeira, ou o fim indicado pela API.
-  const todas = [];
-  let tamanho = 0;
-  for (let page = 1; ; page++) {
-    if (page > MAX_PAGINAS) throw new Error(`mais de ${MAX_PAGINAS} páginas de transações; reduza IMPORT_DAYS`);
-    const r = await api.chamar("transactions/list", { ...args, page, page_size: TAM_PAGINA });
-    const lote = r?.results || [];
-    todas.push(...lote);
-    tamanho ||= lote.length;
-    const fim = r?.has_more === false || (r?.total_pages && page >= r.total_pages) || (r?.total != null && todas.length >= r.total);
-    if (!lote.length || lote.length < tamanho || fim) break;
-  }
+  // Cartão sem "to" para trazer parcelas futuras.
+  const todas = await api.transacoes(conta.id, de, conta.type === "CREDIT" ? undefined : hoje, MAX_PAGINAS);
   const ts = agora();
-  const linhas = todas.map((t) => ({
-    id: String(t.id),
-    account_id: conta.id,
-    date: String(t.date).slice(0, 10),
-    description: t.description ?? "",
-    amount: num(t.amount) ?? 0,
-    type: t.type ?? null,
-    status: t.status ?? null,
-    category: t.category ?? null,
-    merchant: typeof t.merchant === "string" ? t.merchant : t.merchant?.name || t.merchant?.businessName || null,
-    scheduled: t.scheduled ? 1 : 0,
-    updated_at: ts,
-  }));
+  const linhas = todas.map((t) => mapearTransacao(t, conta, hoje, ts));
 
   // Apaga parcelas futuras e pendentes da janela (podem mudar de id) e regrava tudo num lote atômico.
   const comandos = [
@@ -506,10 +622,4 @@ function salvarSnapshot(db, key, data) {
     .prepare("INSERT INTO snapshots (key, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at")
     .bind(key, JSON.stringify(data ?? null), agora())
     .run();
-}
-
-function num(v) {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }

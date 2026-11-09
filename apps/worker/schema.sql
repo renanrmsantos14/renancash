@@ -46,12 +46,36 @@ CREATE TABLE IF NOT EXISTS sync_log (
   message     TEXT
 );
 
--- Ajustes feitos no painel (categoria trocada e/ou "não é gasto"). A sincronização nunca mexe nesta tabela.
-CREATE TABLE IF NOT EXISTS ajustes (
-  transaction_id TEXT PRIMARY KEY,
-  category       TEXT,                    -- NULL = mantém a categoria original
-  gasto          INTEGER,                 -- NULL = regra automática | 1 = é gasto | 0 = não é gasto
-  updated_at     TEXT NOT NULL
+-- Dados do usuário, sincronizados com os apps (categorias, regras, orçamentos, metas, dívidas, assinaturas,
+-- ajustes de transação, lançamentos manuais). Formato de `dados` por tabela: packages/core/src/sync.ts.
+-- updated_at = relógio do cliente (last-write-wins); server_at = relógio do servidor (cursor do pull).
+CREATE TABLE IF NOT EXISTS registros (
+  tabela     TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  dados      TEXT,                        -- JSON; NULL quando excluído
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  server_at  TEXT NOT NULL,
+  PRIMARY KEY (tabela, id)
+);
+CREATE INDEX IF NOT EXISTS idx_registros_server ON registros(server_at);
+
+-- Ajustes no formato antigo (category/gasto) para as consultas do painel. A sincronização do Pluggy nunca mexe aqui.
+-- updated_at = server_at (o cursor de /api/app/transacoes é do servidor); excluído fica com category/gasto NULL (dados NULL)
+-- para a exclusão também chegar ao pull incremental. DROP + CREATE: rodar o schema de novo atualiza a view.
+DROP VIEW IF EXISTS v_ajustes;
+CREATE VIEW v_ajustes AS
+  SELECT id AS transaction_id, json_extract(dados, '$.category') AS category, json_extract(dados, '$.gasto') AS gasto, server_at AS updated_at
+  FROM registros WHERE tabela = 'ajustes';
+
+-- Conexões do Pluggy (items). Substitui o secret PLUGGY_ITEM_IDS, copiado daqui na primeira sincronização.
+CREATE TABLE IF NOT EXISTS pluggy_items (
+  id         TEXT PRIMARY KEY,
+  conector   TEXT,
+  status     TEXT,                        -- status do item no Pluggy (UPDATED, LOGIN_ERROR, ...)
+  criado     TEXT NOT NULL,
+  atualizado TEXT,
+  removido   TEXT
 );
 
 -- Configuração do ciclo: chave "limite" (número) e "salario" (descrição normalizada do crédito do salário).
@@ -74,3 +98,13 @@ CREATE TABLE IF NOT EXISTS notificacoes (
   entregue_em TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notif_criada ON notificacoes(criada);
+
+-- Tokens de aparelho (app Android). Só o SHA-256 (hex) do token é guardado; o token em claro aparece uma vez, na criação.
+CREATE TABLE IF NOT EXISTS app_tokens (
+  id        TEXT PRIMARY KEY,
+  nome      TEXT NOT NULL,
+  hash      TEXT NOT NULL UNIQUE,
+  criado    TEXT NOT NULL,
+  ultimo_uso TEXT,
+  revogado  TEXT
+);

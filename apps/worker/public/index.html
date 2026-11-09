@@ -97,6 +97,8 @@
   #sheet > header h2 { margin: 0; font-size: 17px; }
   .caixa { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; max-width: 340px; width: 100%; }
   .caixa p { margin: 0 0 12px; font-weight: 600; }
+  .qr { background: #fff; padding: 8px; border-radius: 8px; width: 216px; margin: 0 auto 12px; }
+  .qr svg { display: block; width: 200px; height: 200px; }
   .botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   dl.det { display: grid; grid-template-columns: 96px 1fr; gap: 6px 10px; margin: 0 0 12px; font-size: 14px; }
   dl.det dt { color: var(--suave); } dl.det dd { margin: 0; overflow-wrap: anywhere; }
@@ -116,6 +118,15 @@
   .ciclo-topo .ghost { margin-left: auto; min-height: 44px; }
   .alertas { padding-left: 18px; margin: 6px 0; }
   .alertas li + li { margin-top: 6px; }
+  .apps { list-style: none; margin: 12px 0 0; padding: 0; }
+  .apps li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--borda); }
+  .apps .info { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+  .apps .info .sub { display: block; color: var(--suave); font-size: 12px; }
+  .apps button { min-height: 44px; }
+  .apps li.revogado .info { opacity: .6; }
+  .novo-token[hidden] { display: none; }
+  .novo-token { border: 1px solid var(--laranja); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .novo-token input { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; margin: 8px 0; }
   .campo input { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--texto); }
   button { transition: transform .16s cubic-bezier(.23, 1, .32, 1); }
   button:active:not(:disabled) { transform: scale(.97); }
@@ -182,10 +193,10 @@
     <div class="botoes"><button id="continuar" type="button">Continuar editando</button><button id="descartar" class="sec" type="button">Descartar</button></div>
   </div>
 </div>
-<span id="versao">v0.0.6 · 08/11/2026 20:09</span>
+<span id="versao">v0.0.7 · 08/11/2026 22:18</span>
 
 <script type="module">
-import { CATEGORIAS, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe } from "/regras.js";
+import { CATEGORIAS, categoriaEfetiva, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe } from "/regras.js";
 const $ = (id) => document.getElementById(id);
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const moeda = (v) => (v == null || isNaN(v) ? "—" : brl.format(v));
@@ -206,7 +217,7 @@ function h(tag, attrs, ...filhos) {
   return el;
 }
 
-const aplicarAjuste = (t) => { t.cat_orig = t.category; if (t.ajuste_categoria) t.category = t.ajuste_categoria; return t; };
+const aplicarAjuste = (t) => { t.cat_orig = t.category; t.category = categoriaEfetiva(t); return t; };
 
 const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
 const STATUS_TX = { POSTED: "Lançada", PENDING: "Pendente" };
@@ -497,8 +508,15 @@ function abrirConfigCiclo(gatilho) {
   const salvar = h("button", { type: "button" }, "Salvar limite");
   const pushBtn = h("button", { type: "button", class: "sec" });
   const teste = h("button", { type: "button", class: "ghost", hidden: true }, "Enviar notificação de teste");
+  const apps = h("button", { type: "button", class: "ghost", id: "abrirApps" }, "Apps conectados");
   const sujo = () => inp.value !== ini;
   const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+  // Abrir "Apps conectados" substitui este sheet: não pode perder um limite não salvo nem cortar um salvamento em curso.
+  apps.addEventListener("click", () => {
+    if (sheet.salvando) return;
+    if (sujo()) return falhar(new Error("Salve o limite antes de abrir Apps conectados."));
+    abrirApps(apps);
+  });
 
   const suportado = "PushManager" in window && C.push.publica;
   pushBtn.hidden = true; // aparece quando o estado do push for conhecido
@@ -552,6 +570,7 @@ function abrirConfigCiclo(gatilho) {
       erro,
       h("div", { class: "botoes" }, salvar, pushBtn, teste),
       status,
+      h("div", { class: "botoes" }, apps),
       h("p", { class: "sub" }, "Alertas: 80% e 100% do limite, gasto acima do normal, banco pedindo reconexão e resumo no domingo às 20h. Silêncio das 22h às 7h.")),
   });
   // O estado do push vem depois: se o service worker não responder, o resto do sheet funciona.
@@ -562,6 +581,87 @@ function abrirConfigCiclo(gatilho) {
       teste.hidden = !sub;
     }).catch(() => {});
   }
+}
+
+// ---------- Apps conectados (token de aparelho do app Android) ----------
+
+function abrirApps(gatilho) {
+  let lista = [];
+  let novo = null; // token em claro: só existe nesta tela, até fechar
+  let copiado = false;
+  let pedindo = null; // id aguardando confirmação de revogação
+  const nome = h("input", { id: "appNome", maxlength: "40", autocomplete: "off", placeholder: "Ex.: Pixel 8" });
+  const criar = h("button", { type: "button" }, "Criar token");
+  const erro = h("div", { class: "aviso erro", role: "alert", hidden: true });
+  const status = h("p", { class: "sub", role: "status" });
+  const caixa = h("div", { class: "novo-token", hidden: true });
+  const ul = h("ul", { class: "apps", "aria-label": "Apps conectados" });
+  const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+  const sujo = () => nome.value.trim() !== "" || (novo && !copiado);
+
+  const desenhar = () => {
+    ul.replaceChildren(...(lista.length ? lista.map((t) => {
+      const ativo = !t.revogado;
+      const botoes = !ativo ? [] : pedindo === t.id
+        ? [h("button", { type: "button", "data-ok": t.id }, "Confirmar"), h("button", { type: "button", class: "sec", "data-cancela": t.id }, "Cancelar")]
+        : [h("button", { type: "button", class: "sec", "data-revogar": t.id, "aria-label": "Revogar " + t.nome }, "Revogar")];
+      return h("li", { class: ativo ? "" : "revogado" },
+        h("div", { class: "info" }, t.nome, h("span", { class: "sub" },
+          ativo ? "Criado em " + dataHora(t.criado) + " · último uso: " + dataHora(t.ultimo_uso) : "Revogado em " + dataHora(t.revogado))),
+        ...botoes);
+    }) : [h("li", {}, h("span", { class: "sub" }, "Nenhum app conectado."))]));
+  };
+  const carregarLista = async () => { lista = (await api("/api/app/tokens")).tokens; desenhar(); };
+
+  ul.addEventListener("click", async (e) => {
+    const b = e.target.closest("button");
+    if (!b || sheet.salvando) return;
+    if (b.dataset.revogar) { pedindo = b.dataset.revogar; desenhar(); ul.querySelector("[data-ok]")?.focus(); }
+    else if (b.dataset.cancela) { const id = pedindo; pedindo = null; desenhar(); ul.querySelector(`[data-revogar="${id}"]`)?.focus(); }
+    else if (b.dataset.ok) {
+      sheet.salvando = true; b.disabled = true; erro.hidden = true;
+      try {
+        await api("/api/app/tokens/" + encodeURIComponent(b.dataset.ok), { method: "DELETE" });
+        pedindo = null; await carregarLista(); status.textContent = "Token revogado.";
+      } catch (x) { falhar(x); b.disabled = false; }
+      sheet.salvando = false;
+    }
+  });
+
+  criar.addEventListener("click", async () => {
+    const n = nome.value.trim();
+    if (!n) return falhar(new Error("Informe o nome do aparelho."));
+    if (novo && !copiado) return falhar(new Error("Copie o token atual antes de criar outro: ele não aparece de novo."));
+    sheet.salvando = true; criar.disabled = true; nome.disabled = true; erro.hidden = true; status.textContent = "";
+    try {
+      const r = await api("/api/app/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nome: n }) });
+      novo = r.token; copiado = false; nome.value = "";
+      const campo = h("input", { id: "appToken", readonly: "", value: novo, "aria-label": "Token do aparelho " + r.nome });
+      const copiar = h("button", { type: "button", id: "appCopiar" }, "Copiar");
+      copiar.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(novo); } catch { campo.select(); return falhar(new Error("Não foi possível copiar. Selecione o token e copie manualmente.")); }
+        copiado = true; copiar.textContent = "Copiado ✓";
+      });
+      campo.addEventListener("focus", () => campo.select());
+      const qr = h("div", { class: "qr", role: "img", "aria-label": "QR para parear o app " + r.nome });
+      qr.innerHTML = r.qr; // SVG gerado pelo próprio Worker
+      caixa.replaceChildren(h("strong", {}, "Token de " + r.nome),
+        h("p", { class: "sub" }, "Leia o QR no app ou copie o token. Não será mostrado de novo."), qr, campo, copiar);
+      caixa.hidden = false;
+      await carregarLista();
+      copiar.focus();
+    } catch (x) { falhar(x); }
+    sheet.salvando = false; criar.disabled = false; nome.disabled = false;
+  });
+
+  abrirSheet({
+    titulo: "Apps conectados", gatilho, sujo,
+    corpo: h("div", {},
+      h("p", { class: "sub" }, "Cada aparelho do app Android usa um token próprio, só para leitura das transações. Revogue se perder o aparelho."),
+      h("label", { class: "campo", for: "appNome" }, "Nome do aparelho", nome),
+      erro, h("div", { class: "botoes" }, criar), caixa, status, ul),
+  });
+  carregarLista().catch(falhar);
 }
 
 // ---------- Lista de transações (usada no painel e na fatura) ----------

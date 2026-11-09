@@ -1,6 +1,9 @@
 # Copie para .dev.vars (só para "wrangler dev"; nunca vai para o Git nem para a nuvem)
-API_URL=http://localhost:8788/api/openfinance
-MCP_API_KEY=sk_live_teste
+# Mock do Pluggy (node mock/api-mock.mjs). Em produção não existe PLUGGY_API_URL: usa https://api.pluggy.ai.
+PLUGGY_API_URL=http://localhost:8788
+PLUGGY_CLIENT_ID=id-teste
+PLUGGY_CLIENT_SECRET=segredo-teste
+PLUGGY_ITEM_IDS=item-inter,item-santander
 APP_PASSWORD=teste123
 SESSION_SECRET=segredo-local-de-teste
 # Push local: permite endpoints http://localhost (o mock em 8788 simula o serviço de push).
