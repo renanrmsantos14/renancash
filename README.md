@@ -20,12 +20,15 @@ apps/worker/schema.sql          tabelas do D1
 apps/worker/mock/api-mock.mjs   Pluggy falso (2 conexões: Inter e Santander) para teste local
 apps/worker/scripts/reimportar.sql  apaga contas/transações/faturas importadas, para reimportar do zero
 apps/worker/scripts/versao.mjs  incrementa a versão mostrada no canto do painel a cada deploy
+apps/worker/src/backup.js       backup diário do D1 no R2
+apps/worker/scripts/cashew.mjs, importar-cashew.mjs   importação única do backup do Cashew
+packages/core/src/sync.ts       validação e regras de sincronização dos registros (TypeScript, sem dependências)
 ```
 
 ## 1. Preparar o PC (uma vez)
 
 1. Instale o **Node.js LTS** em https://nodejs.org (aceite as opções padrão). Feche e abra o terminal.
-2. Confira: `node -v` (precisa ser 18 ou maior).
+2. Confira: `node -v` (precisa ser 22.18 ou mais novo: o pacote `core` roda `.ts` direto, sem build).
 3. Ative o pnpm: `corepack enable` (ou `npm install -g pnpm`).
 4. Na pasta do projeto: `pnpm install`.
 
@@ -66,6 +69,47 @@ Como o Pluggy vira o formato interno:
 - **Conexão com problema** (`LOGIN_ERROR`, `WAITING_USER_INPUT`...): aviso amarelo no painel, com link para o Meu Pluggy. `OUTDATED` é falha temporária e não avisa.
 
 Custo: o uso pessoal com o conector **MeuPluggy** é gratuito segundo https://pluggy.ai/pricing (limite de 5 conexões ativas por titular, sem SLA, sem contrato; o plano pago "Dados" começa em R$ 2.500/mês). Esse conector só enxerga o que você conectou no Meu Pluggy. Não confirmei com o Pluggy se as credenciais da sua conta valem para esse uso; a cobrança por requisição só se aplica a planos pagos. Cada atualização faz 1 `/auth`, 2 por conexão (`items` e `accounts`), 1+ por conta (`transactions`) e 1 por cartão (`bills`): cerca de 12 chamadas com 2 bancos; a cada 3 horas são ~100 por dia. Se mudar de plano, mude o cron no `apps/worker/wrangler.toml`.
+
+## Pluggy: webhook e conexões
+
+O Pluggy avisa o Worker quando uma conexão muda (`item/updated`, `item/error`, `item/waiting_user_input`, `item/login_succeeded`), quando é criada e quando é apagada. O Worker responde na hora e sincroniza em segundo plano.
+
+1. Crie um segredo aleatório e guarde como secret: `node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_WEBHOOK_SECRET`.
+2. Logado no painel, registre o webhook (uma vez): `POST /api/pluggy/webhooks`. Ele aponta para `https://<seu-worker>/api/pluggy/webhook` e o Pluggy envia o segredo no cabeçalho `x-webhook-secret`. Sem `PLUGGY_WEBHOOK_SECRET` essa rota responde **500** ("PLUGGY_WEBHOOK_SECRET ausente"), e o webhook recusa tudo com 401.
+3. **Rotação do secret**: `criarWebhook` só compara a URL. Se já existe um webhook para ela, ele não é atualizado, então o Pluggy continua enviando o segredo antigo e passa a levar 401. Depois de trocar o secret, apague o webhook no Pluggy (ou recrie-o) e chame `POST /api/pluggy/webhooks` de novo, para o cabeçalho novo valer.
+
+As conexões ativas ficam na tabela `pluggy_items` do D1: na primeira sincronização ela copia o `PLUGGY_ITEM_IDS`, e depois o D1 manda (o secret deixa de valer). `item/created` registra a conexão, `item/deleted` a marca como removida.
+
+## Sincronização com os apps (`/api/sync`)
+
+Cada aparelho tem um token (**Ajustar → Apps conectados**; veja "App Android"). O token vai em `Authorization: Bearer mb_...`:
+
+- `GET /api/sync?desde=<ISO opcional>`: contas, transações, `registros` (categorias, orçamentos, metas, ajustes etc.), pendentes, config, faturas e avisos. Sem `desde` vem tudo; com `desde`, só o que mudou (relê 2 min antes por segurança). Guarde o `agora` da resposta para o próximo `desde`.
+- `POST /api/sync` com `{"registros":[{tabela,id,dados,updated_at,deleted_at}]}`: envia mudanças. Vale o `updated_at` mais novo (last-write-wins por registro). Limites: 500 registros por lote, `dados` até 8 KB, `id` de 1 a 80 caracteres, relógio até 5 min adiantado. Devolve `{ok, aceitos, rejeitados}`.
+- Sem token válido (e sem sessão), 401.
+
+## Atualizar (botão e apps)
+
+O botão **Atualizar** do painel e `POST /api/sync/atualizar` (apps) pedem ao banco dados novos (`PATCH /items/{id}` no Pluggy) e leem o que já existe; quando o banco termina, o webhook faz a leitura final. **Limite: uma vez a cada 30 minutos**, somando painel e apps. Antes disso a resposta é **429** com "Atualizado há pouco. Tente de novo às HH:MM." (horário de Brasília) e `liberado_em`. O cron e os webhooks não contam para o limite.
+
+## Backup diário do D1 (R2)
+
+Todo dia, no tick das 06h07 UTC (03h07 BRT) do cron, o Worker grava o D1 inteiro em `d1/AAAA-MM-DD.json.gz` no bucket R2 `meu-banco-backups` (binding `BACKUP`). Uma falha no backup só é registrada no log e não impede a sincronização.
+
+- Crie o bucket **privado** (sem domínio público nem acesso `r2.dev`): `pnpm --filter @meu-banco/worker exec wrangler r2 bucket create meu-banco-backups`. O backup contém os hashes de `app_tokens` e as conexões de `pluggy_items`, além de todas as transações.
+- Retenção de 30 dias: regra de ciclo de vida do bucket (Dashboard da Cloudflare → R2 → bucket → Configurações → Regras de objeto), prefixo `d1/`. Não é código.
+- Testar local: `pnpm dev` e `curl "localhost:8787/cdn-cgi/handler/scheduled?cron=7+*/3+*+*+*&time=1794204420000"` (06:07 UTC). O R2 local fica em `apps/worker/.wrangler/state`.
+
+## Importar o Cashew (uma vez)
+
+Importa categorias, orçamentos, metas, empréstimos e lançamentos do backup do Cashew como `registros`. Rodar de novo não duplica nem sobrescreve o que foi editado depois (`INSERT OR IGNORE`).
+
+```powershell
+pnpm --filter @meu-banco/worker importar:cashew caminho\do\backup-cashew.sql > cashew-import.sql
+pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=cashew-import.sql
+```
+
+O comando imprime no terminal quantos registros foram convertidos e quais foram ignorados (e por quê). **Pendente**: os nomes das tabelas e colunas do Cashew (`categories`, `budgets`, `objectives`, `transactions`, `wallets`) vêm de suposição; ainda falta conferir contra um backup real. Faça isso e rode primeiro com `--local` antes de importar no banco real. Transações pagas/futuras do Cashew entram como lançamentos normais.
 
 ## Reimportar do zero (troca de fonte de dados)
 
