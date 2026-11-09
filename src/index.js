@@ -1,10 +1,14 @@
 import { ApiCliente } from "./api.js";
+import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
+import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { enviarPush } from "./push.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
 const TAM_PAGINA = 500; // máximo da API
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
 const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status que pede novo login (OUTDATED = só falha temporária)
+const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
@@ -33,7 +37,12 @@ export default {
           ctx.waitUntil(tarefa);
           resp = json(await tarefa);
         }
-      } else if (caminho === "/api/ferramentas" && request.method === "GET") {
+      } else if (caminho === "/api/ciclo" && request.method === "GET") resp = await ciclo(env);
+      else if (caminho === "/api/config" && request.method === "PUT") resp = await salvarConfig(request, env, url);
+      else if (caminho === "/api/push" && (request.method === "POST" || request.method === "DELETE")) resp = await inscreverPush(request, env, url);
+      else if (caminho === "/api/push/teste" && request.method === "POST") resp = await testePush(request, env, url);
+      else if (caminho === "/api/notificacoes/entregar" && request.method === "POST") resp = await entregarNotificacoes(request, env, url);
+      else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
         const api = new ApiCliente(env);
         const [conexoes, endpoints] = await Promise.all([api.chamar("connections/list"), api.endpoints()]);
@@ -47,8 +56,13 @@ export default {
     }
   },
 
-  async scheduled(_evento, env, ctx) {
-    ctx.waitUntil(sincronizar(env, "cron"));
+  async scheduled(evento, env, ctx) {
+    // Um cron só (plano gratuito: 5 por conta). Cada sincronização envia os alertas pendentes, então os retidos
+    // pelo silêncio saem no primeiro tick depois das 7h BRT (09h07). O tick de segunda 00h07 UTC (domingo 21h07 BRT)
+    // também manda o resumo semanal.
+    const t = new Date(evento.scheduledTime);
+    const resumo = t.getUTCDay() === 1 && t.getUTCHours() === 0;
+    ctx.waitUntil(sincronizar(env, "cron").finally(() => resumo && alertaSemanal(env)));
   },
 };
 
@@ -137,12 +151,6 @@ function json(obj, status = 200, extra = {}) {
 const agora = () => new Date().toISOString();
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 
-function somarDias(isoData, dias) {
-  const d = new Date(isoData + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
-}
-
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
@@ -208,6 +216,117 @@ async function salvarAjuste(request, env, idUrl) {
     ).bind(id, category, gasto, agora()).run();
   }
   return json({ ok: true });
+}
+
+// ---------- Ciclo, limite e alertas ----------
+
+async function lerConfig(db) {
+  const { results } = await db.prepare("SELECT chave, valor FROM config").all();
+  const c = Object.fromEntries(results.map((r) => [r.chave, r.valor]));
+  return { limite: c.limite ? Number(c.limite) : null, salario: c.salario || null };
+}
+
+// Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
+async function baseCiclo(env) {
+  const hoje = hojeSP();
+  const [tx, contas, config] = await Promise.all([
+    env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
+    env.DB.prepare("SELECT id, type FROM accounts").all(),
+    lerConfig(env.DB),
+  ]);
+  const transacoes = tx.results;
+  return { hoje, transacoes, contas: contas.results, config, resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
+}
+
+async function ciclo(env) {
+  const [b, notif] = await Promise.all([
+    baseCiclo(env),
+    env.DB.prepare("SELECT chave, titulo, corpo, criada FROM notificacoes ORDER BY criada DESC LIMIT 20").all(),
+  ]);
+  return json({ ciclo: { ...b.resumo, salario: b.config.salario }, notificacoes: notif.results, push: { publica: env.VAPID_PUBLICA || null } });
+}
+
+async function salvarConfig(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const corpo = await request.json().catch(() => null);
+  if (!corpo || typeof corpo !== "object") return json({ erro: "JSON inválido" }, 400);
+  const ops = [];
+  if ("limite" in corpo) {
+    const v = corpo.limite;
+    if (v === null) ops.push(env.DB.prepare("DELETE FROM config WHERE chave = 'limite'"));
+    else if (typeof v === "number" && v > 0 && v <= 1e6) ops.push(env.DB.prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('limite', ?1)").bind(String(v)));
+    else return json({ erro: "Limite deve ser um valor entre R$ 0,01 e R$ 1.000.000" }, 400);
+  }
+  if ("salario_id" in corpo) {
+    const t = await env.DB.prepare("SELECT t.description, t.amount, a.type FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.id = ?1").bind(String(corpo.salario_id)).first();
+    if (!t) return json({ erro: "Transação não encontrada" }, 404);
+    if (t.type === "CREDIT" || !(t.amount > 0) || !normalizar(t.description)) return json({ erro: "Escolha um crédito da conta corrente" }, 400);
+    ops.push(env.DB.prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario', ?1)").bind(normalizar(t.description)));
+  }
+  if (!ops.length) return json({ erro: "Nada para salvar" }, 400);
+  await env.DB.batch(ops);
+  return json({ ok: true });
+}
+
+async function inscreverPush(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const endpoint = (await request.json().catch(() => null))?.endpoint;
+  const permitido = /^https:\/\//.test(endpoint || "") || (env.PUSH_HTTP_LOCAL === "1" && /^http:\/\/localhost[:/]/.test(endpoint || ""));
+  if (!permitido || endpoint.length > 1000) return json({ erro: "Endpoint inválido" }, 400);
+  if (request.method === "DELETE") await env.DB.prepare("DELETE FROM push_inscricoes WHERE endpoint = ?1").bind(endpoint).run();
+  else await env.DB.prepare("INSERT OR REPLACE INTO push_inscricoes (endpoint, criada) VALUES (?1, ?2)").bind(endpoint, agora()).run();
+  return json({ ok: true });
+}
+
+const validadeAlerta = () => new Date(Date.now() - VALIDADE_ALERTA_MS).toISOString();
+
+function gravarAlertas(db, alertas) {
+  if (!alertas.length) return null;
+  return db.batch(alertas.map((a) =>
+    db.prepare("INSERT OR IGNORE INTO notificacoes (chave, titulo, corpo, criada) VALUES (?1, ?2, ?3, ?4)").bind(a.chave, a.titulo, a.corpo, agora())));
+}
+
+// Um push (sem conteúdo) por inscrição quando há alerta não enviado. Respeita o silêncio das 22h às 7h.
+async function enviarPendentes(env, ignorarSilencio = false) {
+  if (!env.VAPID_PRIVADA || (!ignorarSilencio && emSilencio(new Date()))) return 0;
+  const pend = await env.DB.prepare("SELECT COUNT(*) n FROM notificacoes WHERE enviada_em IS NULL AND criada > ?1").bind(validadeAlerta()).first();
+  if (!pend.n) return 0;
+  const { results } = await env.DB.prepare("SELECT endpoint FROM push_inscricoes").all();
+  let enviados = 0;
+  for (const { endpoint } of results) {
+    const status = await enviarPush(endpoint, env).catch((e) => (console.error("push", e.message), 0));
+    if (status === 404 || status === 410) await env.DB.prepare("DELETE FROM push_inscricoes WHERE endpoint = ?1").bind(endpoint).run();
+    else if (status >= 200 && status < 300) enviados++;
+  }
+  if (enviados) await env.DB.prepare("UPDATE notificacoes SET enviada_em = ?1 WHERE enviada_em IS NULL").bind(agora()).run();
+  return enviados;
+}
+
+async function avaliarAlertas(env) {
+  const b = await baseCiclo(env);
+  const avisos = JSON.parse((await env.DB.prepare("SELECT data FROM snapshots WHERE key = 'avisos'").first())?.data || "[]");
+  await gravarAlertas(env.DB, gerarAlertas({ ...b, avisos }));
+  await enviarPendentes(env);
+}
+
+async function alertaSemanal(env) {
+  const b = await baseCiclo(env);
+  await gravarAlertas(env.DB, [resumoSemanal(b)]);
+  await enviarPendentes(env);
+}
+
+async function testePush(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  await gravarAlertas(env.DB, [{ chave: "teste:" + agora(), titulo: "Teste do Meu Banco", corpo: "As notificações estão funcionando." }]);
+  return json({ ok: true, enviados: await enviarPendentes(env, true) });
+}
+
+async function entregarNotificacoes(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const { results } = await env.DB.prepare(
+    "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 5) RETURNING chave, titulo, corpo"
+  ).bind(agora(), validadeAlerta()).all();
+  return json({ notificacoes: results });
 }
 
 // ---------- Sincronização ----------
@@ -317,6 +436,7 @@ async function sincronizar(env, origem) {
     .prepare("UPDATE sync_log SET finished_at = ?1, ok = ?2, message = ?3 WHERE id = ?4")
     .bind(agora(), ok, mensagem, log.id)
     .run();
+  if (ok) await avaliarAlertas(env).catch((e) => console.error("Alertas falharam", e?.stack || e));
   return { ok: !!ok, mensagem };
 }
 

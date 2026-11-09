@@ -12,6 +12,10 @@ public/manifest.webmanifest, public/icons/, public/apple-touch-icon.png   PWA in
 scripts/icones.mjs  gera os PNG dos ícones (node scripts/icones.mjs)
 src/index.js        Worker: login por cookie, API do painel, sincronização (cron e botão)
 src/api.js          cliente da API REST do MCP.AI (com paginação e nova tentativa no 429)
+src/ciclo.js        ciclo do salário, limite e parcelas comprometidas
+src/alertas.js      decide quais alertas gerar (limite, gasto fora do padrão, reconexão, resumo semanal)
+src/push.js         envio de Web Push (VAPID) sem biblioteca
+scripts/vapid.mjs   gera o par de chaves VAPID
 schema.sql          tabelas do D1
 mock/api-mock.mjs   API falsa (mesmo formato da real) para teste local
 scripts/versao.mjs  incrementa a versão mostrada no canto do painel a cada deploy
@@ -79,7 +83,7 @@ Na primeira vez a Cloudflare pede para escolher o subdomínio `workers.dev`.
 
 1. Entre em `https://meu-banco.SEU-USUARIO.workers.dev` com a `APP_PASSWORD`, depois abra `/api/ferramentas`. Deve mostrar suas conexões (Banco Inter) e a lista de endpoints. Se der erro aqui, o problema é a API key.
 2. Abra a raiz do site e clique **Atualizar**. A primeira carga busca 180 dias (`IMPORT_DAYS`) e pode levar até alguns minutos por causa do `force_sync`.
-3. Daí em diante o cron atualiza sozinho a cada 3 horas (minuto 7 das horas 0, 3, 6… UTC = 21h, 0h, 3h… em Brasília).
+3. Daí em diante o cron atualiza sozinho a cada 3 horas (minuto 7 das horas 0, 3, 6… UTC = 21h, 0h, 3h… em Brasília). O mesmo cron envia os alertas pendentes e, no domingo às 21h07, o resumo semanal.
 4. No celular, veja "Instalar no celular" abaixo.
 
 ## Login
@@ -116,7 +120,7 @@ Opcional, camada extra: Cloudflare Zero Trust → Access → Applications → ad
 - **Voltou para a tela de login sozinho**: a sessão expirou (30 dias) ou a `APP_PASSWORD` mudou. Entre de novo.
 - **Painel antigo no celular depois do deploy**: feche e abra o app; o service worker troca de versão no próximo acesso com internet.
 - **Botão Instalar não aparece**: só em Chrome/Android com HTTPS; no iPhone use Compartilhar → Adicionar à Tela de Início.
-- **"no such table: ajustes"**: faltou `pnpm db:remote`.
+- **"no such table: ajustes"** (ou `config`, `notificacoes`, `push_inscricoes`): faltou `pnpm db:remote`.
 
 A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 
@@ -134,6 +138,28 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 - **Ver logs ao vivo**: `pnpm logs` (`wrangler tail`) e clique Atualizar. Também no painel Cloudflare → Workers → meu-banco → Logs. O histórico de execuções fica na tabela `sync_log`:
   `npx wrangler d1 execute meu-banco --remote --command "SELECT * FROM sync_log ORDER BY id DESC LIMIT 5"`
 
+## Ciclo, limite e alertas
+
+- **Marcar o salário (uma vez)**: toque no crédito do salário na lista de transações e em **Este é o meu salário**. O ciclo começa no último crédito com a mesma descrição e termina na véspera do próximo (início + 1 mês − 1 dia). Sem salário marcado, o painel usa o mês do calendário e pede a marcação.
+- **Limite**: no card do ciclo, toque em **Ajustar**, digite o valor total do ciclo e salve. O card mostra consumido, quanto falta e a porcentagem (barra verde, amarela a partir de 80%, vermelha acima de 100%). Consumido = gastos lançados no ciclo + parcelas futuras que caem até o fim dele; as parcelas dos ciclos seguintes aparecem à parte.
+- **O que gera notificação**:
+  - limite em 80% e em 100% (uma vez por ciclo cada);
+  - gasto fora do padrão: compra acima de 2× a média da categoria nos últimos 6 meses, com mínimo de R$ 100 e pelo menos 3 compras de histórico, olhando só os últimos 3 dias;
+  - banco pedindo reconexão (uma vez por dia enquanto durar);
+  - resumo semanal, domingo às 21h07 (no tick de segunda 00h07 UTC do cron de sincronização).
+- **Silêncio das 22h às 7h** (America/Sao_Paulo): o alerta é gravado e sai na primeira sincronização depois das 7h (09h07). Há um cron só, `7 */3 * * *` (o plano gratuito da Cloudflare permite 5 por conta).
+- **Push só com Chrome no Android** (PWA instalado ou não). No iPhone não há push. A notificação não leva conteúdo: o service worker busca o texto ao receber o aviso. Ative em **Ajustar → Ativar notificações** e use **Enviar notificação de teste** para conferir.
+
+### Chaves VAPID (uma vez, na publicação)
+
+```powershell
+node scripts/vapid.mjs vapid-publica.txt | npx wrangler secret put VAPID_PRIVADA
+```
+
+A chave privada só sai pelo pipe e vira secret (nunca em arquivo nem na tela). Copie o conteúdo de `vapid-publica.txt` para `VAPID_PUBLICA` no `wrangler.toml`, apague o arquivo e rode `pnpm push`. **Trocar as chaves VAPID exige reativar as notificações no celular** (as inscrições antigas deixam de valer).
+
+Push local: no `.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de teste gerado fora do repositório (`node scripts/vapid.mjs <pasta-temporaria>/vapid-local.txt > <pasta-temporaria>/vapid-local.json`); o mock (porta 8788) simula o serviço de push.
+
 ## Segurança
 
 - A API key do MCP.AI só existe como secret no Worker; o navegador nunca a recebe e ela não está em nenhum arquivo do projeto. `.dev.vars` está no `.gitignore`.
@@ -144,4 +170,5 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 
 - Gastos por categoria = débitos da conta corrente + compras do cartão no mês, **sem** pagamento de fatura, investimentos/poupança/"porquinho", transferência entre contas próprias e parcelas futuras.
 - Valores das faturas vêm do `totalAmount` do banco (não da soma das transações).
+- O ciclo do salário, o limite e os alertas estão na seção "Ciclo, limite e alertas".
 - Parcelas futuras e transações pendentes são apagadas e regravadas a cada sincronização, para não duplicar.

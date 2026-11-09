@@ -1,10 +1,10 @@
 "use strict";
 // Service worker do Meu Banco. Troque VERSAO (o "pnpm push" faz isso) para renovar o cache do shell.
-const VERSAO = "v0.0.4";
+const VERSAO = "v0.0.6";
 const SHELL = "shell-" + VERSAO;
 const DADOS = "dados-" + VERSAO;
-const ARQUIVOS = ["/", "/login", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
-const ROTAS_DADOS = /^\/api\/(dados|historico|fatura)$/;
+const ARQUIVOS = ["/", "/login", "/regras.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
+const ROTAS_DADOS = /^\/api\/(dados|historico|fatura|ciclo)$/;
 
 self.addEventListener("install", (e) => {
   // Cada arquivo é opcional: "/" sem sessão redireciona para o login e não deve ser guardado.
@@ -53,4 +53,21 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET" || url.origin !== location.origin) return;
   if (ROTAS_DADOS.test(url.pathname)) e.respondWith(redePrimeiro(e, DADOS));
   else if (!url.pathname.startsWith("/api/")) e.respondWith(redePrimeiro(e, SHELL));
+});
+
+// Push sem conteúdo: busca os alertas com o cookie da sessão. Sem sessão ou sem rede, mostra um aviso genérico.
+self.addEventListener("push", (e) => e.waitUntil(mostrarAlertas()));
+async function mostrarAlertas() {
+  let lista = [];
+  try {
+    const r = await fetch("/api/notificacoes/entregar", { method: "POST" });
+    if (r.ok) lista = (await r.json()).notificacoes || [];
+  } catch {}
+  const icone = "/icons/icon-192.png";
+  if (!lista.length) return self.registration.showNotification("Meu Banco", { body: "Você tem alertas novos. Abra o app para ver.", icon: icone, tag: "meu-banco" });
+  await Promise.all(lista.map((n) => self.registration.showNotification(n.titulo, { body: n.corpo, icon: icone, tag: n.chave })));
+}
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window" }).then((ws) => (ws[0] ? ws[0].focus() : self.clients.openWindow("/"))));
 });
