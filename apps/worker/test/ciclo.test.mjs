@@ -1,7 +1,7 @@
 // test/ciclo.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizar, fimDoCiclo, cicloAtual, resumoCiclo } from "../src/ciclo.js";
+import { normalizar, fimDoCiclo, cicloAtual, resumoCiclo, gastoPorDia } from "../src/ciclo.js";
 
 const contas = [{ id: "cc", type: "BANK" }, { id: "cart", type: "CREDIT" }];
 const sal = (date) => ({ account_id: "cc", date, description: `SALARIO EMPRESA X ${date.slice(5, 7)}/2026`, amount: 7500, type: "CREDIT", scheduled: 0 });
@@ -44,4 +44,16 @@ test("sem limite: falta e percentual nulos", () => {
   const r = resumoCiclo({ transacoes: [], contas, config: {}, hoje: "2026-11-20" });
   assert.equal(r.limite, null);
   assert.equal(r.percentual, null);
+});
+
+test("gastoPorDia soma por dia (gasto + parcela) e preenche os zeros", () => {
+  const tx = [
+    { account_id: "cc", date: "2026-11-05", description: "MERCADO", amount: -10.1, type: "DEBIT", scheduled: 0 },
+    { account_id: "cc", date: "2026-11-05", description: "PADARIA", amount: -5.2, type: "DEBIT", scheduled: 0 },
+    { account_id: "cart", date: "2026-11-07", description: "LOJA", amount: 30, type: "DEBIT", scheduled: 1 },
+    { account_id: "cc", date: "2026-11-20", description: "FORA", amount: -99, type: "DEBIT", scheduled: 0 },
+  ];
+  const r = gastoPorDia(tx, contas, "2026-11-05", "2026-11-08");
+  assert.deepEqual(r.map((d) => d.data), ["2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08"]);
+  assert.deepEqual(r.map((d) => d.valor), [15.3, 0, 30, 0]);
 });

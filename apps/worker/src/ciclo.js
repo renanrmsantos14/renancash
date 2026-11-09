@@ -37,6 +37,19 @@ export function cicloAtual(transacoes, contas, salario, hoje) {
 const dias = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400000);
 const centavos = (v) => Math.round(v * 100) / 100;
 
+export function gastoPorDia(transacoes, contas, inicio, fim) {
+  const cartao = idsCartao(contas);
+  const soma = new Map();
+  for (const t of transacoes) {
+    if (t.date < inicio || t.date > fim) continue;
+    const c = cartao.has(t.account_id);
+    soma.set(t.date, (soma.get(t.date) || 0) + valorGasto(t, c) + valorParcela(t, c));
+  }
+  const saida = [];
+  for (let d = inicio; d <= fim; d = somarDias(d, 1)) saida.push({ data: d, valor: centavos(soma.get(d) || 0) });
+  return saida;
+}
+
 export function resumoCiclo({ transacoes, contas, config, hoje }) {
   const cartao = idsCartao(contas);
   const { inicio, fim, semSalario } = cicloAtual(transacoes, contas, config.salario || null, hoje);

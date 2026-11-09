@@ -42,6 +42,7 @@ export function mapearConta(c, banco, itemId, ts) {
     credit_limit: num(c.creditData?.creditLimit),
     available_limit: num(c.creditData?.availableCreditLimit),
     due_date: dia(c.creditData?.balanceDueDate),
+    closing_date: dia(c.creditData?.balanceCloseDate),
     bank: banco,
     item_id: itemId,
     updated_at: ts,

@@ -31,6 +31,10 @@ test("push grava, pull completo devolve e pull incremental traz só o que mudou"
   assert.deepEqual(completo.registros.map((r) => r.id).sort(), ["c1", "c2"]);
   assert.deepEqual(completo.registros.find((r) => r.id === "c1").dados, { nome: "Mercado", tipo: "despesa" });
   for (const k of ["contas", "transacoes", "pendentes", "faturas", "avisos", "config", "agora"]) assert.ok(k in completo, k);
+  for (const k of ["sincronizado_em", "ciclo"]) assert.ok(k in completo, k);
+  assert.match(completo.ciclo.inicio, /^\d{4}-\d{2}-\d{2}$/);
+  const dias = Math.round((Date.parse(completo.ciclo.fim) - Date.parse(completo.ciclo.inicio)) / 86400000) + 1;
+  assert.equal(completo.ciclo.por_dia.length, dias);
 
   const depois = new Date(Date.parse(completo.agora) + 3 * 60_000).toISOString();
   assert.equal((await (await puxar(depois)).json()).registros.length, 0, "fora da sobreposição de 2 min");

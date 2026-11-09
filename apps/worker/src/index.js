@@ -1,7 +1,7 @@
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
-import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
+import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
@@ -362,7 +362,8 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   if (rota === "GET /api/sync") {
     const desde = normalizarDesde(url.searchParams.get("desde"));
     if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
-    return json(await puxar(env.DB, desde, ts));
+    const b = await baseCiclo(env);
+    return json(await puxar(env.DB, desde, ts, { ciclo: { ...b.resumo, salario: b.config.salario ?? null, por_dia: gastoPorDia(b.transacoes, b.contas, b.resumo.inicio, b.resumo.fim) } }));
   }
   if (rota === "POST /api/sync") {
     const r = await enviar(env.DB, await request.json().catch(() => null), ts);

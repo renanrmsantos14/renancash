@@ -24,8 +24,8 @@ test("nome identifica o banco sem repetir", () => {
 });
 
 test("conta de cartão traz limite, disponível e vencimento", () => {
-  const c = mapearConta({ id: "x", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão", balance: "420.5", creditData: { creditLimit: 3000, availableCreditLimit: 2580, balanceDueDate: "2026-11-17T00:00:00.000Z" } }, "Santander", "item-s", TS);
-  assert.deepEqual([c.id, c.name, c.balance, c.credit_limit, c.available_limit, c.due_date, c.bank, c.item_id], ["x", "Cartão Santander", 420.5, 3000, 2580, "2026-11-17", "Santander", "item-s", ]);
+  const c = mapearConta({ id: "x", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão", balance: "420.5", creditData: { creditLimit: 3000, availableCreditLimit: 2580, balanceDueDate: "2026-11-17T00:00:00.000Z", balanceCloseDate: "2026-11-10T00:00:00.000Z" } }, "Santander", "item-s", TS);
+  assert.deepEqual([c.id, c.name, c.balance, c.credit_limit, c.available_limit, c.due_date, c.closing_date, c.bank, c.item_id], ["x", "Cartão Santander", 420.5, 3000, 2580, "2026-11-17", "2026-11-10", "Santander", "item-s", ]);
 });
 
 test("transação de conta: saída negativa, entrada positiva, mesmo se a API vier com o sinal invertido", () => {

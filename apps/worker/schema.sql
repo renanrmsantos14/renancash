@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   credit_limit    REAL,
   available_limit REAL,
   due_date        TEXT,
+  closing_date    TEXT,
   bank            TEXT,
   item_id         TEXT,
   updated_at      TEXT NOT NULL
