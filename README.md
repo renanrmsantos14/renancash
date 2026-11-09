@@ -249,11 +249,13 @@ Push local: no `apps/worker/.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de tes
 
 ### Migração da Fase 2 (`accounts.closing_date`)
 
-Em banco já existente, rode **uma vez** (o SQLite não tem `ADD COLUMN IF NOT EXISTS`; repetir só falha com "duplicate column name", sem efeito):
+Em banco já existente, rode **antes** de `pnpm push` (o Worker novo lê a coluna; sem ela, `/api/sync` e `/api/dados` dão 500). O script confere a coluna e só altera se faltar, então repetir é seguro (o SQLite não tem `ADD COLUMN IF NOT EXISTS`):
 
 ```powershell
-pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=scripts/migrar-fase2.sql
+pnpm --filter @meu-banco/worker migrar:fase2 -- --remote
 ```
+
+Banco novo (`pnpm db:remote`) já nasce com a coluna. Use `-- --local` para o D1 local.
 
 ## App web em `/app/`
 

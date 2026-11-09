@@ -12,6 +12,7 @@
     "importar:cashew": "node scripts/importar-cashew.mjs",
     "push": "node scripts/conferir-app.mjs && node scripts/versao.mjs && wrangler deploy",
     "prints": "node scripts/prints-app.mjs",
+    "migrar:fase2": "node scripts/migrar-fase2.mjs",
     "logs": "wrangler tail"
   },
   "dependencies": {

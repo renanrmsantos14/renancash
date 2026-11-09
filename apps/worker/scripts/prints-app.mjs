@@ -41,7 +41,6 @@ function vigiar(page, rotulo) {
   page.on("requestfailed", (r) => problemas.push(`[${rotulo}] requestfailed: ${r.url()} ${r.failure()?.errorText}`));
   page.on("response", (r) => {
     if (r.status() >= 400) problemas.push(`[${rotulo}] HTTP ${r.status()}: ${r.url()}`);
-    if (r.url().includes("/api/sync")) problemas.push(`[${rotulo}] info /api/sync ${r.request().method()} ${r.status()}`);
   });
 }
 
@@ -83,7 +82,7 @@ for (const tam of tamanhos) {
   }
 }
 await browser.close();
-const relevantes = problemas.filter((p) => !p.includes("info /api/sync") && !conhecidos.some((c) => c.test(p)));
+const relevantes = problemas.filter((p) => !conhecidos.some((c) => c.test(p)));
 console.log(problemas.join("\n") || "sem mensagens");
 console.log(`\n${relevantes.length} problema(s) de console/CSP/rede (fora o conhecido do gsi/client); prints em ${saida}`);
 process.exitCode = relevantes.length ? 1 : 0;
