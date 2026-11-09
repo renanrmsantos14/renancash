@@ -34,6 +34,7 @@ export default {
         return r;
       }
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
+      else if (caminho === "/api/app/parear" && request.method === "POST") resp = await parearComSenha(request, env, url);
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
@@ -123,18 +124,33 @@ async function sessaoValida(request, env) {
 
 async function entrar(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  // Limite por IP (binding de rate limit): 5 tentativas por minuto, além da espera de 1 s por erro.
+  const { erro } = await conferirSenha(request, env);
+  if (erro) return erro;
+  const expira = Math.floor(Date.now() / 1000) + SESSAO_SEGUNDOS;
+  return json({ ok: true }, 200, { "set-cookie": cookie(`${expira}.${await assinar(expira, env)}`, SESSAO_SEGUNDOS) });
+}
+
+// Pareamento sem QR: o app manda a senha do painel e recebe um token de aparelho.
+async function parearComSenha(request, env, url) {
+  if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  const { erro, corpo } = await conferirSenha(request, env);
+  if (erro) return erro;
+  const novo = await inserirToken(env, corpo.nome);
+  return novo ? json({ token: novo.token, url: url.origin }, 201) : json({ erro: "Informe um nome de 1 a 40 caracteres" }, 400);
+}
+
+// Limite por IP (binding de rate limit): 5 tentativas por minuto, além da espera de 1 s por erro.
+async function conferirSenha(request, env) {
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (env.LIMITE_LOGIN && !(await env.LIMITE_LOGIN.limit({ key: ip })).success) {
-    return json({ erro: "Muitas tentativas. Espere 1 minuto." }, 429);
+    return { erro: json({ erro: "Muitas tentativas. Espere 1 minuto." }, 429) };
   }
   const corpo = await request.json().catch(() => null);
   if (!(await iguais(typeof corpo?.senha === "string" ? corpo.senha : "", env.APP_PASSWORD))) {
     await new Promise((r) => setTimeout(r, 1000)); // freia tentativa em série
-    return json({ erro: "Senha incorreta" }, 401);
+    return { erro: json({ erro: "Senha incorreta" }, 401) };
   }
-  const expira = Math.floor(Date.now() / 1000) + SESSAO_SEGUNDOS;
-  return json({ ok: true }, 200, { "set-cookie": cookie(`${expira}.${await assinar(expira, env)}`, SESSAO_SEGUNDOS) });
+  return { corpo };
 }
 
 // Comparação em tempo constante (compara os hashes, que têm o mesmo tamanho).
@@ -480,14 +496,19 @@ async function listarTokens(env) {
 
 async function criarToken(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  const nome = (await request.json().catch(() => null))?.nome;
+  const novo = await inserirToken(env, (await request.json().catch(() => null))?.nome);
+  if (!novo) return json({ erro: "Informe um nome de 1 a 40 caracteres" }, 400);
+  const link = `meubanco://parear?u=${encodeURIComponent(url.origin)}&t=${novo.token}`;
+  return json({ ...novo, link, qr: renderSVG(link, { border: 2 }) }, 201);
+}
+
+async function inserirToken(env, nome) {
   const limpo = typeof nome === "string" ? nome.trim() : "";
-  if (!limpo || limpo.length > 40) return json({ erro: "Informe um nome de 1 a 40 caracteres" }, 400);
+  if (!limpo || limpo.length > 40) return null;
   const token = gerarToken();
   const id = crypto.randomUUID();
   await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agora()).run();
-  const link = `meubanco://parear?u=${encodeURIComponent(url.origin)}&t=${token}`;
-  return json({ id, nome: limpo, token, link, qr: renderSVG(link, { border: 2 }) }, 201);
+  return { id, nome: limpo, token };
 }
 
 async function revogarToken(request, env, url, idUrl) {
