@@ -167,6 +167,10 @@ importers:
   .: {}
 
   apps/worker:
+    dependencies:
+      '@meu-banco/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       wrangler:
         specifier: ^4.40.0

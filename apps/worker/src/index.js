@@ -3,7 +3,8 @@ import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mape
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { enviarPush } from "./push.js";
-import { base64url, gerarToken, hashToken, tokenDoCabecalho, normalizarDesde, montarResposta } from "./app.js";
+import { autenticarAparelho, puxar, enviar } from "./sync.js";
+import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -22,6 +23,7 @@ export default {
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
+      else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho); // Bearer ou cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
       } else if (caminho === "/api/sair" && request.method === "POST") {
@@ -335,7 +337,29 @@ async function entregarNotificacoes(request, env, url) {
 
 // ---------- App Android (token de aparelho) ----------
 
-const USO_TOKEN_MS = 60 * 1000; // ultimo_uso é gravado no máximo 1 vez por minuto
+// Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
+const ROTAS_APARELHO = new Set(["/api/sync"]);
+
+async function rotaAparelho(request, env, url, caminho) {
+  const ts = agora();
+  const aparelho = await autenticarAparelho(request, env.DB, ts);
+  if (!aparelho) {
+    if (!(await sessaoValida(request, env))) return json({ erro: "Token ou sessão necessários" }, 401, { "www-authenticate": "Bearer" });
+    if (request.method !== "GET" && !mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
+  }
+  const rota = `${request.method} ${caminho}`;
+  if (rota === "GET /api/sync") {
+    const desde = normalizarDesde(url.searchParams.get("desde"));
+    if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+    return json(await puxar(env.DB, desde, ts));
+  }
+  if (rota === "POST /api/sync") {
+    const r = await enviar(env.DB, await request.json().catch(() => null), ts);
+    return json(r.corpo, r.status);
+  }
+  return json({ erro: "Método não permitido" }, 405);
+}
+
 
 async function listarTokens(env) {
   const { results } = await env.DB.prepare("SELECT id, nome, criado, ultimo_uso, revogado FROM app_tokens ORDER BY criado DESC").all();
@@ -367,19 +391,15 @@ async function revogarToken(request, env, url, idUrl) {
 // sincronização em andamento grava com o `ts` do início (< agora) e essas linhas podem escapar do filtro; a releitura de
 // DIAS_REIMPORTAR dias a cada sincronização as traz de volta na rodada seguinte.
 async function appTransacoes(request, env, url) {
-  const token = tokenDoCabecalho(request.headers.get("authorization"));
-  const reg = token && await env.DB.prepare("SELECT id FROM app_tokens WHERE hash = ?1 AND revogado IS NULL").bind(await hashToken(token)).first();
-  if (!reg) return json({ erro: "Token inválido" }, 401, { "www-authenticate": "Bearer" });
+  const agoraIso = agora();
+  if (!(await autenticarAparelho(request, env.DB, agoraIso))) return json({ erro: "Token inválido" }, 401, { "www-authenticate": "Bearer" });
   const desde = normalizarDesde(url.searchParams.get("desde"));
   if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
-  const agoraIso = agora();
   const db = env.DB;
   const [contas, tx, pend] = await db.batch([
     db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
     db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
-    db.prepare("UPDATE app_tokens SET ultimo_uso = ?1 WHERE id = ?2 AND (ultimo_uso IS NULL OR ultimo_uso < ?3)")
-      .bind(agoraIso, reg.id, new Date(Date.now() - USO_TOKEN_MS).toISOString()),
   ]);
   return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
 }

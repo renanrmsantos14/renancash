@@ -12,6 +12,9 @@
     "push": "node scripts/versao.mjs && wrangler deploy",
     "logs": "wrangler tail"
   },
+  "dependencies": {
+    "@meu-banco/core": "workspace:*"
+  },
   "devDependencies": {
     "wrangler": "^4.40.0"
   }
