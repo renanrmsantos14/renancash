@@ -61,6 +61,7 @@ test("parcela futura: scheduled, numeração na descrição e regra de gasto do 
 test("item com login pendente vira aviso; OUTDATED e UPDATED não", () => {
   assert.match(avisoItem({ status: "LOGIN_ERROR" }, "Santander").mensagem, /LOGIN_ERROR/);
   assert.equal(avisoItem({ status: "LOGIN_ERROR" }, "Santander").banco, "Santander");
+  assert.equal(avisoItem({ id: "item-1", status: "LOGIN_ERROR" }, "Santander").item_id, "item-1");
   assert.equal(avisoItem({ status: "OUTDATED" }, "X"), null);
   assert.equal(avisoItem({ status: "UPDATED" }, "X"), null);
 });

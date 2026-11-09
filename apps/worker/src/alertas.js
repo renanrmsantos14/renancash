@@ -1,9 +1,11 @@
 // src/alertas.js — quais alertas gerar (funções puras). Chave única por alerta evita repetir.
-import { valorGasto, traduzir } from "../public/regras.js";
+import { categoriaEfetiva, contextoDeRegistros } from "@meu-banco/core";
+import { valorGasto, traduzir, naoEhGasto } from "../public/regras.js";
 import { somarDias, idsCartao } from "./ciclo.js";
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dm = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+const dias = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400000);
 const horaBRT = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" });
 
 export const emSilencio = (data) => { const h = Number(horaBRT.format(data)); return h >= 22 || h < 7; };
@@ -26,7 +28,71 @@ export function foraDoPadrao(transacoes, contas, hoje) {
     .filter(({ t, media }) => media != null && valor(t) > 2 * media);
 }
 
-export function gerarAlertas({ resumo, transacoes, contas, avisos, hoje }) {
+const ultimoDiaDoMes = (a, m) => new Date(Date.UTC(a, m, 0)).getUTCDate(); // m = 1..12
+
+export function alertasOrcamentos({ orcamentos, ctx, transacoes, contas, resumo, hoje }) {
+  const cartao = idsCartao(contas);
+  const [a, m] = hoje.split("-").map(Number);
+  const out = [];
+  for (const o of orcamentos) {
+    const mensal = o.periodo === "mensal";
+    const inicio = mensal ? hoje.slice(0, 8) + "01" : resumo.inicio;
+    const fim = mensal ? `${hoje.slice(0, 8)}${String(ultimoDiaDoMes(a, m)).padStart(2, "0")}` : resumo.fim;
+    const ids = Array.isArray(o.categoria_ids) ? o.categoria_ids : [];
+    const gasto = transacoes
+      .filter((t) => t.date >= inicio && t.date <= fim && (!ids.length || ids.includes(categoriaEfetiva(t, ctx, traduzir, false).categoria_id)))
+      .reduce((s, t) => s + valorGasto(t, cartao.has(t.account_id)), 0);
+    const pct = o.valor > 0 ? (gasto / o.valor) * 100 : 0;
+    const resto = `Você usou ${brl.format(gasto)} de ${brl.format(o.valor)} (${dm(inicio)} a ${dm(fim)}).`;
+    if (pct >= 80) out.push({ chave: `orc80:${o.id}:${inicio}`, titulo: `80% do orçamento ${o.nome}`, corpo: resto });
+    if (pct > 100) out.push({ chave: `orc100:${o.id}:${inicio}`, titulo: `Orçamento ${o.nome} estourado`, corpo: `${resto} ${brl.format(gasto - o.valor)} acima.` });
+  }
+  return out;
+}
+
+export function alertasFechamento({ contas, hoje }) {
+  const out = [];
+  for (const c of contas) {
+    if (c.type !== "CREDIT" || !c.closing_date) continue;
+    const n = dias(hoje, c.closing_date);
+    if (n < 0 || n > 3) continue;
+    out.push({ chave: `fechamento:${c.id}:${c.closing_date}`,
+      titulo: `Fatura do ${c.name} fecha ${n === 0 ? "hoje" : `em ${n} ${n === 1 ? "dia" : "dias"}`}`,
+      corpo: `Fatura atual: ${brl.format(c.balance || 0)}${c.due_date ? ` · vence ${dm(c.due_date)}` : ""}` });
+  }
+  return out;
+}
+
+export function alertasReceita({ transacoes, contas, hoje }) {
+  const bancos = new Map(contas.filter((c) => c.type === "BANK").map((c) => [c.id, c]));
+  const desde = somarDias(hoje, -2);
+  return transacoes
+    .filter((t) => bancos.has(t.account_id) && t.amount > 0 && !t.scheduled && !naoEhGasto(t) && t.date >= desde)
+    .map((t) => ({ chave: `receita:${t.id}`, titulo: "Entrou dinheiro", corpo: `${brl.format(t.amount)} de ${t.description} em ${bancos.get(t.account_id).name}` }));
+}
+
+export function alertasAssinaturas({ assinaturas, hoje }) {
+  const [a, m, d] = hoje.split("-").map(Number);
+  const dataDoMes = (ano, mes, dia) => {
+    const ajustado = new Date(Date.UTC(ano, mes - 1, 1));
+    const y = ajustado.getUTCFullYear(), mm = ajustado.getUTCMonth() + 1;
+    return `${y}-${String(mm).padStart(2, "0")}-${String(Math.min(dia, ultimoDiaDoMes(y, mm))).padStart(2, "0")}`;
+  };
+  const out = [];
+  for (const s of assinaturas) {
+    if (s.status !== "confirmada") continue;
+    const atual = dataDoMes(a, m, s.dia);
+    const proxima = atual >= hoje ? atual : dataDoMes(a, m + 1, s.dia);
+    const n = dias(hoje, proxima);
+    if (n > 1) continue;
+    out.push({ chave: `assinatura:${s.id}:${proxima}`, titulo: `${s.nome} cobra ${n === 0 ? "hoje" : "amanhã"}`, corpo: brl.format(s.valor) });
+  }
+  return out;
+}
+
+const doTipo = (registros, tabela) => registros.filter((r) => r.tabela === tabela && r.dados).map((r) => ({ id: r.id, ...r.dados }));
+
+export function gerarAlertas({ resumo, transacoes, contas, avisos, hoje, registros = [], ctx = contextoDeRegistros([]) }) {
   const out = [];
   const { percentual: p, consumido, limite, falta, inicio, fim } = resumo;
   if (p != null && p >= 80) {
@@ -43,6 +109,12 @@ export function gerarAlertas({ resumo, transacoes, contas, avisos, hoje }) {
       corpo: `${brl.format(valorGasto(t, cartao.has(t.account_id)))} em ${t.description} (${traduzir(t.ajuste_categoria || t.category)}): mais que o dobro da sua média (${brl.format(media)}).` });
   }
   if (avisos[0]) out.push({ chave: `reconexao:${hoje}`, titulo: `${avisos[0].banco} pediu nova conexão`, corpo: avisos[0].mensagem }); // um por dia basta
+  out.push(
+    ...alertasOrcamentos({ orcamentos: doTipo(registros, "orcamentos"), ctx, transacoes, contas, resumo, hoje }),
+    ...alertasFechamento({ contas, hoje }),
+    ...alertasReceita({ transacoes, contas, hoje }),
+    ...alertasAssinaturas({ assinaturas: doTipo(registros, "assinaturas"), hoje }),
+  );
   return out;
 }
 

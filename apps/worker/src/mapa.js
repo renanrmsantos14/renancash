@@ -77,6 +77,7 @@ export function mapearTransacao(t, conta, hoje, ts) {
 export function avisoItem(item, banco) {
   if (!PROBLEMA.test(item.status || "")) return null;
   return {
+    item_id: item.id,
     banco: banco || item.connector?.name || "Conexão",
     mensagem: `A conexão não atualizou (${item.status}${item.error?.message ? ": " + item.error.message : ""}). Reconecte no Meu Pluggy e confirme no app do banco.`,
     reconnect_url: "https://meu.pluggy.ai",

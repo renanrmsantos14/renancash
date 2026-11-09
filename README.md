@@ -86,6 +86,7 @@ Cada aparelho tem um token (**Ajustar → Apps conectados**; veja "App Android")
 
 - `GET /api/sync?desde=<ISO opcional>`: contas, transações, `registros` (categorias, orçamentos, metas, ajustes etc.), pendentes, config, faturas e avisos. Sem `desde` vem tudo; com `desde`, só o que mudou (relê 2 min antes por segurança). Guarde o `agora` da resposta para o próximo `desde`.
 - `POST /api/sync` com `{"registros":[{tabela,id,dados,updated_at,deleted_at}]}`: envia mudanças. Vale o `updated_at` mais novo (last-write-wins por registro). Limites: 500 registros por lote, `dados` até 8 KB, `id` de 1 a 80 caracteres, relógio até 5 min adiantado. Devolve `{ok, aceitos, rejeitados}`.
+- `GET /api/notificacoes?desde=<ISO>`: alertas gerados pelo Worker (limite, orçamentos, fechamento da fatura, receita, assinaturas, fora do padrão, reconexão), até 20 por chamada, mais um `resumo` (disponível, consumido, limite, ciclo, última sincronização). Sem `desde`, só devolve o `cursor` inicial (não despeja o histórico). Das 22h às 7h (Brasília) responde vazio e o cursor não anda. Guarde o `cursor` para a próxima chamada.
 - Sem token válido (e sem sessão), 401.
 
 ## Atualizar (botão e apps)

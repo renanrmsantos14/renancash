@@ -1,3 +1,4 @@
+import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
@@ -246,13 +247,15 @@ async function lerConfig(db) {
 // Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
 async function baseCiclo(env) {
   const hoje = hojeSP();
-  const [tx, contas, config] = await Promise.all([
+  const [tx, contas, config, regs] = await Promise.all([
     env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
-    env.DB.prepare("SELECT id, type FROM accounts").all(),
+    env.DB.prepare("SELECT id, type, name, balance, closing_date, due_date FROM accounts").all(),
     lerConfig(env.DB),
+    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
   ]);
   const transacoes = tx.results;
-  return { hoje, transacoes, contas: contas.results, config, resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
+  const registros = regs.results.map((r) => ({ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }));
+  return { hoje, transacoes, contas: contas.results, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
 }
 
 async function ciclo(env) {
@@ -349,7 +352,7 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/sync", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTAS_APARELHO = new Set(["/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
@@ -364,6 +367,11 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
     const b = await baseCiclo(env);
     return json(await puxar(env.DB, desde, ts, { ciclo: { ...b.resumo, salario: b.config.salario ?? null, por_dia: gastoPorDia(b.transacoes, b.contas, b.resumo.inicio, b.resumo.fim) } }));
+  }
+  if (rota === "GET /api/notificacoes") {
+    const desde = normalizarDesde(url.searchParams.get("desde"));
+    if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+    return json(await notificacoesAparelho(env, desde, ts));
   }
   if (rota === "POST /api/sync") {
     const r = await enviar(env.DB, await request.json().catch(() => null), ts);
@@ -386,6 +394,20 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
+}
+
+// Notificações para o app: só leitura (enviada_em e entregue_em são do Web Push). Em silêncio (22h–7h) o cursor não anda.
+async function notificacoesAparelho(env, desde, ts) {
+  const b = await baseCiclo(env);
+  const sinc = await env.DB.prepare("SELECT MAX(finished_at) AS f FROM sync_log WHERE ok = 1").first("f");
+  const disponivel = Math.round(b.contas.filter((c) => c.type === "BANK").reduce((s, c) => s + (c.balance || 0), 0) * 100) / 100;
+  const { consumido, limite, percentual, inicio, fim } = b.resumo;
+  const resumo = { disponivel, consumido, limite, percentual, inicio, fim, sincronizado_em: sinc ?? null };
+  if (desde === null) return { cursor: ts, notificacoes: [], resumo };
+  if (emSilencio(new Date(ts))) return { cursor: desde, notificacoes: [], resumo };
+  const piso = desde > validadeAlerta() ? desde : validadeAlerta();
+  const { results } = await env.DB.prepare("SELECT chave, titulo, corpo, criada FROM notificacoes WHERE criada > ?1 ORDER BY criada LIMIT 20").bind(piso).all();
+  return { cursor: results.at(-1)?.criada ?? desde, notificacoes: results, resumo };
 }
 
 // Webhook do Pluggy: responde na hora (o Pluggy espera 2xx em poucos segundos) e trabalha em waitUntil.
