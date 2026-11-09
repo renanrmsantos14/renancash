@@ -60,3 +60,10 @@ test("SQL gerado roda no D1 e rodar de novo não duplica nem sobrescreve", async
   assert.equal(await db.prepare("SELECT count(*) AS n FROM registros").first("n"), 9);
   assert.equal(JSON.parse(await db.prepare("SELECT dados FROM registros WHERE id = 'cashew:1'").first("dados")).nome, "Editado");
 });
+
+test("apóstrofo no nome vira SQL válido e volta igual do D1", async () => {
+  const db = criarD1();
+  const regs = converterCashew({ ...dados, categorias: [{ category_pk: "9", name: "Pao d'Acucar", income: 0, colour: null, icon_name: null, main_category_pk: null, order: 0 }], orcamentos: [], objetivos: [], transacoes: [] }, AGORA);
+  await db.exec(sqlImportacao(regs, AGORA));
+  assert.equal(JSON.parse(await db.prepare("SELECT dados FROM registros WHERE id = 'cashew:9'").first("dados")).nome, "Pao d'Acucar");
+});

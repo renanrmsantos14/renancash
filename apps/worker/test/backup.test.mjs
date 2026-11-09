@@ -41,3 +41,25 @@ test("cron das 06h UTC faz o backup; nos outros horários não", async () => {
     assert.equal(BACKUP.objetos.size, esperado, `hora ${hora}`);
   }
 });
+
+test("tabela com aspas no nome é exportada com o identificador escapado", async () => {
+  const db = criarD1();
+  await db.prepare('CREATE TABLE "a""b" (x)').run();
+  await db.prepare('INSERT INTO "a""b" (x) VALUES (1)').run();
+  assert.deepEqual((await exportarBanco(db)).tabelas['a"b'], [{ x: 1 }]);
+});
+
+test("falha ao gravar no R2 não derruba a sincronização do cron", async () => {
+  const BACKUP = { put: async () => { throw new Error("R2 fora do ar"); } };
+  const { env, ctx, worker, esperar } = criarAmbiente({ BACKUP });
+  const erros = [];
+  const original = console.error;
+  console.error = (...a) => erros.push(a.join(" "));
+  try {
+    await worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 6, 7) }, env, ctx);
+    const [resultado] = await esperar();
+    assert.equal(resultado.status, "fulfilled");
+  } finally { console.error = original; }
+  assert.ok(erros.some((e) => e.includes("Backup falhou") && e.includes("R2 fora do ar")));
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM sync_log").first("n"), 1, "a sincronização rodou");
+});

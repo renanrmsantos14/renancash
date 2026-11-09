@@ -3,7 +3,7 @@ export async function exportarBanco(db) {
   const { results } = await db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\' AND name NOT LIKE 'd1\\_%' ESCAPE '\\' ORDER BY name"
   ).all();
-  const lidas = await db.batch(results.map(({ name }) => db.prepare(`SELECT * FROM "${name}"`)));
+  const lidas = await db.batch(results.map(({ name }) => db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`)));
   return { gerado_em: new Date().toISOString(), tabelas: Object.fromEntries(results.map(({ name }, i) => [name, lidas[i].results])) };
 }
 

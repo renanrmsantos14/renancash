@@ -53,7 +53,7 @@ export default {
       else if (request.method === "DELETE" && idToken) resp = await revogarToken(request, env, url, idToken);
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa as credenciais do Pluggy e mostra o status de cada conexão.
-        const api = new ApiCliente(env);
+        const api = await clientePluggy(env.DB, env, agora());
         const itens = await Promise.all((await api.listarIds()).map((id) => api.item(id).then((i) => ({ id, conector: i.connector?.name, status: i.status, executionStatus: i.executionStatus, lastUpdatedAt: i.lastUpdatedAt }), (e) => ({ id, erro: e.message }))));
         resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
@@ -422,7 +422,8 @@ async function atualizarAgora(env, origem, ctx) {
     for (const f of falhas) console.warn("Atualizar no banco falhou", f);
     return { ...(await sincronizar(env, origem)), pedidos: ids.length - falhas.length, falhas };
   })();
-  ctx.waitUntil(tarefa.catch(() => {})); // se o cliente fechar no meio, a sincronização termina e o sync_log é fechado
+  // O erro já chega ao cliente por `await tarefa`; o catch só evita rejeição não tratada quando o cliente desconecta e a tarefa segue.
+  ctx.waitUntil(tarefa.catch(() => {}));
   return json(await tarefa);
 }
 
@@ -471,6 +472,13 @@ async function appTransacoes(request, env, url) {
 
 // ---------- Sincronização ----------
 
+// D1 nunca semeado (sem secret): mantém a descoberta via /v2/items; com linhas, o D1 manda (lista vazia = nada a sincronizar).
+async function clientePluggy(db, env, ts) {
+  const conexoes = await idsConexoes(db, env, ts);
+  const semeado = conexoes.length || (await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"));
+  return new ApiCliente(env, semeado ? conexoes : undefined);
+}
+
 async function sincronizar(env, origem) {
   const db = env.DB;
 
@@ -488,10 +496,7 @@ async function sincronizar(env, origem) {
 
   try {
     const ts = agora();
-    const conexoes = await idsConexoes(db, env, ts);
-    // D1 nunca semeado (sem secret): mantém a descoberta via /v2/items; com linhas, o D1 manda (lista vazia = nada a sincronizar).
-    const semeado = conexoes.length || (await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"));
-    const api = new ApiCliente(env, semeado ? conexoes : undefined);
+    const api = await clientePluggy(db, env, ts);
 
     // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
     const ids = await api.listarIds();

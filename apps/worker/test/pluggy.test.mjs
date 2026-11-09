@@ -85,3 +85,27 @@ test("sincronizar com D1 vazio e sem secret ainda descobre as conexões via /v2/
   assert.ok(chamadas.some((c) => c.caminho === "/v2/items"));
   assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"), 0);
 });
+
+const pluggyUmBanco = (u) => {
+  if (u.pathname === "/v2/items") return { results: [{ id: ID_A }] };
+  if (u.pathname === `/items/${ID_A}`) return { id: ID_A, status: "UPDATED", connector: { name: "Banco Teste" } };
+  if (u.pathname === "/accounts") return { results: [{ id: "conta-1", type: "BANK", name: "Corrente", balance: 10 }] };
+  return { results: [] };
+};
+
+test("/api/ferramentas lista as conexões do D1 sem consultar /v2/items", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  await registrarItem(env.DB, ID_A, T);
+  const { chamadas } = simularPluggy(pluggyUmBanco);
+  const r = await pedir("/api/ferramentas", { headers: { cookie: await entrarComSenha(pedir) } });
+  assert.deepEqual((await r.json()).itens.map((i) => i.id), [ID_A]);
+  assert.ok(!chamadas.some((c) => c.caminho === "/v2/items"));
+});
+
+test("sincronizar com D1 vazio e sem secret grava as contas descobertas via /v2/items", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  simularPluggy(pluggyUmBanco);
+  const r = await pedir("/api/atualizar", { method: "POST", headers: { origin: "https://meu-banco.test", cookie: await entrarComSenha(pedir) } });
+  assert.equal((await r.json()).ok, true);
+  assert.equal(await env.DB.prepare("SELECT item_id FROM accounts WHERE id = 'conta-1'").first("item_id"), ID_A);
+});
