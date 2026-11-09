@@ -77,3 +77,11 @@ test("sincronizar com todas as conexões removidas não busca os ids do secret",
   await pedir("/api/atualizar", { method: "POST", headers: { origin: "https://meu-banco.test", cookie: await entrarComSenha(pedir) } });
   assert.equal(chamadas.filter((c) => c.caminho.startsWith("/items/") || c.caminho === "/accounts").length, 0);
 });
+
+test("sincronizar com D1 vazio e sem secret ainda descobre as conexões via /v2/items", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  const { chamadas } = simularPluggy(() => ({ results: [] }));
+  await pedir("/api/atualizar", { method: "POST", headers: { origin: "https://meu-banco.test", cookie: await entrarComSenha(pedir) } });
+  assert.ok(chamadas.some((c) => c.caminho === "/v2/items"));
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"), 0);
+});

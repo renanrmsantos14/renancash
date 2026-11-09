@@ -441,7 +441,10 @@ async function sincronizar(env, origem) {
 
   try {
     const ts = agora();
-    const api = new ApiCliente(env, await idsConexoes(db, env, ts));
+    const conexoes = await idsConexoes(db, env, ts);
+    // D1 nunca semeado (sem secret): mantém a descoberta via /v2/items; com linhas, o D1 manda (lista vazia = nada a sincronizar).
+    const semeado = conexoes.length || (await db.prepare("SELECT count(*) AS n FROM pluggy_items").first("n"));
+    const api = new ApiCliente(env, semeado ? conexoes : undefined);
 
     // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
     const ids = await api.listarIds();
