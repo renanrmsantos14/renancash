@@ -17,7 +17,7 @@ apps/worker/src/alertas.js      decide quais alertas gerar (limite, gasto fora d
 apps/worker/src/push.js         envio de Web Push (VAPID) sem biblioteca
 apps/worker/scripts/vapid.mjs   gera o par de chaves VAPID
 apps/worker/schema.sql          tabelas do D1
-mock/api-mock.mjs   Pluggy falso (2 conexões: Inter e Santander) para teste local
+apps/worker/mock/api-mock.mjs   Pluggy falso (2 conexões: Inter e Santander) para teste local
 apps/worker/scripts/reimportar.sql  apaga contas/transações/faturas importadas, para reimportar do zero
 apps/worker/scripts/versao.mjs  incrementa a versão mostrada no canto do painel a cada deploy
 ```
@@ -32,7 +32,7 @@ apps/worker/scripts/versao.mjs  incrementa a versão mostrada no canto do painel
 ## 2. Testar localmente com o mock (opcional, recomendado)
 
 ```powershell
-copy .dev.vars.example .dev.vars        # Linux/macOS: cp .dev.vars.example .dev.vars
+copy apps\worker\.dev.vars.example apps\worker\.dev.vars        # Linux/macOS: cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 pnpm db:local                        # cria as tabelas no banco local
 ```
 
@@ -173,12 +173,12 @@ A mensagem de erro aparece no painel (faixa vermelha) e no `/api/ferramentas`.
 ### Chaves VAPID (uma vez, na publicação)
 
 ```powershell
-node scripts/vapid.mjs vapid-publica.txt | pnpm --filter @meu-banco/worker exec wrangler secret put VAPID_PRIVADA
+node apps/worker/scripts/vapid.mjs vapid-publica.txt | pnpm --filter @meu-banco/worker exec wrangler secret put VAPID_PRIVADA
 ```
 
 A chave privada só sai pelo pipe e vira secret (nunca em arquivo nem na tela). Copie o conteúdo de `vapid-publica.txt` para `VAPID_PUBLICA` no `apps/worker/wrangler.toml`, apague o arquivo e rode `pnpm push`. **Trocar as chaves VAPID exige reativar as notificações no celular** (as inscrições antigas deixam de valer).
 
-Push local: no `.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de teste gerado fora do repositório (`node scripts/vapid.mjs <pasta-temporaria>/vapid-local.txt > <pasta-temporaria>/vapid-local.json`); o mock (porta 8788) simula o serviço de push.
+Push local: no `apps/worker/.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de teste gerado fora do repositório (`node apps/worker/scripts/vapid.mjs <pasta-temporaria>/vapid-local.txt > <pasta-temporaria>/vapid-local.json`); o mock (porta 8788) simula o serviço de push.
 
 ## App Android (Cashew)
 

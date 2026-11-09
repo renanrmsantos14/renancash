@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "pnpm -r test",
+    "mock": "pnpm --filter @meu-banco/worker mock",
     "dev": "pnpm --filter @meu-banco/worker dev",
     "push": "pnpm --filter @meu-banco/worker push",
     "logs": "pnpm --filter @meu-banco/worker logs",
