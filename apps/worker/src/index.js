@@ -164,6 +164,9 @@ function json(obj, status = 200, extra = {}) {
 const agora = () => new Date().toISOString();
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 
+// Segmento de URL malformado (%) vira "", que as rotas já tratam como id inválido.
+const decodificar = (segmento) => { try { return decodeURIComponent(segmento); } catch { return ""; } };
+
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
@@ -215,8 +218,7 @@ async function fatura(env, url) {
 }
 
 async function salvarAjuste(request, env, idUrl) {
-  let id = "";
-  try { id = decodeURIComponent(idUrl); } catch {}
+  const id = decodificar(idUrl);
   const c = await request.json().catch(() => null);
   const category = c?.category ?? null;
   const gasto = c?.gasto ?? null;
@@ -399,7 +401,6 @@ async function webhookPluggy(request, env, url, ctx) {
   return json({ ok: true });
 }
 
-
 const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
 
 // Botão Atualizar (painel e apps): no máximo 1 a cada 30 min. Pede ao banco dados novos (PATCH no item) e lê o que o
@@ -444,8 +445,7 @@ async function criarToken(request, env, url) {
 
 async function revogarToken(request, env, url, idUrl) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  let id = "";
-  try { id = decodeURIComponent(idUrl); } catch {}
+  const id = decodificar(idUrl);
   const t = await env.DB.prepare("SELECT revogado FROM app_tokens WHERE id = ?1").bind(id).first();
   if (!t) return json({ erro: "Token não encontrado" }, 404);
   if (!t.revogado) await env.DB.prepare("UPDATE app_tokens SET revogado = ?1 WHERE id = ?2").bind(agora(), id).run();
