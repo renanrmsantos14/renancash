@@ -18,15 +18,16 @@ export async function autenticarAparelho(request, db, agoraIso) {
 const json = (texto) => (texto == null ? null : JSON.parse(texto));
 
 // desde = null → leitura completa (sem exclusões). Senão, tudo que mudou desde (desde − 2 min).
-export async function puxar(db, desde, agoraIso) {
+export async function puxar(db, desde, agoraIso, extras = {}) {
   const janela = inicioDaJanela(desde);
-  const [contas, transacoes, registros, pendentes, config, snapshots] = await db.batch([
-    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date, item_id, updated_at FROM accounts ORDER BY type, name"),
+  const [contas, transacoes, registros, pendentes, config, snapshots, ultimaSync] = await db.batch([
+    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date, closing_date, item_id, updated_at FROM accounts ORDER BY type, name"),
     db.prepare("SELECT * FROM transactions WHERE ?1 IS NULL OR updated_at > ?1 ORDER BY date, id").bind(janela),
     db.prepare("SELECT tabela, id, dados, updated_at, deleted_at FROM registros WHERE (?1 IS NULL AND deleted_at IS NULL) OR server_at > ?1 ORDER BY server_at").bind(janela),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
     db.prepare("SELECT chave, valor FROM config"),
     db.prepare("SELECT key, data FROM snapshots WHERE key = 'avisos' OR key LIKE 'faturas:%'"),
+    db.prepare("SELECT MAX(finished_at) AS f FROM sync_log WHERE ok = 1"),
   ]);
   const faturas = {};
   let avisos = [];
@@ -44,6 +45,8 @@ export async function puxar(db, desde, agoraIso) {
     config: Object.fromEntries(config.results.map((c) => [c.chave, c.valor])),
     faturas,
     avisos,
+    sincronizado_em: ultimaSync.results[0]?.f ?? null,
+    ...extras,
   };
 }
 

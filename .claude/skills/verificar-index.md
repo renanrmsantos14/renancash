@@ -1,0 +1,2 @@
+- verificar-meu-banco | apps/worker/src/**, apps/worker/mock/**, apps/worker/scripts/**, apps/worker/test/**, apps/worker/schema.sql, apps/worker/wrangler.toml, apps/worker/public/**, packages/core/** | Worker + D1 + mock do Pluggy: sync, ciclo, alertas, /api/notificacoes, tokens de aparelho, migração
+- verificar-app-web | apps/worker/public/app/**, apps/worker/scripts/prints-app.mjs, apps/worker/scripts/conferir-app.mjs | app web em /app/ (sessão, CSP_APP e prints Playwright)

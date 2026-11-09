@@ -24,7 +24,7 @@ const contasPorItem = {
     { id: "conta-cc", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Conta Corrente Inter", number: "1234567-8", balance: 4823.17 },
     {
       id: "conta-cartao", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão Inter Gold", number: "5555", balance: 1342.9,
-      creditData: { creditLimit: 8000, availableCreditLimit: 5320.4, balanceDueDate: dia(12) },
+      creditData: { creditLimit: 8000, availableCreditLimit: 5320.4, balanceDueDate: dia(12), balanceCloseDate: dia(3) },
     },
   ],
   "item-santander": [

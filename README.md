@@ -86,6 +86,7 @@ Cada aparelho tem um token (**Ajustar → Apps conectados**; veja "App Android")
 
 - `GET /api/sync?desde=<ISO opcional>`: contas, transações, `registros` (categorias, orçamentos, metas, ajustes etc.), pendentes, config, faturas e avisos. Sem `desde` vem tudo; com `desde`, só o que mudou (relê 2 min antes por segurança). Guarde o `agora` da resposta para o próximo `desde`.
 - `POST /api/sync` com `{"registros":[{tabela,id,dados,updated_at,deleted_at}]}`: envia mudanças. Vale o `updated_at` mais novo (last-write-wins por registro). Limites: 500 registros por lote, `dados` até 8 KB, `id` de 1 a 80 caracteres, relógio até 5 min adiantado. Devolve `{ok, aceitos, rejeitados}`.
+- `GET /api/notificacoes?desde=<ISO>`: alertas gerados pelo Worker (limite, orçamentos, fechamento da fatura, receita, assinaturas, fora do padrão, reconexão), até 20 por chamada, mais um `resumo` (disponível, consumido, limite, ciclo, última sincronização). Sem `desde`, só devolve o `cursor` inicial (não despeja o histórico). Das 22h às 7h (Brasília) responde vazio e o cursor não anda. Guarde o `cursor` para a próxima chamada.
 - Sem token válido (e sem sessão), 401.
 
 ## Atualizar (botão e apps)
@@ -245,3 +246,22 @@ Push local: no `apps/worker/.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de tes
 - Valores das faturas vêm do `totalAmount` do banco (não da soma das transações).
 - O ciclo do salário, o limite e os alertas estão na seção "Ciclo, limite e alertas".
 - Parcelas futuras e transações pendentes são apagadas e regravadas a cada sincronização, para não duplicar.
+
+### Migração da Fase 2 (`accounts.closing_date`)
+
+Em banco já existente, rode **antes** de `pnpm push` (o Worker novo lê a coluna; sem ela, `/api/sync` e `/api/dados` dão 500). O script confere a coluna e só altera se faltar, então repetir é seguro (o SQLite não tem `ADD COLUMN IF NOT EXISTS`):
+
+```powershell
+pnpm --filter @meu-banco/worker migrar:fase2 -- --remote
+```
+
+Banco novo (`pnpm db:remote`) já nasce com a coluna. Use `-- --local` para o D1 local.
+
+## App web em `/app/`
+
+O Worker serve o build web do Meu Cashew em `/app/`, só com sessão (cookie). Sem sessão, vai para `/login?volta=/app/` e volta ao app depois do login. O app usa a mesma origem e o cookie, sem token `mb_`.
+
+- **Gerar o build** (no repositório meu-cashew): `scripts/compilar.sh web <este-repo>/apps/worker/public/app`. A pasta `apps/worker/public/app/` não é versionada.
+- **Renderer**: CanvasKit (padrão do Flutter 3.24). Se der tela branca ou erro de wasm no console, o plano B é `--web-renderer html` em `scripts/compilar.sh`.
+- **CSP própria** em `/app/`: acrescenta `'wasm-unsafe-eval'` e `base-uri 'self'` (o painel mantém `base-uri 'none'`).
+- `pnpm push` falha com instrução se `public/app/index.html` não existir.

@@ -5,3 +5,6 @@ node_modules/
 vapid-*.txt
 vapid-*.json
 .worktrees/
+apps/worker/public/app/
+apps/worker/.prints/
+.verificacao/

@@ -42,6 +42,7 @@ export function mapearConta(c, banco, itemId, ts) {
     credit_limit: num(c.creditData?.creditLimit),
     available_limit: num(c.creditData?.availableCreditLimit),
     due_date: dia(c.creditData?.balanceDueDate),
+    closing_date: dia(c.creditData?.balanceCloseDate),
     bank: banco,
     item_id: itemId,
     updated_at: ts,
@@ -76,6 +77,7 @@ export function mapearTransacao(t, conta, hoje, ts) {
 export function avisoItem(item, banco) {
   if (!PROBLEMA.test(item.status || "")) return null;
   return {
+    item_id: item.id,
     banco: banco || item.connector?.name || "Conexão",
     mensagem: `A conexão não atualizou (${item.status}${item.error?.message ? ": " + item.error.message : ""}). Reconecte no Meu Pluggy e confirme no app do banco.`,
     reconnect_url: "https://meu.pluggy.ai",

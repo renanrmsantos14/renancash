@@ -10,7 +10,9 @@
     "db:remote": "wrangler d1 execute meu-banco --remote --file=schema.sql",
     "dev": "wrangler dev --test-scheduled",
     "importar:cashew": "node scripts/importar-cashew.mjs",
-    "push": "node scripts/versao.mjs && wrangler deploy",
+    "push": "node scripts/conferir-app.mjs && node scripts/versao.mjs && wrangler deploy",
+    "prints": "node scripts/prints-app.mjs",
+    "migrar:fase2": "node scripts/migrar-fase2.mjs",
     "logs": "wrangler tail"
   },
   "dependencies": {
@@ -18,6 +20,7 @@
     "uqr": "0.1.2"
   },
   "devDependencies": {
+    "playwright": "1.49.1",
     "wrangler": "^4.40.0"
   }
 }

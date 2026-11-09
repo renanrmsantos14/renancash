@@ -1,8 +1,9 @@
+import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
-import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
-import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
+import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
@@ -25,6 +26,13 @@ export default {
     const idToken = /^\/api\/app\/tokens\/([^/]+)$/.exec(caminho)?.[1];
     try {
       let resp;
+      if (caminho === "/app") return seguranca(new Response(null, { status: 301, headers: { location: "/app/" } }));
+      if (caminho.startsWith("/app/")) {
+        if (!(await sessaoValida(request, env))) return seguranca(new Response(null, { status: 302, headers: { location: "/login?volta=/app/" } }));
+        const r = seguranca(await env.ASSETS.fetch(request), CSP_APP);
+        r.headers.set("cache-control", "private, no-cache");
+        return r;
+      }
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
@@ -144,16 +152,16 @@ function mesmaOrigem(request, url) {
   return !origem || origem === url.origin;
 }
 
-function seguranca(resp) {
+const CSP_PAINEL = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const CSP_APP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
+function seguranca(resp, csp = CSP_PAINEL) {
   const r = new Response(resp.body, resp);
   r.headers.set("x-content-type-options", "nosniff");
   r.headers.set("x-frame-options", "DENY");
   r.headers.set("referrer-policy", "no-referrer");
   r.headers.set("cache-control", "private, no-store");
-  r.headers.set(
-    "content-security-policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-  );
+  r.headers.set("content-security-policy", csp);
   return r;
 }
 
@@ -246,13 +254,17 @@ async function lerConfig(db) {
 // Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
 async function baseCiclo(env) {
   const hoje = hojeSP();
-  const [tx, contas, config] = await Promise.all([
+  const [tx, contas, config, regs] = await Promise.all([
     env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
-    env.DB.prepare("SELECT id, type FROM accounts").all(),
+    env.DB.prepare("SELECT id, type, name, balance, closing_date, due_date FROM accounts").all(),
     lerConfig(env.DB),
+    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
   ]);
   const transacoes = tx.results;
-  return { hoje, transacoes, contas: contas.results, config, resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
+  const registros = regs.results.flatMap((r) => {
+    try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; }
+  });
+  return { hoje, transacoes, contas: contas.results, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
 }
 
 async function ciclo(env) {
@@ -296,12 +308,6 @@ async function inscreverPush(request, env, url) {
 }
 
 const validadeAlerta = () => new Date(Date.now() - VALIDADE_ALERTA_MS).toISOString();
-
-function gravarAlertas(db, alertas) {
-  if (!alertas.length) return null;
-  return db.batch(alertas.map((a) =>
-    db.prepare("INSERT OR IGNORE INTO notificacoes (chave, titulo, corpo, criada) VALUES (?1, ?2, ?3, ?4)").bind(a.chave, a.titulo, a.corpo, agora())));
-}
 
 // Um push (sem conteúdo) por inscrição quando há alerta não enviado. Respeita o silêncio das 22h às 7h.
 async function enviarPendentes(env, ignorarSilencio = false) {
@@ -349,7 +355,7 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/sync", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTAS_APARELHO = new Set(["/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
@@ -362,7 +368,13 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   if (rota === "GET /api/sync") {
     const desde = normalizarDesde(url.searchParams.get("desde"));
     if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
-    return json(await puxar(env.DB, desde, ts));
+    const b = await baseCiclo(env);
+    return json(await puxar(env.DB, desde, ts, { ciclo: { ...b.resumo, salario: b.config.salario ?? null, por_dia: gastoPorDia(b.transacoes, b.contas, b.resumo.inicio, b.resumo.fim) } }));
+  }
+  if (rota === "GET /api/notificacoes") {
+    const desde = normalizarDesde(url.searchParams.get("desde"));
+    if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+    return json(await notificacoesAparelho(env, desde, ts));
   }
   if (rota === "POST /api/sync") {
     const r = await enviar(env.DB, await request.json().catch(() => null), ts);
@@ -385,6 +397,20 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
+}
+
+// Notificações para o app: só leitura (enviada_em e entregue_em são do Web Push). Em silêncio (22h–7h) o cursor não anda.
+async function notificacoesAparelho(env, desde, ts) {
+  const b = await baseCiclo(env);
+  const sinc = await env.DB.prepare("SELECT MAX(finished_at) AS f FROM sync_log WHERE ok = 1").first("f");
+  const disponivel = Math.round(b.contas.filter((c) => c.type === "BANK").reduce((s, c) => s + (c.balance || 0), 0) * 100) / 100;
+  const { consumido, limite, percentual, inicio, fim } = b.resumo;
+  const resumo = { disponivel, consumido, limite, percentual, inicio, fim, sincronizado_em: sinc ?? null };
+  if (desde === null) return { cursor: ts, notificacoes: [], resumo };
+  if (emSilencio(new Date(ts))) return { cursor: desde, notificacoes: [], resumo };
+  const piso = desde > validadeAlerta() ? desde : validadeAlerta();
+  const { results } = await env.DB.prepare("SELECT chave, titulo, corpo, criada FROM notificacoes WHERE criada > ?1 ORDER BY criada LIMIT 20").bind(piso).all();
+  return { cursor: results.at(-1)?.criada ?? desde, notificacoes: results, resumo };
 }
 
 // Webhook do Pluggy: responde na hora (o Pluggy espera 2xx em poucos segundos) e trabalha em waitUntil.
