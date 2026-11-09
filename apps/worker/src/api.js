@@ -14,12 +14,12 @@ const DICAS = {
 };
 
 export class ApiCliente {
-  constructor(env) {
+  constructor(env, ids) {
     if (!env.PLUGGY_CLIENT_ID || !env.PLUGGY_CLIENT_SECRET) throw new Error("Secrets PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET não configurados");
     this.base = (env.PLUGGY_API_URL || BASE_PADRAO).replace(/\/+$/, "");
     this.clientId = env.PLUGGY_CLIENT_ID;
     this.clientSecret = env.PLUGGY_CLIENT_SECRET;
-    this.itemIds = (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    this.itemIds = ids?.length ? ids : (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
     this.semV2 = false;
     this.chave = null; // Promise da apiKey (compartilhada entre chamadas simultâneas)
   }
@@ -28,9 +28,9 @@ export class ApiCliente {
   async #pedir(metodo, caminho, { params, corpo, chave, tentativa = 0 } = {}) {
     const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)) : "";
     const headers = { accept: "application/json" };
-    if (corpo) headers["content-type"] = "application/json";
+    if (corpo !== undefined) headers["content-type"] = "application/json";
     if (chave) headers["x-api-key"] = chave;
-    const resp = await fetch(`${this.base}${caminho}${qs}`, { method: metodo, headers, body: corpo ? JSON.stringify(corpo) : undefined });
+    const resp = await fetch(`${this.base}${caminho}${qs}`, { method: metodo, headers, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
     if (resp.status === 429 && tentativa < 3) {
       const espera = Math.min(10, Number(resp.headers.get("retry-after")) || 6);
       await resp.body?.cancel(); // libera a conexão antes de tentar de novo
@@ -60,16 +60,37 @@ export class ApiCliente {
     return this.chave;
   }
 
-  // GET autenticado. Se a apiKey expirar no meio (401/403), autentica de novo uma vez.
-  async obter(caminho, params) {
+  // Requisição autenticada. Se a apiKey expirar no meio (401/403), autentica de novo uma vez.
+  async #autenticado(metodo, caminho, { params, corpo } = {}) {
     const usada = this.#autenticar();
     const chave = await usada; // falha de autenticação sobe direto, sem repetir
     try {
-      return await this.#pedir("GET", caminho, { params, chave });
+      return await this.#pedir(metodo, caminho, { params, corpo, chave });
     } catch (e) {
       if (e.status !== 401 && e.status !== 403) throw e;
-      return this.#pedir("GET", caminho, { params, chave: await this.#autenticar(usada) });
+      return this.#pedir(metodo, caminho, { params, corpo, chave: await this.#autenticar(usada) });
     }
+  }
+
+  obter(caminho, params) { return this.#autenticado("GET", caminho, { params }); }
+
+  // Token temporário (30 min) do Pluggy Connect. Com itemId, o Connect abre em modo de atualização daquele item.
+  async connectToken(itemId) {
+    const corpo = { ...(itemId ? { itemId } : {}), options: { clientUserId: "meu-banco", avoidDuplicates: true } };
+    const r = await this.#autenticado("POST", "/connect_token", { corpo });
+    if (!r?.accessToken) throw new Error("POST /connect_token: resposta sem accessToken");
+    return r.accessToken;
+  }
+
+  // Pede ao banco dados novos com as credenciais salvas; o fim chega pelo webhook (item/updated).
+  atualizarItem(id) { return this.#autenticado("PATCH", `/items/${encodeURIComponent(id)}`, { corpo: {} }); }
+
+  // Webhook único para todos os items (event "all"). Não duplica se já houver um para a mesma URL.
+  async criarWebhook(url, secret) {
+    const igual = ((await this.obter("/webhooks"))?.results || []).find((w) => w.url === url);
+    if (igual) return { id: igual.id, criado: false };
+    const r = await this.#autenticado("POST", "/webhooks", { corpo: { event: "all", url, headers: { "x-webhook-secret": secret } } });
+    return { id: r?.id, criado: true };
   }
 
   // Ids das conexões (items): os de PLUGGY_ITEM_IDS ou, se vazio, GET /v2/items (opt-in na conta; o Pluggy não lista items por padrão).

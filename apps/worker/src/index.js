@@ -3,6 +3,7 @@ import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { REGEX_ITEM, idsConexoes, registrarItem, atualizarStatus } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { autenticarAparelho, puxar, enviar } from "./sync.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
@@ -24,7 +25,7 @@ export default {
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
-      else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho); // Bearer ou cookie
+      else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
       } else if (caminho === "/api/sair" && request.method === "POST") {
@@ -339,9 +340,9 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/sync"]);
+const ROTAS_APARELHO = new Set(["/api/sync", "/api/pluggy/connect-token", "/api/pluggy/items"]);
 
-async function rotaAparelho(request, env, url, caminho) {
+async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
   const aparelho = await autenticarAparelho(request, env.DB, ts);
   if (!aparelho) {
@@ -357,6 +358,21 @@ async function rotaAparelho(request, env, url, caminho) {
   if (rota === "POST /api/sync") {
     const r = await enviar(env.DB, await request.json().catch(() => null), ts);
     return json(r.corpo, r.status);
+  }
+  if (rota === "POST /api/pluggy/connect-token") {
+    const itemId = (await request.json().catch(() => null))?.itemId ?? null;
+    if (itemId !== null && !(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
+    if (itemId && !(await env.DB.prepare("SELECT 1 FROM pluggy_items WHERE id = ?1 AND removido IS NULL").bind(itemId).first())) {
+      return json({ erro: "Conexão não encontrada" }, 404);
+    }
+    return json({ accessToken: await new ApiCliente(env).connectToken(itemId) });
+  }
+  if (rota === "POST /api/pluggy/items") {
+    const itemId = (await request.json().catch(() => null))?.itemId;
+    if (!(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
+    await registrarItem(env.DB, itemId, ts);
+    ctx.waitUntil(sincronizar(env, "app").catch((e) => console.error("Sincronização após conectar", e?.stack || e)));
+    return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
 }
@@ -424,17 +440,18 @@ async function sincronizar(env, origem) {
   let ok = 1;
 
   try {
-    const api = new ApiCliente(env);
+    const ts = agora();
+    const api = new ApiCliente(env, await idsConexoes(db, env, ts));
 
     // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
     const ids = await api.listarIds();
     const linhasContas = [];
     const brutas = new Map(); // id da conta → conta do Pluggy (faturas)
     const reconectar = [];
-    const ts = agora();
     for (const id of ids) {
       try {
         const [item, contas] = await Promise.all([api.item(id), api.contas(id)]);
+        await atualizarStatus(db, { ...item, id }, ts);
         const banco = bancoDoItem(item);
         const aviso = avisoItem(item, banco);
         if (aviso) reconectar.push(aviso);
