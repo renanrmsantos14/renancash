@@ -97,6 +97,8 @@
   #sheet > header h2 { margin: 0; font-size: 17px; }
   .caixa { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; max-width: 340px; width: 100%; }
   .caixa p { margin: 0 0 12px; font-weight: 600; }
+  .qr { background: #fff; padding: 8px; border-radius: 8px; width: 216px; margin: 0 auto 12px; }
+  .qr svg { display: block; width: 200px; height: 200px; }
   .botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   dl.det { display: grid; grid-template-columns: 96px 1fr; gap: 6px 10px; margin: 0 0 12px; font-size: 14px; }
   dl.det dt { color: var(--suave); } dl.det dd { margin: 0; overflow-wrap: anywhere; }
@@ -641,8 +643,10 @@ function abrirApps(gatilho) {
         copiado = true; copiar.textContent = "Copiado ✓";
       });
       campo.addEventListener("focus", () => campo.select());
+      const qr = h("div", { class: "qr", role: "img", "aria-label": "QR para parear o app " + r.nome });
+      qr.innerHTML = r.qr; // SVG gerado pelo próprio Worker
       caixa.replaceChildren(h("strong", {}, "Token de " + r.nome),
-        h("p", { class: "sub" }, "Não será mostrado de novo. Copie agora e cole no app."), campo, copiar);
+        h("p", { class: "sub" }, "Leia o QR no app ou copie o token. Não será mostrado de novo."), qr, campo, copiar);
       caixa.hidden = false;
       await carregarLista();
       copiar.focus();

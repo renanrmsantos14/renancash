@@ -1,3 +1,4 @@
+import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
@@ -374,7 +375,8 @@ async function criarToken(request, env, url) {
   const token = gerarToken();
   const id = crypto.randomUUID();
   await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agora()).run();
-  return json({ id, nome: limpo, token }, 201);
+  const link = `meubanco://parear?u=${encodeURIComponent(url.origin)}&t=${token}`;
+  return json({ id, nome: limpo, token, link, qr: renderSVG(link, { border: 2 }) }, 201);
 }
 
 async function revogarToken(request, env, url, idUrl) {

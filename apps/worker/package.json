@@ -13,7 +13,8 @@
     "logs": "wrangler tail"
   },
   "dependencies": {
-    "@meu-banco/core": "workspace:*"
+    "@meu-banco/core": "workspace:*",
+    "uqr": "0.1.2"
   },
   "devDependencies": {
     "wrangler": "^4.40.0"
