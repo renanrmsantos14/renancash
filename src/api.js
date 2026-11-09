@@ -20,6 +20,7 @@ export class ApiCliente {
     this.clientId = env.PLUGGY_CLIENT_ID;
     this.clientSecret = env.PLUGGY_CLIENT_SECRET;
     this.itemIds = (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    this.semV2 = false;
     this.chave = null; // Promise da apiKey (compartilhada entre chamadas simultâneas)
   }
 
@@ -97,8 +98,35 @@ export class ApiCliente {
 
   async faturas(accountId) { return (await this.obter("/bills", { accountId, pageSize: 24 }))?.results || []; }
 
-  // Todas as páginas de /transactions (pageSize 500 é o máximo). Falha se passar de maxPaginas.
+  // Todas as transações da conta. Usa GET /v2/transactions (cursor `after`, dateFrom/dateTo, 500 por página);
+  // a v1 (GET /transactions, page/pageSize) vence em 2026-12-31 e só é usada se a v2 responder 403/404/410 (não disponível).
   async transacoes(accountId, from, to, maxPaginas) {
+    if (!this.semV2) {
+      try {
+        return await this.#transacoesV2(accountId, from, to, maxPaginas);
+      } catch (e) {
+        if (![403, 404, 410].includes(e.status)) throw e;
+        this.semV2 = true;
+        console.warn("GET /v2/transactions indisponível; usando GET /transactions (v1)", e.message);
+      }
+    }
+    return this.#transacoesV1(accountId, from, to, maxPaginas);
+  }
+
+  async #transacoesV2(accountId, dateFrom, dateTo, maxPaginas) {
+    const todas = [];
+    let after;
+    for (let pagina = 1; ; pagina++) {
+      if (pagina > maxPaginas) throw new Error(`mais de ${maxPaginas} páginas de transações; reduza IMPORT_DAYS`);
+      const r = await this.obter("/v2/transactions", { accountId, dateFrom, dateTo, after });
+      todas.push(...(r?.results || []));
+      // `next` é uma query string pronta; a doc manda enviar só o valor (decodificado) de `after`.
+      after = r?.next ? new URLSearchParams(r.next).get("after") : null;
+      if (!after) return todas;
+    }
+  }
+
+  async #transacoesV1(accountId, from, to, maxPaginas) {
     const todas = [];
     for (let page = 1; ; page++) {
       if (page > maxPaginas) throw new Error(`mais de ${maxPaginas} páginas de transações; reduza IMPORT_DAYS`);

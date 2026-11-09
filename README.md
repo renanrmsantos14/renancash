@@ -54,8 +54,8 @@ O que o app usa:
 |---|---|
 | URL base | `https://api.pluggy.ai` |
 | Autenticação | `POST /auth` com `clientId`/`clientSecret` devolve a `apiKey` (vale 2 h; o app pede uma por sincronização e renova se expirar); as demais chamadas levam `X-API-KEY` |
-| Endpoints | `GET /items/{id}`, `GET /accounts?itemId=`, `GET /transactions?accountId&from&to&page&pageSize` (paginado por `totalPages`), `GET /bills?accountId=` |
-| Limite | 360 requisições por minuto por IP em `/auth` e `/transactions` (https://docs.pluggy.ai/docs/rate-limits); o app espera o `Retry-After` no 429 |
+| Endpoints | `GET /items/{id}`, `GET /accounts?itemId=`, `GET /v2/transactions?accountId&dateFrom&dateTo&after` (paginação por cursor: segue `next` até vir nulo; a v1 `GET /transactions` vence em 2026-12-31 e só é usada como fallback se a v2 responder 403/404/410), `GET /bills?accountId=` |
+| Limite | 360 requisições por minuto por IP em `/auth` e `/transactions` (v1) (https://docs.pluggy.ai/docs/rate-limits); o app espera o `Retry-After` no 429 |
 
 Como o Pluggy vira o formato interno:
 

@@ -89,10 +89,18 @@ function rota(caminho, q) {
     const r = contasPorItem[q.get("itemId")];
     return r ? [200, { total: r.length, totalPages: 1, page: 1, results: r }] : [404, { message: "Item not found" }];
   }
-  if (caminho === "/transactions") {
-    const de = q.get("from"), ate = q.get("to");
+  if (caminho === "/transactions" || caminho === "/v2/transactions") {
+    const v2 = caminho.startsWith("/v2");
+    if (v2 && process.env.MOCK_SEM_V2 === "1") return [404, { message: "not found" }]; // simula conta sem a v2 (usa a v1)
+    const de = q.get(v2 ? "dateFrom" : "from"), ate = q.get(v2 ? "dateTo" : "to");
     const todas = transacoes(q.get("accountId")).filter((t) => t.date.slice(0, 10) >= de && (!ate || t.date.slice(0, 10) <= ate));
-    const tam = Math.min(Number(q.get("pageSize")) || 500, 25), pag = Number(q.get("page")) || 1; // páginas pequenas para testar a paginação
+    const tam = v2 ? 25 : Math.min(Number(q.get("pageSize")) || 500, 25); // páginas pequenas para testar a paginação
+    if (v2) { // cursor: `after` = deslocamento codificado; `next` é uma query string
+      const ini = q.get("after") ? Number(atob(q.get("after"))) : 0;
+      const fim = ini + tam;
+      return [200, { results: todas.slice(ini, fim), next: fim < todas.length ? `?accountId=${q.get("accountId")}&after=${encodeURIComponent(btoa(String(fim)))}` : null }];
+    }
+    const pag = Number(q.get("page")) || 1;
     return [200, { total: todas.length, totalPages: Math.max(1, Math.ceil(todas.length / tam)), page: pag, results: todas.slice((pag - 1) * tam, pag * tam) }];
   }
   if (caminho === "/bills") return [200, { total: 6, totalPages: 1, page: 1, results: faturas() }];

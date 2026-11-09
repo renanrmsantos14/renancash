@@ -65,18 +65,42 @@ test("listarIds usa PLUGGY_ITEM_IDS; sem ele tenta /v2/items paginado; sem acess
   await assert.rejects(new ApiCliente(sem).listarIds(), /Defina PLUGGY_ITEM_IDS/);
 });
 
-test("transacoes pagina por totalPages e manda accountId/from/to; sem to omite o parâmetro", async () => {
-  simular((u) => {
-    if (u.pathname === "/auth") return resposta({ apiKey: "k" });
-    const p = Number(u.searchParams.get("page"));
-    return resposta({ page: p, totalPages: 3, total: 5, results: p === 3 ? [{ id: "t5" }] : [{ id: `t${p * 2 - 1}` }, { id: `t${p * 2}` }] });
-  });
+const rotaTx = (v2, v1) => (u) => (u.pathname === "/auth" ? resposta({ apiKey: "k" }) : u.pathname === "/v2/transactions" ? v2(u) : v1(u));
+
+test("transacoes v2: segue o cursor `after` de `next`, manda dateFrom/dateTo e omite dateTo no cartão", async () => {
+  simular(rotaTx((u) => {
+    const after = u.searchParams.get("after");
+    if (!after) return resposta({ results: [{ id: "t1" }, { id: "t2" }], next: "?accountId=c1&after=a%2Fb%3D%3D" });
+    assert.equal(after, "a/b=="); // decodificado
+    return resposta({ results: [{ id: "t3" }], next: null });
+  }, () => resposta({}, 500)));
   const todas = await new ApiCliente(env).transacoes("c1", "2026-05-01", undefined, 10);
-  assert.deepEqual(todas.map((t) => t.id), ["t1", "t2", "t3", "t4", "t5"]);
-  const u = new URL(chamadas.at(-1).url);
+  assert.deepEqual(todas.map((t) => t.id), ["t1", "t2", "t3"]);
+  const u = new URL(chamadas.at(-2).url);
   assert.equal(u.searchParams.get("accountId"), "c1");
-  assert.equal(u.searchParams.get("from"), "2026-05-01");
-  assert.equal(u.searchParams.get("pageSize"), "500");
-  assert.equal(u.searchParams.has("to"), false);
+  assert.equal(u.searchParams.get("dateFrom"), "2026-05-01");
+  assert.equal(u.searchParams.has("dateTo"), false);
+  assert.equal(u.searchParams.has("from"), false);
+  simular(rotaTx(() => resposta({ results: [{ id: "x" }], next: "?after=mais" }), () => resposta({}, 500)));
   await assert.rejects(new ApiCliente(env).transacoes("c1", "2026-05-01", "2026-11-01", 2), /mais de 2 páginas/);
+});
+
+test("transacoes: v2 indisponível (404) cai na v1 paginada por totalPages e lembra a escolha", async () => {
+  simular(rotaTx(() => resposta({ message: "nf" }, 404), (u) => {
+    const p = Number(u.searchParams.get("page"));
+    return resposta({ page: p, totalPages: 2, results: [{ id: `v1-${p}` }] });
+  }));
+  const api = new ApiCliente(env);
+  assert.deepEqual((await api.transacoes("c1", "2026-05-01", "2026-11-01", 10)).map((t) => t.id), ["v1-1", "v1-2"]);
+  const u = new URL(chamadas.at(-1).url);
+  assert.equal(u.searchParams.get("from"), "2026-05-01");
+  assert.equal(u.searchParams.get("to"), "2026-11-01");
+  const antes = chamadas.filter((c) => c.url.includes("/v2/")).length;
+  await api.transacoes("c2", "2026-05-01", undefined, 10);
+  assert.equal(chamadas.filter((c) => c.url.includes("/v2/")).length, antes); // não tenta a v2 de novo
+});
+
+test("transacoes: erro 5xx na v2 não cai na v1", async () => {
+  simular(rotaTx(() => resposta({}, 503), () => resposta({ results: [] })));
+  await assert.rejects(new ApiCliente(env).transacoes("c1", "2026-05-01", undefined, 10), /HTTP 503/);
 });

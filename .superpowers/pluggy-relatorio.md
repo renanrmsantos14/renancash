@@ -5,7 +5,8 @@
 - Cabeçalho `X-API-KEY` e validade de 2 h: https://v2.docs.pluggy.ai/en/docs/reference/authentication.md
 - Listar items: https://docs.pluggy.ai/reference/items-list-by-cursor (GET /v2/items, opt-in, desligado por padrão, exige contato com o suporte); FAQ https://v2.docs.pluggy.ai/en/docs/get-started/faq (não há listagem de items por segurança); https://docs.pluggy.ai/reference/items-retrieve (status UPDATED, LOGIN_ERROR citado em consecutiveFailedLoginAttempts; OUTDATED não aparece na página)
 - Contas: https://docs.pluggy.ai/reference/accounts-list (itemId obrigatório; creditData.creditLimit/availableCreditLimit/balanceDueDate)
-- Transações: https://docs.pluggy.ai/reference/transactions-list (accountId, from, to, page, pageSize=500, totalPages; creditCardMetadata.installmentNumber/totalInstallments). ATENÇÃO: marcado como deprecated, disponível só até 2026-12-31; o substituto é GET /v2/transactions (paginação por cursor).
+- Transações: https://docs.pluggy.ai/reference/transactions-list (accountId, from, to, page, pageSize=500, totalPages; creditCardMetadata.installmentNumber/totalInstallments). v1 deprecated, disponível só até 2026-12-31 (hoje usada só como fallback).
+- Transações v2: https://docs.pluggy.ai/reference/transactions-list-by-cursor (accountId obrigatório, dateFrom, dateTo, createdAtFrom, ids, after; resposta {results, next}, `next` nulo na última página; sem totalPages; 500 por página; campos id, date, amount, type, status, description, category, accountId... A página NÃO cita creditCardMetadata nem merchant: o mapeamento já tolera a ausência, mas o texto "parcela n/total" depende de description). Changelog: https://v2.docs.pluggy.ai/en/changelog/2026.06.
 - Faturas: https://docs.pluggy.ai/reference/bills-list (GET /bills?accountId; id, dueDate, totalAmount, minimumPaymentAmount; sem situação de pagamento)
 - Limites: https://docs.pluggy.ai/docs/rate-limits (360 req/min por IP em /auth e /transactions)
 - Plano/custo: https://pluggy.ai/pricing (conector MeuPluggy gratuito, máx. 5 conexões ativas por titular, sem SLA; plano Dados a partir de R$ 2.500/mês)
@@ -17,7 +18,7 @@
 - Não implementado: forçar atualização do banco (PATCH /items/{id}); o app só lê o que o Pluggy já tem.
 
 ## O que mudou
-- `src/api.js`: cliente do Pluggy (auth com apiKey compartilhada e renovada em 401/403, 429 com Retry-After, paginação por totalPages, erros em pt-BR por status).
+- `src/api.js`: cliente do Pluggy (auth com apiKey compartilhada e renovada em 401/403, 429 com Retry-After, transações via GET /v2/transactions (cursor `after`, dateFrom/dateTo), com fallback para a v1 se a v2 devolver 403/404/410 (lembrado por instância), erros em pt-BR por status).
 - `src/mapa.js` (novo): contrato interno. Contas com id do Pluggy (único entre bancos) e nome com o banco ("Cartão Santander"); sinal por tipo (conta: saída negativa; cartão: compra positiva, estorno negativo); `scheduled` = data depois de hoje; parcela "n/total" na descrição; faturas no formato que o painel já lia (aberta = saldo + vencimento da conta; fechadas = /bills, situação "CLOSED").
 - `src/index.js`: `sincronizar` itera os items; uma conexão com erro vira aviso e as outras seguem; `/api/ferramentas` mostra o status de cada item; `/api/app/transacoes` e o painel inalterados.
 - Painel: já suportava N contas e N cartões (cards por conta, faturas por cartão, filtro de contas). Nenhuma mudança em `public/`. O card "Conta corrente" soma os saldos dos bancos e lista cada conta. Provado com 2 bancos (4 contas) no mock; sem print do painel porque `public/` não mudou.
@@ -36,3 +37,8 @@
 - Framework: workers-best-practices aplicada (secrets via wrangler, sem estado mutável global, sem ctx desestruturado, observabilidade já ativa, sem Env duplicado).
 - code-review high --fix: 7 achados. Corrigidos: reautenticação compartilhada entre chamadas simultâneas; detecção de parcela já numerada só pelo "n/total" exato; sinal cai no da API quando o type falta; avisos de reconexão não são apagados quando uma conexão falha na leitura. Não corrigidos (aceitos e documentados): sem PATCH /items para forçar atualização; faturas sempre "Fechada" (o Pluggy não informa pagamento) e saldo da conta usado como fatura aberta; 403 por falta de permissão ainda gasta uma reautenticação; `next` de /v2/items assumido como query string.
 - Provas finais após o code-review: testes, node --check, dry-run e fluxo local repetidos, ok.
+
+
+## Migração para /v2/transactions
+- Feita em `src/api.js` (`transacoes` -> `#transacoesV2`; `#transacoesV1` é o fallback). Não confirmado sem credenciais reais: se a v2 está habilitada para o conector Meu Pluggy e se devolve `creditCardMetadata`/`merchant`. Sem eles, as parcelas futuras do cartão só aparecem se vierem no resultado; verifique no primeiro sync real.
+- Prova: `pnpm -s test` 41/41, `node --check`, `wrangler deploy --dry-run`, fluxo mock com v2 e com `MOCK_SEM_V2=1` (v1): cartão Inter 64 (3 futuras), conta 37, Santander 4 (1) e 3, idempotente.
