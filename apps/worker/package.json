@@ -9,6 +9,7 @@
     "db:local": "wrangler d1 execute meu-banco --local --file=schema.sql",
     "db:remote": "wrangler d1 execute meu-banco --remote --file=schema.sql",
     "dev": "wrangler dev --test-scheduled",
+    "importar:cashew": "node scripts/importar-cashew.mjs",
     "push": "node scripts/versao.mjs && wrangler deploy",
     "logs": "wrangler tail"
   },
