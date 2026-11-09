@@ -26,9 +26,9 @@ port = 8787
 [observability]
 enabled = true
 
-# Variáveis NÃO secretas. A API key do MCP.AI vai com "wrangler secret put MCP_API_KEY".
+# Variáveis NÃO secretas. Credenciais do Pluggy vão com "wrangler secret put PLUGGY_CLIENT_ID" e "PLUGGY_CLIENT_SECRET".
+# Se o Pluggy não listar suas conexões, defina também o secret PLUGGY_ITEM_IDS (ids do Meu Pluggy, separados por vírgula).
 [vars]
-API_URL = "https://api.mcp.ai/api/openfinance"
 IMPORT_DAYS = "180"
 VAPID_ASSUNTO = "https://meu-banco.renanrmsantos14.workers.dev"
 VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"

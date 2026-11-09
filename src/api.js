@@ -1,58 +1,110 @@
-// Cliente da API REST do Banco MCP (MCP.AI). Sem IA: POST JSON com a API key do workspace.
-// Documentação pública: https://api.mcp.ai/api/openfinance/_endpoints
+// Cliente da API do Pluggy (https://api.pluggy.ai), lendo as conexões feitas no Meu Pluggy.
+// Docs: https://docs.pluggy.ai/reference/auth-create · https://docs.pluggy.ai/docs/rate-limits
+// Autenticação: POST /auth {clientId, clientSecret} → apiKey (vale 2 h); as demais chamadas levam o cabeçalho X-API-KEY.
 
-const BASE_PADRAO = "https://api.mcp.ai/api/openfinance";
+const BASE_PADRAO = "https://api.pluggy.ai";
+const MAX_PAGINAS_ITENS = 5;
 
 const DICAS = {
-  401: "API key inválida ou ausente: refaça 'wrangler secret put MCP_API_KEY'",
-  402: "créditos do MCP.AI esgotados ou plano necessário",
-  403: "a API key não tem acesso ao Banco MCP neste workspace",
-  409: "o banco não está conectado no MCP.AI (conecte em app.mcp.ai)",
-  429: "limite de requisições do MCP.AI",
+  400: "requisição inválida",
+  401: "credenciais do Pluggy inválidas: refaça 'wrangler secret put PLUGGY_CLIENT_ID' e 'PLUGGY_CLIENT_SECRET'",
+  403: "sem permissão no Pluggy (confira as credenciais e se o recurso está habilitado na sua conta)",
+  404: "não encontrado no Pluggy (confira os ids em PLUGGY_ITEM_IDS)",
+  429: "limite de requisições do Pluggy",
 };
 
 export class ApiCliente {
   constructor(env) {
-    if (!env.MCP_API_KEY) throw new Error("Secret MCP_API_KEY não configurado");
-    this.base = (env.API_URL || BASE_PADRAO).replace(/\/+$/, "");
-    this.chave = env.MCP_API_KEY;
+    if (!env.PLUGGY_CLIENT_ID || !env.PLUGGY_CLIENT_SECRET) throw new Error("Secrets PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET não configurados");
+    this.base = (env.PLUGGY_API_URL || BASE_PADRAO).replace(/\/+$/, "");
+    this.clientId = env.PLUGGY_CLIENT_ID;
+    this.clientSecret = env.PLUGGY_CLIENT_SECRET;
+    this.itemIds = (env.PLUGGY_ITEM_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    this.chave = null; // Promise da apiKey (compartilhada entre chamadas simultâneas)
   }
 
-  // caminho = rota REST, ex.: "accounts/list"
-  async chamar(caminho, args = {}, tentativa = 0) {
-    const resp = await fetch(`${this.base}/${caminho}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.chave}` },
-      body: JSON.stringify(args),
-    });
-    // 429 do provedor (Pluggy: 2 req/s compartilhado) pede ~6 s; espera até 10 s, 3 vezes.
+  // Uma requisição HTTP, com nova tentativa no 429 (espera o Retry-After, até 10 s, 3 vezes). Devolve o JSON.
+  async #pedir(metodo, caminho, { params, corpo, chave, tentativa = 0 } = {}) {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null)) : "";
+    const headers = { accept: "application/json" };
+    if (corpo) headers["content-type"] = "application/json";
+    if (chave) headers["x-api-key"] = chave;
+    const resp = await fetch(`${this.base}${caminho}${qs}`, { method: metodo, headers, body: corpo ? JSON.stringify(corpo) : undefined });
     if (resp.status === 429 && tentativa < 3) {
       const espera = Math.min(10, Number(resp.headers.get("retry-after")) || 6);
       await resp.body?.cancel(); // libera a conexão antes de tentar de novo
       await new Promise((r) => setTimeout(r, espera * 1000));
-      return this.chamar(caminho, args, tentativa + 1);
+      return this.#pedir(metodo, caminho, { params, corpo, chave, tentativa: tentativa + 1 });
     }
     const texto = await resp.text();
-    let corpo;
-    try { corpo = JSON.parse(texto); } catch { corpo = null; }
-    if (!resp.ok || !corpo?.ok) {
-      const e = corpo?.error || {};
-      const dica = DICAS[resp.status] ? ` (${DICAS[resp.status]})` : "";
-      const link = e.connect_url || e.checkout_urls?.[0] || "";
-      throw new Error(
-        `${caminho}: HTTP ${resp.status} ${e.code || ""}${dica} ${e.message || texto.slice(0, 200)} ${link}`.replace(/\s+/g, " ").trim()
-      );
+    let json;
+    try { json = JSON.parse(texto); } catch { json = null; }
+    if (!resp.ok) {
+      const dica = DICAS[resp.status] ? ` (${DICAS[resp.status]})` : resp.status >= 500 ? " (instabilidade no Pluggy; tente de novo mais tarde)" : "";
+      const msg = json?.message || (json ? "" : texto.slice(0, 200));
+      const e = new Error(`${metodo} ${caminho}: HTTP ${resp.status}${dica} ${msg}`.replace(/\s+/g, " ").trim());
+      e.status = resp.status;
+      throw e;
     }
-    const r = corpo.result;
-    return typeof r === "string" ? JSON.parse(r) : r;
+    return json;
   }
 
-  // Lista pública dos endpoints (diagnóstico).
-  async endpoints() {
-    const resp = await fetch(`${this.base}/_endpoints`);
-    if (!resp.ok) throw new Error(`_endpoints: HTTP ${resp.status}`);
-    const d = await resp.json();
-    const lista = Array.isArray(d) ? d : d.endpoints || [];
-    return lista.map((e) => e.id);
+  // renovar = a apiKey (promise) que acabou de falhar; se outra chamada já a trocou, reaproveita a nova em vez de autenticar de novo.
+  #autenticar(renovar) {
+    if (!this.chave || (renovar && this.chave === renovar)) {
+      this.chave = this.#pedir("POST", "/auth", { corpo: { clientId: this.clientId, clientSecret: this.clientSecret } })
+        .then((r) => { if (!r?.apiKey) throw new Error("POST /auth: resposta sem apiKey"); return r.apiKey; })
+        .catch((e) => { this.chave = null; throw e; });
+    }
+    return this.chave;
+  }
+
+  // GET autenticado. Se a apiKey expirar no meio (401/403), autentica de novo uma vez.
+  async obter(caminho, params) {
+    const usada = this.#autenticar();
+    const chave = await usada; // falha de autenticação sobe direto, sem repetir
+    try {
+      return await this.#pedir("GET", caminho, { params, chave });
+    } catch (e) {
+      if (e.status !== 401 && e.status !== 403) throw e;
+      return this.#pedir("GET", caminho, { params, chave: await this.#autenticar(usada) });
+    }
+  }
+
+  // Ids das conexões (items): os de PLUGGY_ITEM_IDS ou, se vazio, GET /v2/items (opt-in na conta; o Pluggy não lista items por padrão).
+  async listarIds() {
+    await this.#autenticar(); // credenciais erradas falham aqui, uma vez só, e não em cada conexão
+    if (this.itemIds.length) return this.itemIds;
+    const ids = [];
+    let proximo = "";
+    try {
+      for (let i = 0; i < MAX_PAGINAS_ITENS; i++) {
+        const r = await this.obter("/v2/items" + proximo);
+        ids.push(...(r?.results || []).map((x) => x.id));
+        if (!r?.next) break;
+        proximo = r.next;
+      }
+    } catch (e) {
+      throw new Error(`Defina PLUGGY_ITEM_IDS (ids das conexões do Meu Pluggy, separados por vírgula): ${e.message}`);
+    }
+    if (!ids.length) throw new Error("Nenhuma conexão encontrada; defina PLUGGY_ITEM_IDS com os ids do Meu Pluggy");
+    return ids;
+  }
+
+  item(id) { return this.obter(`/items/${encodeURIComponent(id)}`); }
+
+  async contas(itemId) { return (await this.obter("/accounts", { itemId }))?.results || []; }
+
+  async faturas(accountId) { return (await this.obter("/bills", { accountId, pageSize: 24 }))?.results || []; }
+
+  // Todas as páginas de /transactions (pageSize 500 é o máximo). Falha se passar de maxPaginas.
+  async transacoes(accountId, from, to, maxPaginas) {
+    const todas = [];
+    for (let page = 1; ; page++) {
+      if (page > maxPaginas) throw new Error(`mais de ${maxPaginas} páginas de transações; reduza IMPORT_DAYS`);
+      const r = await this.obter("/transactions", { accountId, from, to, page, pageSize: 500 });
+      todas.push(...(r?.results || []));
+      if (!r?.results?.length || page >= (r.totalPages || 1)) return todas;
+    }
   }
 }

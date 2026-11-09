@@ -1,4 +1,5 @@
 import { ApiCliente } from "./api.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
 import { resumoCiclo, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { enviarPush } from "./push.js";
@@ -6,9 +7,7 @@ import { base64url, gerarToken, hashToken, tokenDoCabecalho, normalizarDesde, mo
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
-const TAM_PAGINA = 500; // máximo da API
 const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
-const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status que pede novo login (OUTDATED = só falha temporária)
 const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
 const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
@@ -49,10 +48,10 @@ export default {
       else if (caminho === "/api/app/tokens" && request.method === "POST") resp = await criarToken(request, env, url);
       else if (request.method === "DELETE" && idToken) resp = await revogarToken(request, env, url, idToken);
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
-        // Diagnóstico: testa a API key listando as conexões e mostra os endpoints disponíveis.
+        // Diagnóstico: testa as credenciais do Pluggy e mostra o status de cada conexão.
         const api = new ApiCliente(env);
-        const [conexoes, endpoints] = await Promise.all([api.chamar("connections/list"), api.endpoints()]);
-        resp = json({ conexoes, endpoints });
+        const itens = await Promise.all((await api.listarIds()).map((id) => api.item(id).then((i) => ({ id, conector: i.connector?.name, status: i.status, executionStatus: i.executionStatus, lastUpdatedAt: i.lastUpdatedAt }), (e) => ({ id, erro: e.message }))));
+        resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
       return seguranca(resp);
@@ -405,59 +404,30 @@ async function sincronizar(env, origem) {
   try {
     const api = new ApiCliente(env);
 
-    // 1) Conexões (bancos ligados no MCP.AI)
-    const rconn = await api.chamar("connections/list");
-    const conexoes = rconn?.connections || [];
-    if (!conexoes.length) throw new Error("Nenhum banco conectado no MCP.AI");
-
-    // 2) Força o banco a atualizar. Se falhar, segue com os dados atuais.
-    let sync = null;
-    try {
-      sync = await api.chamar("connections/sync", { items: conexoes.map((c) => c.item_id), wait: true });
-    } catch (e) {
-      avisos.push("force_sync falhou: " + e.message);
-      console.warn("force_sync falhou", e.message);
-    }
-    // Um status por banco; o resultado do sync (pós-atualização) prevalece sobre o connections/list (pré).
-    const porItem = new Map();
-    for (const x of [...conexoes, ...(Array.isArray(sync?.results) ? sync.results : [])]) {
-      if (x) porItem.set(x.item_id, { connector_name: porItem.get(x.item_id)?.connector_name, ...x });
-    }
-    const reconectar = [...porItem.values()]
-      .filter((x) => x.needs_action || PROBLEMA.test(x.status || "")) // reconnect_url vem sempre, mesmo com a conexão ok
-      .map((x) => ({
-        banco: x.bank || x.connector_name || x.name || "Banco",
-        mensagem:
-          x.message ||
-          `O banco não atualizou (${x.executionStatus || x.status || "ação necessária"})` +
-            (x.lastUpdatedAt ? `; dados de ${String(x.lastUpdatedAt).slice(8, 10)}/${String(x.lastUpdatedAt).slice(5, 7)}` : "") +
-            ". Reconecte e confirme no app do banco.",
-        reconnect_url: /^https:\/\//.test(x.reconnect_url || "") ? x.reconnect_url : null,
-      }));
-    await salvarSnapshot(db, "avisos", reconectar);
-
-    // 3) Contas de cada conexão
+    // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
+    const ids = await api.listarIds();
     const linhasContas = [];
-    for (const conn of conexoes) {
-      const rc = await api.chamar("accounts/list", { item: conn.item_id });
-      for (const c of rc?.results || []) {
-        linhasContas.push({
-          id: String(c.id),
-          type: c.type,
-          subtype: c.subtype ?? null,
-          name: c.name ?? null,
-          number: c.number ?? null,
-          balance: num(c.balance),
-          credit_limit: num(c.creditData?.creditLimit),
-          available_limit: num(c.creditData?.availableCreditLimit),
-          due_date: c.creditData?.balanceDueDate ? String(c.creditData.balanceDueDate).slice(0, 10) : null,
-          bank: rc.bank ?? conn.connector_name ?? null,
-          item_id: rc.item_id ?? conn.item_id,
-          updated_at: agora(),
-        });
+    const brutas = new Map(); // id da conta → conta do Pluggy (faturas)
+    const reconectar = [];
+    const ts = agora();
+    for (const id of ids) {
+      try {
+        const [item, contas] = await Promise.all([api.item(id), api.contas(id)]);
+        const banco = bancoDoItem(item);
+        const aviso = avisoItem(item, banco);
+        if (aviso) reconectar.push(aviso);
+        for (const c of contas) {
+          brutas.set(String(c.id), c);
+          linhasContas.push(mapearConta(c, banco, id, ts));
+        }
+      } catch (e) {
+        avisos.push(`Conexão ${id}: ${e.message}`);
+        console.error("Erro conexão", id, e.message);
       }
     }
-    if (!linhasContas.length) throw new Error("accounts/list não retornou contas");
+    if (!avisos.length) await salvarSnapshot(db, "avisos", reconectar); // conexão que falhou na leitura mantém os avisos anteriores
+    desambiguar(linhasContas);
+    if (!linhasContas.length) throw new Error("Nenhuma conta encontrada nas conexões do Pluggy");
     await db.prepare(upsertSql("accounts", Object.keys(linhasContas[0]))).bind(JSON.stringify(linhasContas)).run();
 
     // 4) Transações e 5) faturas, conta por conta
@@ -473,8 +443,9 @@ async function sincronizar(env, origem) {
       }
       if (conta.type === "CREDIT") {
         try {
-          const f = await api.chamar("credit-card-bills/list", { account_id: conta.id, include_open_bill: true, page_size: 24 });
-          await salvarSnapshot(db, "faturas:" + conta.id, f);
+          // Sem a lista de faturas (ex.: conta sem acesso a /bills) o painel ainda mostra a fatura aberta.
+          const bills = await api.faturas(conta.id).catch((e) => { console.warn("Faturas indisponíveis", conta.id, e.message); return []; });
+          await salvarSnapshot(db, "faturas:" + conta.id, mapearFaturas(brutas.get(conta.id), bills));
         } catch (e) {
           avisos.push(`Faturas de ${conta.name}: ${e.message}`);
           console.error("Erro faturas", conta.id, e.message);
@@ -505,35 +476,10 @@ async function sincronizarConta(db, api, conta, hoje, diasImport) {
     .first();
   let de = ultima?.d ? somarDias(ultima.d, -DIAS_REIMPORTAR) : somarDias(hoje, -diasImport);
   if (ultima?.p && ultima.p < de) de = ultima.p; // relê pendentes antigas para não duplicarem quando forem postadas
-  const args = { account_id: conta.id, from: de };
-  if (conta.type !== "CREDIT") args.to = hoje; // cartão sem "to" para trazer parcelas futuras
-
-  // A REST pagina: busca até vir página vazia, menor que a primeira, ou o fim indicado pela API.
-  const todas = [];
-  let tamanho = 0;
-  for (let page = 1; ; page++) {
-    if (page > MAX_PAGINAS) throw new Error(`mais de ${MAX_PAGINAS} páginas de transações; reduza IMPORT_DAYS`);
-    const r = await api.chamar("transactions/list", { ...args, page, page_size: TAM_PAGINA });
-    const lote = r?.results || [];
-    todas.push(...lote);
-    tamanho ||= lote.length;
-    const fim = r?.has_more === false || (r?.total_pages && page >= r.total_pages) || (r?.total != null && todas.length >= r.total);
-    if (!lote.length || lote.length < tamanho || fim) break;
-  }
+  // Cartão sem "to" para trazer parcelas futuras.
+  const todas = await api.transacoes(conta.id, de, conta.type === "CREDIT" ? undefined : hoje, MAX_PAGINAS);
   const ts = agora();
-  const linhas = todas.map((t) => ({
-    id: String(t.id),
-    account_id: conta.id,
-    date: String(t.date).slice(0, 10),
-    description: t.description ?? "",
-    amount: num(t.amount) ?? 0,
-    type: t.type ?? null,
-    status: t.status ?? null,
-    category: t.category ?? null,
-    merchant: typeof t.merchant === "string" ? t.merchant : t.merchant?.name || t.merchant?.businessName || null,
-    scheduled: t.scheduled ? 1 : 0,
-    updated_at: ts,
-  }));
+  const linhas = todas.map((t) => mapearTransacao(t, conta, hoje, ts));
 
   // Apaga parcelas futuras e pendentes da janela (podem mudar de id) e regrava tudo num lote atômico.
   const comandos = [
@@ -562,10 +508,4 @@ function salvarSnapshot(db, key, data) {
     .prepare("INSERT INTO snapshots (key, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at")
     .bind(key, JSON.stringify(data ?? null), agora())
     .run();
-}
-
-function num(v) {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }
