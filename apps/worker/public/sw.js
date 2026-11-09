@@ -50,7 +50,7 @@ async function redePrimeiro(e, nomeCache) {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== location.origin) return;
+  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/app/")) return;
   if (ROTAS_DADOS.test(url.pathname)) e.respondWith(redePrimeiro(e, DADOS));
   else if (!url.pathname.startsWith("/api/")) e.respondWith(redePrimeiro(e, SHELL));
 });

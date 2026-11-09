@@ -26,6 +26,13 @@ export default {
     const idToken = /^\/api\/app\/tokens\/([^/]+)$/.exec(caminho)?.[1];
     try {
       let resp;
+      if (caminho === "/app") return seguranca(new Response(null, { status: 301, headers: { location: "/app/" } }));
+      if (caminho.startsWith("/app/")) {
+        if (!(await sessaoValida(request, env))) return seguranca(new Response(null, { status: 302, headers: { location: "/login?volta=/app/" } }));
+        const r = seguranca(await env.ASSETS.fetch(request), CSP_APP);
+        r.headers.set("cache-control", "private, no-cache");
+        return r;
+      }
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
@@ -145,16 +152,16 @@ function mesmaOrigem(request, url) {
   return !origem || origem === url.origin;
 }
 
-function seguranca(resp) {
+const CSP_PAINEL = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const CSP_APP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
+function seguranca(resp, csp = CSP_PAINEL) {
   const r = new Response(resp.body, resp);
   r.headers.set("x-content-type-options", "nosniff");
   r.headers.set("x-frame-options", "DENY");
   r.headers.set("referrer-policy", "no-referrer");
   r.headers.set("cache-control", "private, no-store");
-  r.headers.set(
-    "content-security-policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-  );
+  r.headers.set("content-security-policy", csp);
   return r;
 }
 

@@ -61,7 +61,7 @@ $("form").addEventListener("submit", async (e) => {
   botao.disabled = true; botao.textContent = "Entrando…"; $("erro").hidden = true;
   try {
     const r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ senha: $("senha").value }) });
-    if (r.ok) { location.replace("/"); return; }
+    if (r.ok) { const volta = new URLSearchParams(location.search).get("volta"); location.replace(volta === "/app/" ? "/app/" : "/"); return; }
     const j = await r.json().catch(() => ({}));
     $("erro").textContent = r.status === 401 ? "Senha incorreta." : j.erro || "Erro " + r.status;
   } catch { $("erro").textContent = "Sem conexão. Tente de novo."; }

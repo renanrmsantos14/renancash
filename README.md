@@ -254,3 +254,12 @@ Em banco já existente, rode **uma vez** (o SQLite não tem `ADD COLUMN IF NOT E
 ```powershell
 pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=scripts/migrar-fase2.sql
 ```
+
+## App web em `/app/`
+
+O Worker serve o build web do Meu Cashew em `/app/`, só com sessão (cookie). Sem sessão, vai para `/login?volta=/app/` e volta ao app depois do login. O app usa a mesma origem e o cookie, sem token `mb_`.
+
+- **Gerar o build** (no repositório meu-cashew): `scripts/compilar.sh web <este-repo>/apps/worker/public/app`. A pasta `apps/worker/public/app/` não é versionada.
+- **Renderer**: CanvasKit (padrão do Flutter 3.24). Se der tela branca ou erro de wasm no console, o plano B é `--web-renderer html` em `scripts/compilar.sh`.
+- **CSP própria** em `/app/`: acrescenta `'wasm-unsafe-eval'` e `base-uri 'self'` (o painel mantém `base-uri 'none'`).
+- `pnpm push` falha com instrução se `public/app/index.html` não existir.
