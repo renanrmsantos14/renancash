@@ -159,7 +159,7 @@ const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(n
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
 const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
-const DE_TX = "FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id";
+const DE_TX = "FROM transactions t LEFT JOIN v_ajustes a ON a.transaction_id = t.id";
 
 async function dados(env, url) {
   const db = env.DB;
@@ -191,7 +191,7 @@ async function historico(env) {
   const hoje = hojeSP();
   const de = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7) - 6, 1)).toISOString().slice(0, 10);
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto FROM transactions t LEFT JOIN ajustes a ON a.transaction_id = t.id WHERE t.date >= ?1 AND t.scheduled = 0"
+    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto ${DE_TX} WHERE t.date >= ?1 AND t.scheduled = 0`
   ).bind(de).all();
   return json({ mesAtual: hoje.slice(0, 7), de, transacoes: results });
 }
@@ -213,12 +213,12 @@ async function salvarAjuste(request, env, idUrl) {
   const gasto = c?.gasto ?? null;
   const valido = id && id.length <= 100 && (category === null || (typeof category === "string" && category && category.length <= 80)) && (gasto === null || gasto === 0 || gasto === 1);
   if (!valido) return json({ erro: "Dados inválidos" }, 400);
-  if (category === null && gasto === null) await env.DB.prepare("DELETE FROM ajustes WHERE transaction_id = ?1").bind(id).run();
-  else {
-    await env.DB.prepare(
-      "INSERT INTO ajustes (transaction_id, category, gasto, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(transaction_id) DO UPDATE SET category = excluded.category, gasto = excluded.gasto, updated_at = excluded.updated_at"
-    ).bind(id, category, gasto, agora()).run();
-  }
+  // Merge-patch (RFC 7396): null remove a chave; campos gravados pelo app (ex.: nota) ficam. O painel sempre vence.
+  const ts = agora();
+  await env.DB.prepare(
+    "INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES ('ajustes', ?1, json_patch('{}', ?2), ?3, NULL, ?3) " +
+      "ON CONFLICT(tabela, id) DO UPDATE SET dados = json_patch(COALESCE(registros.dados, '{}'), ?2), updated_at = ?3, deleted_at = NULL, server_at = ?3"
+  ).bind(id, JSON.stringify({ category, gasto }), ts).run();
   return json({ ok: true });
 }
 
