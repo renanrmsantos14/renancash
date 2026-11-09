@@ -162,15 +162,17 @@ Sem sessão, páginas redirecionam para `/login` e `/api/*` devolve 401. Só `/l
 - **Android/desktop (Chrome)**: toque em **Instalar** no cabeçalho (ou no menu do navegador → Instalar app).
 - Sem internet, o app abre com a última cópia dos dados e mostra a faixa "Offline: dados de dd/mm HH:mm".
 
-## Migração do banco (tabela de ajustes)
+## Migração do banco (ajustes para `registros`)
 
-A tabela `ajustes` (categoria trocada e "não é gasto") foi adicionada ao `apps/worker/schema.sql` com `CREATE TABLE IF NOT EXISTS`, então não apaga nada. No banco já em uso, rode **uma vez** antes do deploy:
+Os ajustes (categoria trocada e "não é gasto") saíram da tabela `ajustes` e agora ficam em `registros` (`tabela = 'ajustes'`), lidos pela view `v_ajustes`. No banco já em uso, rode **uma vez**, nesta ordem, logo antes do deploy (faça o backup antes):
 
 ```powershell
+pnpm --filter @meu-banco/worker exec wrangler d1 export meu-banco --remote --output=backup-AAAA-MM-DD.sql
 pnpm db:remote
+pnpm --filter @meu-banco/worker exec wrangler d1 execute meu-banco --remote --file=scripts/migrar-ajustes.sql
 ```
 
-(Local: `pnpm db:local`.) A sincronização nunca altera `ajustes`.
+`db:remote` só cria o que falta (`registros`, `pluggy_items`) e recria a view `v_ajustes`. O `migrar-ajustes.sql` copia `ajustes` para `registros` e apaga a tabela antiga; rodar de novo só falha com "no such table: ajustes", sem efeito. Sem ele, os ajustes somem do painel depois do deploy. (Local: `pnpm db:local`, o banco novo já nasce sem `ajustes`.) A sincronização do Pluggy nunca altera os ajustes.
 
 ## Gráficos, ajustes e faturas
 
