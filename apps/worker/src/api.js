@@ -121,6 +121,17 @@ export class ApiCliente {
 
   async contas(itemId) { return (await this.obter("/accounts", { itemId }))?.results || []; }
 
+  // Investimentos da conexão (CDB, fundos, ações...). Página de 500; para depois de `maxPaginas`.
+  async investimentos(itemId, maxPaginas = 5) {
+    const todos = [];
+    for (let page = 1; page <= maxPaginas; page++) {
+      const r = await this.obter("/investments", { itemId, page, pageSize: 500 });
+      todos.push(...(r?.results || []));
+      if (!r?.results?.length || page >= (r.totalPages || 1)) break;
+    }
+    return todos;
+  }
+
   async faturas(accountId) { return (await this.obter("/bills", { accountId, pageSize: 24 }))?.results || []; }
 
   // Todas as transações da conta. Usa GET /v2/transactions (cursor `after`, dateFrom/dateTo, 500 por página);

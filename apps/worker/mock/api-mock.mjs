@@ -80,7 +80,7 @@ function transacoes(conta) {
 
 const faturas = () => ["a", "b", "c", "d", "e", "f"].map((k, i) => ({ id: `fat-${k}`, dueDate: dia(-(i + 1) * 30 + 12), totalAmount: 1400 + i * 37.5, minimumPaymentAmount: 200, allowsInstallments: true }));
 
-// Mesmos caminhos e formato do Pluggy: POST /auth, GET e PATCH /items/:id, /accounts, /transactions, /bills (X-API-KEY).
+// Mesmos caminhos e formato do Pluggy: POST /auth, GET e PATCH /items/:id, /accounts, /transactions, /bills, /investments (X-API-KEY).
 const CHAVE = "chave-mock-" + Date.now();
 function rota(caminho, q) {
   const id = /^\/items\/([^/]+)$/.exec(caminho)?.[1];
@@ -102,6 +102,12 @@ function rota(caminho, q) {
     }
     const pag = Number(q.get("page")) || 1;
     return [200, { total: todas.length, totalPages: Math.max(1, Math.ceil(todas.length / tam)), page: pag, results: todas.slice((pag - 1) * tam, pag * tam) }];
+  }
+  if (caminho === "/investments") {
+    const r = q.get("itemId") === "item-santander"
+      ? [{ id: "inv-cdb", name: "CDB Santander", type: "FIXED_INCOME", balance: 15230.4, status: "ACTIVE" }, { id: "inv-velho", name: "Fundo resgatado", type: "MUTUAL_FUND", balance: 0, status: "TOTAL_WITHDRAWAL" }]
+      : [];
+    return [200, { total: r.length, totalPages: 1, page: 1, results: r }];
   }
   if (caminho === "/bills") return [200, { total: 6, totalPages: 1, page: 1, results: faturas() }];
   if (caminho === "/v2/items") return process.env.MOCK_LISTA_ITENS === "1" ? [200, { results: Object.values(itens), next: null }] : [403, { message: "Forbidden" }];

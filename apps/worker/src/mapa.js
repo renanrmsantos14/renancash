@@ -97,3 +97,12 @@ export function mapearFaturas(contaPluggy, bills) {
     total_pending_debt: saldo,
   };
 }
+
+// Investimentos de uma conexão, para o app somar no patrimônio. Resgate total (TOTAL_WITHDRAWAL) e sem saldo ficam fora.
+// `banco`: o da conexão ou, no Meu Pluggy, o nome da conta corrente da mesma conexão sem o final do número.
+export function mapearInvestimentos(lista, banco, contasDaConexao) {
+  const nomeBanco = banco || contasDaConexao.find((c) => c.type === "BANK")?.name?.replace(/\s*[·#].*$/, "") || null;
+  return lista
+    .filter((i) => i.status !== "TOTAL_WITHDRAWAL" && num(i.balance) != null)
+    .map((i) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo: num(i.balance), banco: nomeBanco }));
+}

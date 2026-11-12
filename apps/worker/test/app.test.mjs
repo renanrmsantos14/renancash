@@ -29,17 +29,18 @@ test("normalizarDesde", () => {
 test("montarResposta renomeia campos, aplica ajuste de categoria e converte futura", () => {
   const r = montarResposta({
     agora: "2026-11-08T12:00:00.000Z",
-    contas: [{ id: "c1", type: "CREDIT", name: "Cartão", bank: "Inter", balance: -10, credit_limit: 100, available_limit: 90, due_date: "2026-11-15" }],
+    contas: [{ id: "c1", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão", bank: "Inter", balance: -10, credit_limit: 100, available_limit: 90, due_date: "2026-11-15" }],
     transacoes: [
       { id: "t1", account_id: "c1", date: "2026-11-01", description: "X", amount: 5, type: "DEBIT", status: "POSTED", category: "Shopping", ajuste_categoria: "Rent", merchant: "Loja", scheduled: 0 },
       { id: "t2", account_id: "c1", date: "2026-12-01", description: "Y", amount: 7, type: "DEBIT", status: "PENDING", category: null, ajuste_categoria: null, merchant: null, scheduled: 1 },
     ],
     pendentes: [{ id: "t2" }],
   });
-  assert.deepEqual(r.contas[0], { id: "c1", tipo: "CREDIT", nome: "Cartão", banco: "Inter", saldo: -10, limite: 100, limite_disponivel: 90, vencimento: "2026-11-15" });
+  assert.deepEqual(r.contas[0], { id: "c1", tipo: "CREDIT", subtipo: "CREDIT_CARD", nome: "Cartão", banco: "Inter", saldo: -10, limite: 100, limite_disponivel: 90, vencimento: "2026-11-15" });
   assert.equal(r.transacoes[0].categoria, "Rent");
   assert.equal(r.transacoes[0].futura, false);
   assert.equal(r.transacoes[1].categoria, null);
   assert.equal(r.transacoes[1].futura, true);
   assert.deepEqual(r.ids_pendentes, ["t2"]);
+  assert.deepEqual(r.investimentos, []);
 });

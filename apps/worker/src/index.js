@@ -1,7 +1,7 @@
 import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
-import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
@@ -529,12 +529,14 @@ async function appTransacoes(request, env, url) {
   const desde = normalizarDesde(url.searchParams.get("desde"));
   if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
   const db = env.DB;
-  const [contas, tx, pend] = await db.batch([
-    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
+  const [contas, tx, pend, inv] = await db.batch([
+    db.prepare("SELECT id, type, subtype, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
     db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
+    db.prepare("SELECT data FROM snapshots WHERE key LIKE 'investimentos:%' ORDER BY key"),
   ]);
-  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
+  const investimentos = inv.results.flatMap((s) => JSON.parse(s.data));
+  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results, investimentos }));
 }
 
 // ---------- Sincronização ----------
@@ -577,9 +579,15 @@ async function sincronizar(env, origem) {
         const banco = bancoDoItem(item);
         const aviso = avisoItem(item, banco);
         if (aviso) reconectar.push(aviso);
-        for (const c of contas) {
-          brutas.set(String(c.id), c);
-          linhasContas.push(mapearConta(c, banco, id, ts));
+        const daConexao = contas.map((c) => mapearConta(c, banco, id, ts));
+        for (const c of contas) brutas.set(String(c.id), c);
+        linhasContas.push(...daConexao);
+        // Erro nos investimentos mantém o snapshot anterior; 403/404 (produto não liberado na conexão) não vira aviso.
+        try {
+          await salvarSnapshot(db, "investimentos:" + id, mapearInvestimentos(await api.investimentos(id), banco, daConexao));
+        } catch (e) {
+          if (![403, 404].includes(e.status)) avisos.push(`Investimentos da conexão ${id}: ${e.message}`);
+          console.warn("Investimentos indisponíveis", id, e.message);
         }
       } catch (e) {
         avisos.push(`Conexão ${id}: ${e.message}`);
