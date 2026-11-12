@@ -264,7 +264,7 @@ async function salvarAjuste(request, env, idUrl) {
 async function lerConfig(db) {
   const { results } = await db.prepare("SELECT chave, valor FROM config").all();
   const c = Object.fromEntries(results.map((r) => [r.chave, r.valor]));
-  return { limite: c.limite ? Number(c.limite) : null, salario: c.salario || null };
+  return { limite: c.limite ? Number(c.limite) : null, salario: c.salario || null, salarioValor: Number(c.salario_valor) || null };
 }
 
 // Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
@@ -272,7 +272,7 @@ async function baseCiclo(env) {
   const hoje = hojeSP();
   const [tx, contas, config, regs] = await Promise.all([
     env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
-    env.DB.prepare("SELECT id, type, name, balance, closing_date, due_date FROM accounts").all(),
+    env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
     lerConfig(env.DB),
     env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
   ]);
@@ -307,6 +307,7 @@ async function salvarConfig(request, env, url) {
     if (!t) return json({ erro: "Transação não encontrada" }, 404);
     if (t.type === "CREDIT" || !(t.amount > 0) || !normalizar(t.description)) return json({ erro: "Escolha um crédito da conta corrente" }, 400);
     ops.push(env.DB.prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario', ?1)").bind(normalizar(t.description)));
+    ops.push(env.DB.prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('salario_valor', ?1)").bind(String(t.amount)));
   }
   if (!ops.length) return json({ erro: "Nada para salvar" }, 400);
   await env.DB.batch(ops);
