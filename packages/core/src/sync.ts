@@ -18,7 +18,8 @@ export const TABELAS: Readonly<Record<Tabela, Esquema>> = {
   categorias: { nome: "texto", tipo: ["despesa", "receita"], "cor?": "texto", "icone?": "texto", "pai_id?": "texto", "ordem?": "numero", "pluggy?": "lista" },
   regras: { padrao: "texto", categoria_id: "texto", "conta_id?": "texto", "prioridade?": "numero" },
   orcamentos: { nome: "texto", valor: "numero", categoria_ids: "lista", periodo: ["ciclo", "mensal"] },
-  metas: { nome: "texto", valor_alvo: "numero", "valor_atual?": "numero", "prazo?": "data" },
+  // valor_alvo 0 = meta sem valor definido. aplicacao_ids: ids das aplicações (Pluggy) que compõem a meta; cada aplicação em uma meta só.
+  metas: { nome: "texto", valor_alvo: "numero", "valor_atual?": "numero", "prazo?": "data", "aplicacao_ids?": "lista" },
   dividas: { tipo: ["emprestimo"], nome: "texto", "pessoa?": "texto", sentido: ["devo", "me_devem"], valor_total: "numero", "pago?": "numero" },
   assinaturas: { nome: "texto", valor: "numero", dia: "numero", padrao: "texto", status: ["confirmada", "ignorada"], "categoria_id?": "texto" },
   ajustes: { "category?": "texto", "gasto?": [0, 1], "categoria_id?": "texto", "nota?": "texto" },

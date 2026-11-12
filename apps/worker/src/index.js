@@ -9,6 +9,7 @@ import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, a
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
+import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 
 const TZ = "America/Sao_Paulo";
@@ -603,6 +604,7 @@ async function sincronizar(env, origem) {
       }
     }
     if (!avisos.length) await salvarSnapshot(db, "avisos", reconectar); // conexão que falhou na leitura mantém os avisos anteriores
+    await registrarHistoricoInvestimentos(db);
     desambiguar(linhasContas);
     if (!linhasContas.length) throw new Error("Nenhuma conta encontrada nas conexões do Pluggy");
     await db.prepare(upsertSql("accounts", Object.keys(linhasContas[0]))).bind(JSON.stringify(linhasContas)).run();
@@ -678,6 +680,18 @@ function upsertSql(tabela, colunas) {
   const sel = colunas.map((c) => `json_extract(value, '$.${c}')`).join(", ");
   const upd = colunas.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ");
   return `INSERT INTO ${tabela} (${colunas.join(", ")}) SELECT ${sel} FROM json_each(?1) WHERE true ON CONFLICT(id) DO UPDATE SET ${upd}`;
+}
+
+// Retrato do mês corrente a partir dos snapshots de investimentos (Inter e Santander juntos). Nunca derruba a sincronização.
+async function registrarHistoricoInvestimentos(db) {
+  try {
+    const { results } = await db.prepare("SELECT key, data FROM snapshots WHERE key LIKE 'investimentos:%' OR key = ?1").bind(CHAVE_HISTORICO).all();
+    const historico = results.find((s) => s.key === CHAVE_HISTORICO);
+    const lista = results.filter((s) => s.key !== CHAVE_HISTORICO).flatMap((s) => JSON.parse(s.data) || []);
+    if (lista.length) await salvarSnapshot(db, CHAVE_HISTORICO, registrarRetrato(historico ? JSON.parse(historico.data) : {}, lista, mesSP()));
+  } catch (e) {
+    console.warn("Histórico de investimentos não gravado", e.message);
+  }
 }
 
 function salvarSnapshot(db, key, data) {

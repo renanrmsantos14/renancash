@@ -90,3 +90,11 @@ test("revisoes: decisão e memória de destinatário válidas; resposta desconhe
   const r = validarLote([{ ...base, id: "tx:t1", dados: { tipo: "decisao", tx_id: "t1", resposta: "voar" } }], AGORA);
   assert.ok("rejeitados" in r && r.rejeitados.length === 1);
 });
+
+test("meta aceita aplicacao_ids (lista de ids) e valor_alvo 0 para meta sem valor definido", () => {
+  const meta = (dados: Record<string, unknown>) => dadosValidos("metas", dados);
+  assert.ok(meta({ nome: "Reserva de emergência", valor_alvo: 0, aplicacao_ids: ["a1", "a2"] }));
+  assert.ok(meta({ nome: "Viagem", valor_alvo: 5000, prazo: "2027-06-30" })); // sem aplicações: formato antigo
+  assert.ok(!meta({ nome: "Viagem", valor_alvo: 5000, aplicacao_ids: "a1" }));
+  assert.ok(!meta({ nome: "Viagem", valor_alvo: 5000, aplicacao_ids: [1] }));
+});
