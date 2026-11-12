@@ -54,26 +54,35 @@ export function valorBaseSalario(entradas, config) {
   return null;
 }
 
-// Datas (crescentes) em que o salário caiu. `entradas` já vem só com créditos candidatos, em ordem de data.
-export function datasDeSalario(entradas, config) {
+// Entradas (em ordem de data) em que o salário caiu. `entradas` já vem só com créditos candidatos.
+export function salariosDetectados(entradas, config) {
   let referencia = valorBaseSalario(entradas, config);
-  const datas = [];
+  const achados = [];
   for (const t of entradas) {
     const pelaDescricao = config.salario && normalizar(t.description) === config.salario; // marcação antiga (só descrição)
     if (!pelaDescricao && !(referencia != null && parecido(t.amount, referencia))) continue;
-    if (datas.length && diasEntre(datas.at(-1), t.date) < MIN_DIAS_ENTRE_SALARIOS) continue;
-    datas.push(t.date);
+    if (achados.length && diasEntre(achados.at(-1).date, t.date) < MIN_DIAS_ENTRE_SALARIOS) continue;
+    achados.push(t);
     referencia = t.amount;
   }
-  return datas;
+  return achados;
 }
 
-export function cicloAtual(transacoes, contas, config, hoje) {
+export const datasDeSalario = (entradas, config) => salariosDetectados(entradas, config).map((t) => t.date);
+
+// Créditos da conta corrente que podem ser salário. O que o usuário já classificou na fila (`revisada`: Pix de devolução,
+// reembolso ou renda) fica de fora: a decisão dele vale mais que o valor parecido.
+export function entradasCandidatas(transacoes, contas, hoje) {
   const validas = new Set(contas.filter((c) => c.type !== "CREDIT" && !contaIgnorada(c)).map((c) => c.id));
   const doBanco = transacoes.filter((t) => validas.has(t.account_id) && !t.scheduled && t.date <= hoje);
   const entradas = doBanco
-    .filter((t) => t.amount > 0 && !regraAuto(t) && !NAO_SALARIO.test(semAcento(t.description)))
+    .filter((t) => t.amount > 0 && !t.revisada && !regraAuto(t) && !NAO_SALARIO.test(semAcento(t.description)))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { doBanco, entradas };
+}
+
+export function cicloAtual(transacoes, contas, config, hoje) {
+  const { doBanco, entradas } = entradasCandidatas(transacoes, contas, hoje);
   const ultimoSalario = datasDeSalario(entradas, config).at(-1) ?? null;
   // Sem salário nenhum, conta desde o começo do histórico (ou hoje, sem transações).
   const desde = ultimoSalario ?? doBanco.reduce((m, t) => (t.date < m ? t.date : m), hoje);
@@ -89,6 +98,8 @@ export function cicloAtual(transacoes, contas, config, hoje) {
 
 const dias = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400000);
 const centavos = (v) => Math.round(v * 100) / 100;
+// Pix recebido que o usuário marcou como reembolso: abate o gasto como um estorno genérico (não é renda).
+const abatimento = (t) => (t.reembolso && t.amount > 0 ? t.amount : 0);
 
 export function gastoPorDia(todas, todasContas, inicio, fim) {
   const [transacoes, contas] = semIgnoradas(todas, todasContas);
@@ -97,7 +108,7 @@ export function gastoPorDia(todas, todasContas, inicio, fim) {
   for (const t of transacoes) {
     if (t.date < inicio || t.date > fim) continue;
     const c = cartao.has(t.account_id);
-    soma.set(t.date, (soma.get(t.date) || 0) + valorGasto(t, c) + valorParcela(t, c));
+    soma.set(t.date, (soma.get(t.date) || 0) + valorGasto(t, c) + valorParcela(t, c) - abatimento(t));
   }
   const saida = [];
   for (let d = inicio; d <= fim; d = somarDias(d, 1)) saida.push({ data: d, valor: centavos(soma.get(d) || 0) });
@@ -111,7 +122,7 @@ export function resumoCiclo({ transacoes: todas, contas: todasContas, config, ho
   let gasto = 0, parcelasCiclo = 0, parcelasDepois = 0;
   for (const t of transacoes) {
     const c = cartao.has(t.account_id);
-    if (t.date >= inicio && t.date <= fim) gasto += valorGasto(t, c);
+    if (t.date >= inicio && t.date <= fim) gasto += valorGasto(t, c) - abatimento(t);
     const p = valorParcela(t, c);
     if (p && t.date >= inicio && t.date <= fim) parcelasCiclo += p;
     else if (p && t.date > fim) parcelasDepois += p;

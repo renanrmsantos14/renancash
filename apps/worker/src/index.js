@@ -3,6 +3,7 @@ import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
+import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
 import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
@@ -55,7 +56,6 @@ export default {
       } else if (caminho === "/api/atualizar" && request.method === "POST") {
         resp = mesmaOrigem(request, url) ? await atualizarAgora(env, "botao", ctx) : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/ciclo" && request.method === "GET") resp = await ciclo(env);
-      else if (caminho === "/api/config" && request.method === "PUT") resp = await salvarConfig(request, env, url);
       else if (caminho === "/api/push" && (request.method === "POST" || request.method === "DELETE")) resp = await inscreverPush(request, env, url);
       else if (caminho === "/api/push/teste" && request.method === "POST") resp = await testePush(request, env, url);
       else if (caminho === "/api/notificacoes/entregar" && request.method === "POST") resp = await entregarNotificacoes(request, env, url);
@@ -274,14 +274,21 @@ async function baseCiclo(env) {
     env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
     env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
     lerConfig(env.DB),
-    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
+    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas','revisoes')").all(),
   ]);
   // Conta e cartão do Santander ficam fora de tudo que sai daqui (ciclo, alertas, resumo semanal, "disponível").
-  const [transacoes, contasUsadas] = semIgnoradas(tx.results, contas.results);
+  const [semIgnorar, contasUsadas] = semIgnoradas(tx.results, contas.results);
   const registros = regs.results.flatMap((r) => {
     try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; }
   });
-  return { hoje, transacoes, contas: contasUsadas, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contasUsadas, config, hoje }) };
+  // As respostas da fila "Para revisar" mexem no que conta como gasto e no que pode ser salário antes de qualquer cálculo.
+  // O início do ciclo não depende dos envios ao Santander: 1ª passada acha o ciclo, 2ª limita a reclassificação a ele.
+  const revisoes = lerRevisoes(registros);
+  const cartoes = new Set(contasUsadas.filter((c) => c.type === "CREDIT").map((c) => c.id));
+  const { inicio } = resumoCiclo({ transacoes: aplicarRevisoes(semIgnorar, revisoes, { cartoes }), contas: contasUsadas, config, hoje });
+  const transacoes = aplicarRevisoes(semIgnorar, revisoes, { cartoes, inicio });
+  const resumo = resumoCiclo({ transacoes, contas: contasUsadas, config, hoje });
+  return { hoje, transacoes, contas: contasUsadas, config, registros, ctx: contextoDeRegistros(registros), resumo, revisar: filaRevisar({ transacoes, contas: contasUsadas, config, resumo, hoje }) };
 }
 
 async function ciclo(env) {
@@ -373,7 +380,7 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
@@ -387,8 +394,9 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     const desde = normalizarDesde(url.searchParams.get("desde"));
     if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
     const b = await baseCiclo(env);
-    return json(await puxar(env.DB, desde, ts, { ciclo: { ...b.resumo, salario: b.config.salario ?? null, por_dia: gastoPorDia(b.transacoes, b.contas, b.resumo.inicio, b.resumo.fim) } }));
+    return json(await puxar(env.DB, desde, ts, { ciclo: { ...b.resumo, salario: b.config.salario ?? null, por_dia: gastoPorDia(b.transacoes, b.contas, b.resumo.inicio, b.resumo.fim), revisar: b.revisar } }));
   }
+  if (rota === "PUT /api/config") return salvarConfig(request, env, url); // app marca o salário da fila "Para revisar"
   if (rota === "GET /api/notificacoes") {
     const desde = normalizarDesde(url.searchParams.get("desde"));
     if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
