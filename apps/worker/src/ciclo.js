@@ -99,7 +99,7 @@ export function cicloAtual(transacoes, contas, config, hoje) {
 const dias = (de, ate) => Math.round((Date.parse(ate) - Date.parse(de)) / 86400000);
 const centavos = (v) => Math.round(v * 100) / 100;
 // Pix recebido que o usuário marcou como reembolso: abate o gasto como um estorno genérico (não é renda).
-const abatimento = (t) => (t.reembolso && t.amount > 0 ? t.amount : 0);
+export const abatimento = (t) => (t.reembolso && t.amount > 0 ? t.amount : 0);
 
 export function gastoPorDia(todas, todasContas, inicio, fim) {
   const [transacoes, contas] = semIgnoradas(todas, todasContas);

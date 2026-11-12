@@ -4,7 +4,7 @@ import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
-import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
+import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
@@ -78,12 +78,12 @@ export default {
   },
 
   async scheduled(evento, env, ctx) {
-    // Um cron só (plano gratuito: 5 por conta). Cada sincronização envia os alertas pendentes, então os retidos
-    // pelo silêncio saem no primeiro tick depois das 7h BRT (09h07). O tick de segunda 00h07 UTC (domingo 21h07 BRT)
-    // também manda o resumo semanal.
+    // Um cron só (plano gratuito: 5 por conta), de 3 em 3 horas em horário de Brasília (22h07, 01h07, ..., 19h07).
+    // Cada sincronização envia os alertas pendentes, então o que ficou retido no silêncio (22h-7h) sai no tick das 07h07.
+    // O tick de domingo 19h07 BRT (22h UTC) também manda o resumo semanal; o de 04h07 BRT (07h UTC) faz o backup.
     const t = new Date(evento.scheduledTime);
-    const resumo = t.getUTCDay() === 1 && t.getUTCHours() === 0;
-    const backup = t.getUTCHours() === 6 && env.BACKUP; // tick das 06h07 UTC = 03h07 BRT
+    const resumo = t.getUTCDay() === 0 && t.getUTCHours() === 22;
+    const backup = t.getUTCHours() === 7 && env.BACKUP;
     ctx.waitUntil(sincronizar(env, "cron").finally(async () => {
       if (resumo) await alertaSemanal(env);
       // O backup nunca derruba a sincronização: em falha, só registra o erro (sem segredos).
@@ -275,7 +275,7 @@ async function baseCiclo(env) {
     env.DB.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
     env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
     lerConfig(env.DB),
-    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas','revisoes')").all(),
+    env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas','revisoes','metas')").all(),
   ]);
   // Conta e cartão do Santander ficam fora de tudo que sai daqui (ciclo, alertas, resumo semanal, "disponível").
   const [semIgnorar, contasUsadas] = semIgnoradas(tx.results, contas.results);
@@ -351,16 +351,37 @@ async function enviarPendentes(env, ignorarSilencio = false) {
   return enviados;
 }
 
+const lerSnapshot = async (db, key, vazio) => {
+  try { return JSON.parse((await db.prepare("SELECT data FROM snapshots WHERE key = ?1").bind(key).first("data")) ?? "null") ?? vazio; } catch { return vazio; }
+};
+
+// Avalia o que mudou desde a última sincronização. Alertas e snapshots de controle saem no mesmo batch: ou grava tudo ou nada,
+// então uma compra não é avisada duas vezes nem se perde.
 async function avaliarAlertas(env) {
+  const db = env.DB;
   const b = await baseCiclo(env);
-  const avisos = JSON.parse((await env.DB.prepare("SELECT data FROM snapshots WHERE key = 'avisos'").first())?.data || "[]");
-  await gravarAlertas(env.DB, gerarAlertas({ ...b, avisos }));
+  const [avisos, vistas, avisadas] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", [])]);
+  const ts = agora();
+  const geral = consumoGeral(b);
+  const { novas, ids } = comprasNovas({ ...b, vistas });
+  const alertas = [
+    ...alertasConexao({ avisos, avisadas, agora: ts }),
+    ...alertasGeral(geral),
+    ...alertaCompras({ compras: novas, contas: b.contas, geral, agora: ts }),
+    ...alertasFatura(b),
+    ...alertasRevisao(b),
+  ];
+  await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);
   await enviarPendentes(env);
 }
 
 async function alertaSemanal(env) {
   const b = await baseCiclo(env);
-  await gravarAlertas(env.DB, [resumoSemanal(b)]);
+  const conexoes = await idsConexoes(env.DB, env, agora());
+  const { results } = await env.DB.prepare("SELECT key, data FROM snapshots WHERE key LIKE 'investimentos:%'").all();
+  const saldos = new Map(results.filter((r) => conexoes.includes(r.key.slice("investimentos:".length))).flatMap((r) => JSON.parse(r.data) || []).map((i) => [i.id, i.saldo]));
+  const metas = linhasMetas({ metas: doTipo(b.registros, "metas"), saldos, hoje: b.hoje });
+  await gravarAlertas(env.DB, [resumoSemanal({ ...b, geral: consumoGeral(b), metas })]);
   await enviarPendentes(env);
 }
 
@@ -373,7 +394,7 @@ async function testePush(request, env, url) {
 async function entregarNotificacoes(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
   const { results } = await env.DB.prepare(
-    "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 5) RETURNING chave, titulo, corpo"
+    "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 20) RETURNING chave, titulo, corpo"
   ).bind(agora(), validadeAlerta()).all();
   return json({ notificacoes: results });
 }
@@ -437,7 +458,15 @@ async function notificacoesAparelho(env, desde, ts) {
   if (emSilencio(new Date(ts))) return { cursor: desde, notificacoes: [], resumo };
   const piso = desde > validadeAlerta() ? desde : validadeAlerta();
   const { results } = await env.DB.prepare("SELECT chave, titulo, corpo, criada FROM notificacoes WHERE criada > ?1 ORDER BY criada LIMIT 20").bind(piso).all();
-  return { cursor: results.at(-1)?.criada ?? desde, notificacoes: results, resumo };
+  // "Para revisar": leva o item (o app mostra os botões das opções) e some com o aviso de item já respondido em outro aparelho.
+  const fila = new Map(b.revisar.map((i) => [i.tipo === "salario_nao_detectado" ? "salario" : i.id, i]));
+  const notificacoes = results.flatMap((n) => {
+    if (!n.chave.startsWith("revisar:")) return [n];
+    const k = n.chave.startsWith("revisar:salario:") ? "salario" : n.chave.slice("revisar:".length);
+    const item = fila.get(k);
+    return !item ? [] : k === "salario" ? [n] : [{ ...n, item }];
+  });
+  return { cursor: results.at(-1)?.criada ?? desde, notificacoes, resumo };
 }
 
 // Webhook do Pluggy: responde na hora (o Pluggy espera 2xx em poucos segundos) e trabalha em waitUntil.
@@ -703,9 +732,7 @@ async function registrarHistoricoInvestimentos(db, ids, lidas) {
   }
 }
 
-function salvarSnapshot(db, key, data) {
-  return db
-    .prepare("INSERT INTO snapshots (key, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at")
-    .bind(key, JSON.stringify(data ?? null), agora())
-    .run();
-}
+const stmtSnapshot = (db, key, data) => db
+  .prepare("INSERT INTO snapshots (key, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at")
+  .bind(key, JSON.stringify(data ?? null), agora());
+const salvarSnapshot = (db, key, data) => stmtSnapshot(db, key, data).run();
