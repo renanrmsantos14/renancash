@@ -2,7 +2,7 @@ import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
-import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
+import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
@@ -276,11 +276,12 @@ async function baseCiclo(env) {
     lerConfig(env.DB),
     env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas')").all(),
   ]);
-  const transacoes = tx.results;
+  // Conta e cartão do Santander ficam fora de tudo que sai daqui (ciclo, alertas, resumo semanal, "disponível").
+  const [transacoes, contasUsadas] = semIgnoradas(tx.results, contas.results);
   const registros = regs.results.flatMap((r) => {
     try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; }
   });
-  return { hoje, transacoes, contas: contas.results, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contas.results, config, hoje }) };
+  return { hoje, transacoes, contas: contasUsadas, config, registros, ctx: contextoDeRegistros(registros), resumo: resumoCiclo({ transacoes, contas: contasUsadas, config, hoje }) };
 }
 
 async function ciclo(env) {

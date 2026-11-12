@@ -46,3 +46,24 @@ test("PUT /api/config com salario_id guarda também o valor do salário", async 
   const cfg = Object.fromEntries((await amb.env.DB.prepare("SELECT chave, valor FROM config").all()).results.map((x) => [x.chave, x.valor]));
   assert.deepEqual(cfg, { salario: "PAGAMENTO", salario_valor: "7500" });
 });
+
+test("alertas, resumo semanal e disponível não contam conta nem cartão do Santander", async () => {
+  const amb = criarAmbiente();
+  const token = await criarAparelho(amb.env);
+  const agora = new Date().toISOString();
+  const conta = (id, type, subtype, bank, saldo) =>
+    amb.env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, balance, updated_at) VALUES (?1, ?2, ?3, 'Conta', ?4, ?5, ?6)").bind(id, type, subtype, bank, saldo, agora);
+  const tx = (id, c, valor) =>
+    amb.env.DB.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, ?2, ?3, 'MERCADO', ?4, 'DEBIT', 'POSTED', 0, ?5)").bind(id, c, somarDias(hoje, -1), valor, agora);
+  await amb.env.DB.batch([
+    conta("inter", "BANK", "CHECKING_ACCOUNT", "Inter", 100), conta("st", "BANK", "CHECKING_ACCOUNT", "Santander", 5000), conta("stc", "CREDIT", null, "Santander", -900),
+    tx("g1", "inter", -100), tx("g2", "st", -900), tx("g3", "stc", 400),
+  ]);
+  await amb.worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 0, 7) }, amb.env, amb.ctx); // segunda 00h07 UTC: resumo semanal
+  await amb.esperar();
+  const semana = await amb.env.DB.prepare("SELECT corpo FROM notificacoes WHERE chave LIKE 'semana:%'").first("corpo");
+  assert.match(semana, /Gastou R\$\s100,00 nos últimos 7 dias/);
+  const r = await (await amb.pedir("/api/notificacoes", { headers: { authorization: "Bearer " + token } })).json();
+  assert.equal(r.resumo.disponivel, 100);
+  assert.equal(r.resumo.consumido, 100);
+});
