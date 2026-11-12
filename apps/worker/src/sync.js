@@ -1,6 +1,7 @@
 // Sincronização em duas vias com os apps: pull (dados do banco + registros do usuário) e push (registros, LWW).
 import { validarLote, inicioDaJanela } from "@meu-banco/core";
 import { hashToken, tokenDoCabecalho } from "./app.js";
+import { CHAVE_HISTORICO, serieMensal } from "./historico.js";
 
 export const USO_TOKEN_MS = 60 * 1000; // ultimo_uso é gravado no máximo 1 vez por minuto
 export const INTERVALO_ATUALIZAR_MS = 30 * 60 * 1000;
@@ -26,14 +27,16 @@ export async function puxar(db, desde, agoraIso, extras = {}) {
     db.prepare("SELECT tabela, id, dados, updated_at, deleted_at FROM registros WHERE (?1 IS NULL AND deleted_at IS NULL) OR server_at > ?1 ORDER BY server_at").bind(janela),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
     db.prepare("SELECT chave, valor FROM config"),
-    db.prepare("SELECT key, data FROM snapshots WHERE key = 'avisos' OR key LIKE 'faturas:%' OR key LIKE 'investimentos:%' ORDER BY key"),
+    db.prepare("SELECT key, data FROM snapshots WHERE key = 'avisos' OR key LIKE 'faturas:%' OR key LIKE 'investimentos:%' OR key = 'investimentos_mensal' ORDER BY key"),
     db.prepare("SELECT MAX(finished_at) AS f FROM sync_log WHERE ok = 1"),
   ]);
   const faturas = {};
   let avisos = [];
+  let investimentosMensal = []; // um retrato por mês (aplicações do Inter e do Santander juntas)
   const investimentos = []; // lista completa a cada pull (não segue o `desde`)
   for (const s of snapshots.results) {
     if (s.key === "avisos") avisos = json(s.data) || [];
+    else if (s.key === CHAVE_HISTORICO) investimentosMensal = serieMensal(json(s.data));
     else if (s.key.startsWith("investimentos:")) investimentos.push(...(json(s.data) || []));
     else faturas[s.key.slice("faturas:".length)] = json(s.data);
   }
@@ -48,6 +51,7 @@ export async function puxar(db, desde, agoraIso, extras = {}) {
     faturas,
     avisos,
     investimentos,
+    investimentos_mensal: investimentosMensal,
     sincronizado_em: ultimaSync.results[0]?.f ?? null,
     ...extras,
   };
