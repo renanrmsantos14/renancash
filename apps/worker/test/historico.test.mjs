@@ -71,3 +71,17 @@ test("leitura sem aplicações (403) não cria nem apaga retrato; /api/sync sem 
   corpo = await (await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
   assert.equal(corpo.investimentos_mensal[0].itens[0].saldo, 10);
 });
+
+test("resgate total grava o mês vazio; leitura que falhou depois de ter snapshot não grava dado velho", async () => {
+  const amb = criarAmbiente(ENV);
+  await registrarItem(amb.env.DB, ID, "2026-01-01T00:00:00.000Z");
+  const token = await criarAparelho(amb.env);
+  await sincronizar(amb, "2026-10-20T15:00:00Z", () => inv(["i1", "CDB", 10]));
+  await sincronizar(amb, "2026-11-02T15:00:00Z", () => Response.json({ message: "erro" }, { status: 500 }));
+  let corpo = await (await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
+  assert.deepEqual(corpo.investimentos_mensal.map((m) => m.mes), ["2026-10"]);
+  await sincronizar(amb, "2026-11-03T15:00:00Z", () => inv());
+  mock.timers.reset();
+  corpo = await (await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
+  assert.deepEqual(corpo.investimentos_mensal.map((m) => [m.mes, m.itens.length]), [["2026-10", 1], ["2026-11", 0]]);
+});

@@ -9,7 +9,7 @@ const TZ = "America/Sao_Paulo";
 export const mesSP = (data = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(data).slice(0, 7);
 
 // Devolve o histórico com o retrato de `mes` trocado por `lista` (meses anteriores intactos).
-// Quem chama só grava com aplicações na leitura: um mês vazio por falha de leitura apagaria um retrato bom.
+// Quem chama só grava quando todas as conexões foram lidas (lista vazia = resgate total).
 export function registrarRetrato(historico, lista, mes) {
   const base = historico && typeof historico === "object" && !Array.isArray(historico) ? historico : {};
   return { ...base, [mes]: lista.map(({ id, nome, banco, saldo }) => ({ id, nome, banco, saldo })) };
