@@ -32,8 +32,8 @@ test("salvarBackup grava JSON gzip no R2 com a data na chave", async () => {
   assert.deepEqual(JSON.parse(gunzipSync(salvo.v)).tabelas.config, [{ chave: "salario", valor: "PAGTO SALARIO" }]);
 });
 
-test("cron das 06h UTC faz o backup; nos outros horários não", async () => {
-  for (const [hora, esperado] of [[6, 1], [9, 0]]) {
+test("cron das 07h UTC faz o backup; nos outros horários não", async () => {
+  for (const [hora, esperado] of [[7, 1], [10, 0]]) {
     const BACKUP = r2();
     const { env, ctx, worker, esperar } = criarAmbiente({ BACKUP });
     await worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, hora, 7) }, env, ctx);
@@ -56,7 +56,7 @@ test("falha ao gravar no R2 não derruba a sincronização do cron", async () =>
   const original = console.error;
   console.error = (...a) => erros.push(a.join(" "));
   try {
-    await worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 6, 7) }, env, ctx);
+    await worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 7, 7) }, env, ctx);
     const [resultado] = await esperar();
     assert.equal(resultado.status, "fulfilled");
   } finally { console.error = original; }

@@ -59,10 +59,10 @@ test("alertas, resumo semanal e disponível não contam conta nem cartão do San
     conta("inter", "BANK", "CHECKING_ACCOUNT", "Inter", 100), conta("st", "BANK", "CHECKING_ACCOUNT", "Santander", 5000), conta("stc", "CREDIT", null, "Santander", -900),
     tx("g1", "inter", -100), tx("g2", "st", -900), tx("g3", "stc", 400),
   ]);
-  await amb.worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 0, 7) }, amb.env, amb.ctx); // segunda 00h07 UTC: resumo semanal
+  await amb.worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 8, 22, 7) }, amb.env, amb.ctx); // domingo 22h07 UTC = 19h07 BRT: resumo semanal
   await amb.esperar();
   const semana = await amb.env.DB.prepare("SELECT corpo FROM notificacoes WHERE chave LIKE 'semana:%'").first("corpo");
-  assert.match(semana, /Gastou R\$\s100,00 nos últimos 7 dias/);
+  assert.match(semana, /Semana: R\$\s100,00\./);
   const r = await (await amb.pedir("/api/notificacoes", { headers: { authorization: "Bearer " + token } })).json();
   assert.equal(r.resumo.disponivel, 100);
   assert.equal(r.resumo.consumido, 100);

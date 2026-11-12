@@ -2,105 +2,137 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { contextoDeRegistros } from "@meu-banco/core";
-import { emSilencio, foraDoPadrao, gerarAlertas, resumoSemanal, alertasOrcamentos, alertasFechamento, alertasReceita, alertasAssinaturas } from "../src/alertas.js";
+import { emSilencio, ID_GERAL, orcamentoGeral, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasConexao, alertasRevisao, linhasMetas, resumoSemanal } from "../src/alertas.js";
 
+const sp = (s) => s.replace(/\u00a0/g, " "); // o Intl usa espaço não separável após R$
 const contas = [{ id: "cc", type: "BANK" }, { id: "cart", type: "CREDIT" }];
-const compra = (id, date, amount, category = "Gas stations") => ({ id, account_id: "cart", date, description: "POSTO SHELL", amount, category, scheduled: 0 });
-const base = { inicio: "2026-11-05", fim: "2026-12-04", limite: 2000, consumido: 1000, falta: 1000, percentual: 50, diasRestantes: 14 };
+const compra = (id, date, amount, extra = {}) => ({ id, account_id: "cart", date, description: "POSTO SHELL", amount, category: "Gas stations", scheduled: 0, ...extra });
+const resumo = { inicio: "2026-11-05", fim: "2026-12-04", limite: null, consumido: 1000, falta: null, percentual: null, diasRestantes: 14 };
+const geralReg = (valor, id = ID_GERAL) => ({ tabela: "orcamentos", id, dados: { nome: "Geral", valor, categoria_ids: [], periodo: "ciclo" } });
+const geralCom = (valor, consumido) => consumoGeral({ registros: [geralReg(valor)], transacoes: [], contas, resumo: { ...resumo, consumido } });
 
-test("silêncio 22h–7h em BRT", () => {
-  assert.equal(emSilencio(new Date("2026-11-08T01:30:00Z")), true);  // 22:30 BRT
-  assert.equal(emSilencio(new Date("2026-11-08T10:00:00Z")), false); // 07:00 BRT
-  assert.equal(emSilencio(new Date("2026-11-08T09:59:00Z")), true);  // 06:59 BRT
+test("silêncio 22h–7h em BRT: bordas 21:59, 22:00, 06:59 e 07:00", () => {
+  assert.equal(emSilencio(new Date("2026-11-09T00:59:00Z")), false); // 21:59 BRT
+  assert.equal(emSilencio(new Date("2026-11-09T01:00:00Z")), true);  // 22:00 BRT
+  assert.equal(emSilencio(new Date("2026-11-09T09:59:00Z")), true);  // 06:59 BRT
+  assert.equal(emSilencio(new Date("2026-11-09T10:00:00Z")), false); // 07:00 BRT
 });
-test("fora do padrão: > 2x média, >= R$100, 3+ compras de histórico, últimos 3 dias", () => {
-  const hist = [compra("a", "2026-09-01", 200), compra("b", "2026-10-01", 210), compra("c", "2026-10-20", 220)];
-  assert.equal(foraDoPadrao([...hist, compra("n", "2026-11-19", 500)], contas, "2026-11-20").length, 1);
-  assert.equal(foraDoPadrao([...hist, compra("n", "2026-11-10", 500)], contas, "2026-11-20").length, 0); // antiga
-  assert.equal(foraDoPadrao([...hist.slice(0, 2), compra("n", "2026-11-19", 500)], contas, "2026-11-20").length, 0); // pouco histórico
-  assert.equal(foraDoPadrao([compra("a", "2026-09-01", 30), compra("b", "2026-10-01", 30), compra("c", "2026-10-02", 30), compra("n", "2026-11-19", 90)], contas, "2026-11-20").length, 0); // < R$100
+
+test("Geral: só o orçamento Geral conta; sem valor definido não há aviso", () => {
+  assert.equal(orcamentoGeral([geralReg(0)]), null);
+  assert.equal(orcamentoGeral([{ tabela: "orcamentos", id: "o1", dados: { nome: "Mercado", valor: 500 } }]), null);
+  assert.equal(orcamentoGeral([geralReg(2000)]).valor, 2000);
+  assert.deepEqual(alertasGeral(null), []);
 });
-test("limite: 80% e 100% com chave por ciclo", () => {
-  const c = (percentual) => gerarAlertas({ resumo: { ...base, percentual }, transacoes: [], contas, avisos: [], hoje: "2026-11-20" }).map((a) => a.chave);
-  assert.deepEqual(c(50), []);
-  assert.deepEqual(c(85), ["limite80:2026-11-05"]);
-  assert.deepEqual(c(110), ["limite80:2026-11-05", "limite100:2026-11-05"]);
+
+test("Geral: gasto só em outro orçamento não conta; gasto sem escolha conta", () => {
+  const transacoes = [compra("a", "2026-11-06", 300), compra("b", "2026-11-07", 200)];
+  const registros = [geralReg(2000), { tabela: "ajustes", id: "b", dados: { orcamento_ids: ["cashew:mb:orc:mercado"] } }];
+  const g = consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, consumido: 500 } });
+  assert.equal(g.consumido, 300);
+  assert.equal(g.falta, 1700);
+  const dois = [{ tabela: "ajustes", id: "b", dados: { orcamento_ids: ["cashew:mb:orc:mercado", ID_GERAL] } }];
+  assert.equal(consumoGeral({ registros: [geralReg(2000), ...dois], transacoes, contas, resumo: { ...resumo, consumido: 500 } }).consumido, 500);
 });
-test("reconexão: uma chave por dia", () => {
-  const a = gerarAlertas({ resumo: { ...base, limite: null, percentual: null }, transacoes: [], contas, avisos: [{ banco: "Banco Inter", mensagem: "Faça login" }], hoje: "2026-11-20" });
-  assert.deepEqual(a.map((x) => x.chave), ["reconexao:2026-11-20"]);
+
+test("Geral: 80% e 100% com chave por ciclo; passou direto de 100% só avisa 100%", () => {
+  const chaves = (c) => alertasGeral(geralCom(1000, c)).map((a) => a.chave);
+  assert.deepEqual(chaves(790), []);
+  assert.deepEqual(chaves(800), [`orc80:${ID_GERAL}:2026-11-05`]);
+  assert.deepEqual(chaves(1000), [`orc80:${ID_GERAL}:2026-11-05`]); // exatamente o valor ainda não estourou
+  assert.deepEqual(chaves(1001), [`orc100:${ID_GERAL}:2026-11-05`]);
+  assert.deepEqual(chaves(800), chaves(800)); // mesma chave a cada avaliação: INSERT OR IGNORE não repete
+  const [a80] = alertasGeral(geralCom(1000, 850));
+  assert.equal(a80.titulo, "80% do orçamento Geral");
+  assert.match(a80.corpo, /R\$\s?850,00 de R\$\s?1\.000,00 \(05\/11 a 04\/12\)\. Faltam R\$\s?150,00/);
+  const [a100] = alertasGeral(geralCom(1000, 1200));
+  assert.equal(a100.titulo, "Orçamento Geral estourado");
+  assert.match(a100.corpo, /R\$\s?200,00 acima/);
 });
-test("resumo semanal soma os últimos 7 dias", () => {
-  const r = resumoSemanal({ resumo: base, transacoes: [compra("x", "2026-11-18", 100), compra("y", "2026-11-01", 999)], contas, hoje: "2026-11-22" });
+
+test("compras: primeira avaliação só registra; depois só as novas com gasto, uma notificação para o lote", () => {
+  const hoje = "2026-11-10";
+  const t1 = compra("a", "2026-11-09", 50);
+  const primeira = comprasNovas({ transacoes: [t1], contas, vistas: null, hoje });
+  assert.deepEqual(primeira.novas, []);
+  assert.deepEqual(primeira.ids, ["a"]);
+  const entrada = (extra) => comprasNovas({ transacoes: [t1, compra("b", "2026-11-10", 70), compra("c", "2026-11-10", 50), compra("agend", "2026-11-12", 9, { scheduled: 1 }), compra("antiga", "2026-10-01", 80), compra("estorno", "2026-11-10", -30), ...extra], contas, vistas: ["a"], hoje });
+  const { novas, ids } = entrada([]);
+  assert.deepEqual(novas.map((t) => t.id), ["b", "c"]);
+  assert.ok(ids.includes("estorno") && !ids.includes("antiga") && !ids.includes("agend"));
+  const [n] = alertaCompras({ compras: novas, contas, geral: geralCom(1000, 400), agora: "2026-11-10T15:07:00.000Z" });
+  assert.equal(n.chave, "compras:2026-11-10T15:07:00.000Z");
+  assert.equal(sp(n.titulo), "2 compras, R$ 120,00");
+  assert.equal(sp(n.corpo), "Faltam R$ 600,00 no Geral até 04/12.");
+  assert.deepEqual(comprasNovas({ transacoes: [t1, compra("b", "2026-11-10", 70)], contas, vistas: ["a", "b"], hoje }).novas, []); // 2ª avaliação: nada novo
+});
+
+test("compras: uma compra, Geral estourado e Geral sem valor", () => {
+  const t = [compra("a", "2026-11-10", 35.5)];
+  assert.equal(sp(alertaCompras({ compras: t, contas, geral: geralCom(1000, 1100), agora: "x" })[0].titulo), "1 compra, R$ 35,50");
+  assert.match(alertaCompras({ compras: t, contas, geral: geralCom(1000, 1100), agora: "x" })[0].corpo, /R\$\s?100,00 acima do Geral\./);
+  assert.equal(alertaCompras({ compras: t, contas, geral: null, agora: "x" })[0].corpo, "Defina o valor do Geral para ver quanto falta.");
+  assert.deepEqual(alertaCompras({ compras: [], contas, geral: null, agora: "x" }), []);
+});
+
+test("fatura do Inter: avisa de 3 dias antes até o vencimento, uma chave por vencimento", () => {
+  const cartao = (due_date, balance = 420.5) => [{ id: "cart", type: "CREDIT", name: "Cartão Inter · final 1234", balance, due_date }];
+  assert.deepEqual(alertasFatura({ contas: cartao("2026-11-24"), hoje: "2026-11-20" }), []); // 4 dias
+  const r = alertasFatura({ contas: cartao("2026-11-23"), hoje: "2026-11-20" });
+  assert.deepEqual(r.map((a) => a.chave), ["fatura:cart:2026-11-23"]);
+  assert.equal(r[0].titulo, "Fatura do Cartão Inter vence em 3 dias");
+  assert.match(r[0].corpo, /R\$\s?420,50 · vence 23\/11/);
+  assert.equal(alertasFatura({ contas: cartao("2026-11-21"), hoje: "2026-11-20" })[0].titulo, "Fatura do Cartão Inter vence amanhã");
+  assert.equal(alertasFatura({ contas: cartao("2026-11-20"), hoje: "2026-11-20" })[0].titulo, "Fatura do Cartão Inter vence hoje");
+  assert.deepEqual(alertasFatura({ contas: cartao("2026-11-19"), hoje: "2026-11-20" }), []); // vencida
+  assert.deepEqual(alertasFatura({ contas: cartao("2026-11-22", 0), hoje: "2026-11-20" }), []); // nada a pagar
+  assert.deepEqual(alertasFatura({ contas: [{ id: "cc", type: "BANK", name: "X", due_date: "2026-11-21", balance: 9 }], hoje: "2026-11-20" }), []);
+});
+
+test("conexão caída: um aviso por queda; some da lista, volta a poder avisar", () => {
+  const avisos = [{ item_id: "i1", banco: "Banco Inter", mensagem: "m" }];
+  const r = alertasConexao({ avisos, avisadas: [], agora: "2026-11-10T15:07:00.000Z" });
+  assert.equal(r[0].chave, "conexao:i1:2026-11-10T15:07:00.000Z");
+  assert.equal(r[0].titulo, "Banco Inter desconectou");
+  assert.deepEqual(alertasConexao({ avisos, avisadas: ["i1"], agora: "x" }), []); // ainda caída: não repete
+  assert.equal(alertasConexao({ avisos, avisadas: [], agora: "y" }).length, 1); // voltou e caiu de novo
+});
+
+test("para revisar: um aviso por item recente (máx. 5), salário por mês", () => {
+  const item = (n, data = "2026-11-10") => ({ id: "tx:" + n, tipo: "pix_enviado", tx_id: n, data, descricao: "Pix para Ana", valor: 120 });
+  const r = alertasRevisao({ revisar: [item("a"), item("velho", "2026-11-01"), { id: "salario", tipo: "salario_nao_detectado", dias: 40 }], hoje: "2026-11-10" });
+  assert.deepEqual(r.map((a) => a.chave), ["revisar:tx:a", "revisar:salario:2026-11"]);
+  assert.equal(sp(r[0].titulo), "Pix enviado: R$ 120,00");
+  assert.equal(alertasRevisao({ revisar: Array.from({ length: 9 }, (_, i) => item("n" + i)), hoje: "2026-11-10" }).length, 5);
+});
+
+test("metas: mesmo texto do app", () => {
+  const saldos = new Map([["a1", 3000], ["a2", 1000]]);
+  const l = linhasMetas({ saldos, hoje: "2026-11-10", metas: [
+    { nome: "Reserva", valor_alvo: 10000, aplicacao_ids: ["a1", "a2"], prazo: "2026-12-10" },
+    { nome: "Viagem", aplicacao_ids: ["a1"] },
+    { nome: "Feita", valor_alvo: 2000, aplicacao_ids: ["a1"] },
+  ] });
+  assert.equal(sp(l[0]), "Reserva: R$ 4.000,00 de R$ 10.000,00 (40%), faltam R$ 6.000,00, prazo 10/12 (30 dias)");
+  assert.equal(sp(l[1]), "Viagem: R$ 3.000,00, defina o valor da meta");
+  assert.equal(sp(l[2]), "Feita: R$ 3.000,00 de R$ 2.000,00 (100%), meta atingida");
+});
+
+test("resumo semanal: semana, ciclo, Geral, maiores categorias, fila e metas", () => {
+  const registros = [geralReg(2000), { tabela: "categorias", id: "mercado", dados: { nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] } }];
+  const transacoes = [compra("x", "2026-11-18", 100, { category: "Groceries" }), compra("y", "2026-11-19", 300, { category: "Groceries" }), compra("z", "2026-11-20", 50), compra("velha", "2026-11-06", 900)];
+  const r = resumoSemanal({
+    resumo: { ...resumo, consumido: 1350 }, transacoes, contas, hoje: "2026-11-22", registros, ctx: contextoDeRegistros(registros.map((x) => ({ ...x, deleted_at: null, dados: x.dados }))),
+    geral: consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, consumido: 1350 } }),
+    revisar: [{ id: "tx:1" }, { id: "tx:2" }], metas: ["Reserva: R$ 4.000,00 de R$ 10.000,00 (40%)"],
+  });
   assert.equal(r.chave, "semana:2026-11-22");
-  assert.match(r.corpo, /R\$\s?100,00/);
-});
-
-const ctxCat = contextoDeRegistros([
-  { tabela: "categorias", id: "mercado", dados: { nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] }, deleted_at: null },
-]);
-const gasto = (id, date, amount, category) => ({ id, account_id: "cart", date, description: "LOJA", amount, category, scheduled: 0 });
-
-test("orçamento: ciclo usa o período do resumo, mensal usa o mês de hoje; chave não repete", () => {
-  const transacoes = [gasto("a", "2026-11-06", 850, "Groceries"), gasto("b", "2026-11-20", 100, "Gas stations"), gasto("c", "2026-10-30", 300, "Groceries")];
-  const entrada = (periodo, valor, extra = {}) => ({ orcamentos: [{ id: "o1", nome: "Mercado", valor, categoria_ids: ["mercado"], periodo }], ctx: ctxCat, transacoes, contas, resumo: base, hoje: "2026-11-20", ...extra });
-  const r = alertasOrcamentos(entrada("ciclo", 1000));
-  assert.deepEqual(r.map((a) => a.chave), ["orc80:o1:2026-11-05"]);
-  assert.equal(r[0].titulo, "80% do orçamento Mercado");
-  assert.match(r[0].corpo, /05\/11 a 04\/12/);
-  assert.deepEqual(alertasOrcamentos(entrada("ciclo", 1000)).map((a) => a.chave), r.map((a) => a.chave));
-  assert.deepEqual(alertasOrcamentos(entrada("mensal", 800)).map((a) => a.chave), ["orc100:o1:2026-11-01"]);
-  assert.equal(alertasOrcamentos(entrada("mensal", 800))[0].titulo, "Orçamento Mercado estourado");
-  assert.deepEqual(alertasOrcamentos(entrada("ciclo", 5000)), []);
-  const todas = alertasOrcamentos({ ...entrada("mensal", 1000), orcamentos: [{ id: "o2", nome: "Geral", valor: 1000, categoria_ids: [], periodo: "mensal" }] });
-  assert.deepEqual(todas.map((a) => a.chave), ["orc80:o2:2026-11-01"]); // lista vazia = todas (950 de 1000)
-});
-
-test("fechamento do cartão: 4 dias não avisa, 3 avisa, hoje e passado", () => {
-  const cartao = (closing_date) => [{ id: "cart", type: "CREDIT", name: "Nubank", balance: 420.5, closing_date, due_date: "2026-11-27" }];
-  assert.deepEqual(alertasFechamento({ contas: cartao("2026-11-24"), hoje: "2026-11-20" }), []);
-  const r = alertasFechamento({ contas: cartao("2026-11-23"), hoje: "2026-11-20" });
-  assert.deepEqual(r.map((a) => a.chave), ["fechamento:cart:2026-11-23"]);
-  assert.equal(r[0].titulo, "Fatura do Nubank fecha em 3 dias");
-  assert.match(r[0].corpo, /Fatura atual: R\$\s?420,50 · vence 27\/11/);
-  assert.equal(alertasFechamento({ contas: cartao("2026-11-20"), hoje: "2026-11-20" })[0].titulo, "Fatura do Nubank fecha hoje");
-  assert.deepEqual(alertasFechamento({ contas: cartao("2026-11-19"), hoje: "2026-11-20" }), []);
-  assert.deepEqual(alertasFechamento({ contas: [{ id: "cc", type: "BANK", name: "X", closing_date: "2026-11-21" }], hoje: "2026-11-20" }), []);
-});
-
-test("receita: só crédito na conta corrente, não agendado, últimos 2 dias", () => {
-  const cc = [{ id: "cc", type: "BANK", name: "Inter" }, { id: "cart", type: "CREDIT", name: "Nubank" }];
-  const t = (id, over) => ({ id, account_id: "cc", date: "2026-11-20", description: "EMPRESA SA", amount: 3000, scheduled: 0, ...over });
-  const r = alertasReceita({ transacoes: [t("a"), t("b", { date: "2026-11-18" }), t("c", { date: "2026-11-17" }), t("d", { amount: -10 }), t("e", { scheduled: 1 }), t("f", { account_id: "cart" })], contas: cc, hoje: "2026-11-20" });
-  assert.deepEqual(r.map((a) => a.chave), ["receita:a", "receita:b"]);
-  assert.equal(r[0].titulo, "Entrou dinheiro");
-  assert.match(r[0].corpo, /R\$\s?3\.000,00 de EMPRESA SA em Inter/);
-});
-
-test("assinaturas: hoje, amanhã, dia 31 em novembro cai em 30/11 e virada de ano", () => {
-  const ass = (dia, status = "confirmada") => [{ id: "s1", nome: "Netflix", valor: 39.9, dia, status }];
-  const r = alertasAssinaturas({ assinaturas: ass(31), hoje: "2026-11-29" });
-  assert.deepEqual(r.map((a) => a.chave), ["assinatura:s1:2026-11-30"]);
-  assert.equal(r[0].titulo, "Netflix cobra amanhã");
-  assert.match(r[0].corpo, /R\$\s?39,90/);
-  assert.equal(alertasAssinaturas({ assinaturas: ass(30), hoje: "2026-11-30" })[0].titulo, "Netflix cobra hoje");
-  assert.deepEqual(alertasAssinaturas({ assinaturas: ass(30), hoje: "2026-11-27" }), []);
-  assert.deepEqual(alertasAssinaturas({ assinaturas: ass(30, "sugerida"), hoje: "2026-11-30" }), []);
-  assert.deepEqual(alertasAssinaturas({ assinaturas: ass(1), hoje: "2026-12-31" }).map((a) => a.chave), ["assinatura:s1:2027-01-01"]);
-});
-
-test("gerarAlertas concatena os alertas novos a partir de registros", () => {
-  const registros = [{ tabela: "assinaturas", id: "s1", dados: { nome: "Netflix", valor: 39.9, dia: 21, status: "confirmada" } }];
-  const a = gerarAlertas({ resumo: { ...base, limite: null, percentual: null }, transacoes: [], contas, avisos: [], hoje: "2026-11-20", registros });
-  assert.deepEqual(a.map((x) => x.chave), ["assinatura:s1:2026-11-21"]);
-});
-
-test("textos sem nome ou descrição não viram undefined/null", () => {
-  const todos = [
-    ...alertasOrcamentos({ orcamentos: [{ id: "o", valor: 10, categoria_ids: [], periodo: "mensal" }], ctx: ctxCat, transacoes: [gasto("a", "2026-11-02", 50, "x")], contas, resumo: base, hoje: "2026-11-20" }),
-    ...alertasAssinaturas({ assinaturas: [{ id: "s", valor: 5, dia: 20, status: "confirmada" }], hoje: "2026-11-20" }),
-    ...alertasReceita({ transacoes: [{ id: "r", account_id: "cc", date: "2026-11-20", description: null, amount: 10, scheduled: 0 }], contas: [{ id: "cc", type: "BANK", name: "Inter" }], hoje: "2026-11-20" }),
-  ];
-  assert.equal(todos.length, 3);
-  for (const a of todos) assert.doesNotMatch(a.titulo + a.corpo, /undefined|null/);
+  assert.equal(r.titulo, "Resumo da semana");
+  const linhas = r.corpo.split("\n");
+  assert.match(linhas[0], /^Semana: R\$\s?450,00\. Ciclo \(05\/11 a 04\/12\): R\$\s?1\.350,00\.$/);
+  assert.match(linhas[1], /^Geral: R\$\s?1\.350,00 de R\$\s?2\.000,00, faltam R\$\s?650,00\.$/);
+  assert.equal(sp(linhas[2]), "Maiores: Combustível R$ 950,00, Mercado R$ 400,00.");
+  assert.equal(linhas[3], "Para revisar: 2 itens.");
+  assert.match(linhas[4], /^Reserva/);
+  assert.doesNotMatch(r.corpo, /undefined|null/);
 });

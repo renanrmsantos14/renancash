@@ -20,9 +20,10 @@ database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
 binding = "BACKUP"
 bucket_name = "meu-banco-backups"
 
-# Crons em UTC (BRT = UTC-3): sincronização a cada 3 h (minuto 7 para fugir do pico), 07h (fim do silêncio) e domingo 20h (resumo semanal).
+# Cron em UTC (BRT = UTC-3), de 3 em 3 h no minuto 7 (fugir do pico): 22h07, 01h07, 04h07, 07h07 (fim do silêncio: entrega o que ficou retido),
+# 10h07, 13h07, 16h07 e 19h07 BRT (no domingo, resumo semanal). O backup roda no tick de 04h07 BRT.
 [triggers]
-crons = ["7 */3 * * *"]
+crons = ["7 1,4,7,10,13,16,19,22 * * *"]
 
 # Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
 [dev]
