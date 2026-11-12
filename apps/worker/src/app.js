@@ -25,11 +25,11 @@ export function normalizarDesde(valor) {
   return Number.isNaN(t) ? undefined : new Date(t).toISOString();
 }
 
-export function montarResposta({ agora, contas, transacoes, pendentes, investimentos = [] }) {
+export function montarResposta({ agora, contas, transacoes, pendentes }) {
   return {
     agora,
     contas: contas.map((c) => ({
-      id: c.id, tipo: c.type, subtipo: c.subtype, nome: c.name, banco: c.bank, saldo: c.balance,
+      id: c.id, tipo: c.type, nome: c.name, banco: c.bank, saldo: c.balance,
       limite: c.credit_limit, limite_disponivel: c.available_limit, vencimento: c.due_date,
     })),
     transacoes: transacoes.map((t) => ({
@@ -37,6 +37,5 @@ export function montarResposta({ agora, contas, transacoes, pendentes, investime
       status: t.status, categoria: categoriaEfetiva(t), estabelecimento: t.merchant, futura: !!t.scheduled,
     })),
     ids_pendentes: pendentes.map((p) => p.id),
-    investimentos, // lista completa a cada resposta (não segue o `desde`)
   };
 }
