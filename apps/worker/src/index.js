@@ -529,14 +529,12 @@ async function appTransacoes(request, env, url) {
   const desde = normalizarDesde(url.searchParams.get("desde"));
   if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
   const db = env.DB;
-  const [contas, tx, pend, inv] = await db.batch([
-    db.prepare("SELECT id, type, subtype, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
+  const [contas, tx, pend] = await db.batch([
+    db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
     db.prepare(`SELECT ${COLUNAS_TX} ${DE_TX} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
-    db.prepare("SELECT data FROM snapshots WHERE key LIKE 'investimentos:%' ORDER BY key"),
   ]);
-  const investimentos = inv.results.flatMap((s) => JSON.parse(s.data));
-  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results, investimentos }));
+  return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
 }
 
 // ---------- Sincronização ----------

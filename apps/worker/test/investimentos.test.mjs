@@ -19,14 +19,14 @@ async function sincronizarCom(investimentos) {
   });
   await amb.worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 12, 7) }, amb.env, amb.ctx);
   await amb.esperar();
-  const r = await amb.pedir("/api/app/transacoes", { headers: { authorization: "Bearer " + token } });
+  const r = await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } });
   return { amb, token, corpo: await r.json() };
 }
 
 test("investimentos do Pluggy chegam ao app com banco e subtipo da conta", async () => {
   const { corpo } = await sincronizarCom(() => ({ totalPages: 1, results: [{ id: "i1", name: "CDB", type: "FIXED_INCOME", balance: 1500, status: "ACTIVE" }] }));
   assert.deepEqual(corpo.investimentos, [{ id: "i1", nome: "CDB", tipo: "FIXED_INCOME", saldo: 1500, banco: "Banco Santander Pessoa Física" }]);
-  assert.equal(corpo.contas[0].subtipo, "CHECKING_ACCOUNT");
+  assert.equal(corpo.contas[0].subtype, "CHECKING_ACCOUNT");
 });
 
 test("investimentos sem permissão (403) não viram aviso nem derrubam a sincronização", async () => {
