@@ -81,3 +81,12 @@ test("janela do cursor recua 2 minutos", () => {
   assert.equal(inicioDaJanela(null), null);
   assert.equal(inicioDaJanela("2026-11-09T12:00:00.000Z"), "2026-11-09T11:58:00.000Z");
 });
+
+test("revisoes: decisão e memória de destinatário válidas; resposta desconhecida é rejeitada", () => {
+  const base = { tabela: "revisoes" as const, updated_at: "2026-11-09T11:00:00.000Z", deleted_at: null };
+  assert.ok(dadosValidos("revisoes", { tipo: "decisao", tx_id: "t1", resposta: "ajuda", valor: 800, data: "2026-11-09" }));
+  assert.ok(dadosValidos("revisoes", { tipo: "destinatario", destinatario: "JOAO", categoria_id: "c1" }));
+  assert.ok(!dadosValidos("revisoes", { tipo: "decisao", tx_id: "t1", resposta: "voar" }));
+  const r = validarLote([{ ...base, id: "tx:t1", dados: { tipo: "decisao", tx_id: "t1", resposta: "voar" } }], AGORA);
+  assert.ok("rejeitados" in r && r.rejeitados.length === 1);
+});

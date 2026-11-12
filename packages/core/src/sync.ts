@@ -1,7 +1,7 @@
 // Protocolo de sincronização dos dados do usuário (tabela genérica `registros` no D1).
 // Last-write-wins por registro pelo `updated_at` do cliente; o cursor de leitura usa o `server_at` do servidor.
 
-export type Tabela = "categorias" | "regras" | "orcamentos" | "metas" | "dividas" | "assinaturas" | "ajustes" | "lancamentos";
+export type Tabela = "categorias" | "regras" | "orcamentos" | "metas" | "dividas" | "assinaturas" | "ajustes" | "lancamentos" | "revisoes";
 
 export interface Registro {
   tabela: Tabela;
@@ -22,6 +22,9 @@ export const TABELAS: Readonly<Record<Tabela, Esquema>> = {
   dividas: { tipo: ["emprestimo"], nome: "texto", "pessoa?": "texto", sentido: ["devo", "me_devem"], valor_total: "numero", "pago?": "numero" },
   assinaturas: { nome: "texto", valor: "numero", dia: "numero", padrao: "texto", status: ["confirmada", "ignorada"], "categoria_id?": "texto" },
   ajustes: { "category?": "texto", "gasto?": [0, 1], "categoria_id?": "texto", "nota?": "texto" },
+  // Fila "Para revisar": tipo "decisao" (id `tx:<transação>`) guarda a resposta do usuário; tipo "destinatario" (id `dest:<nome>`)
+  // lembra a categoria do Pix enviado a essa pessoa. valor/data/descricao ficam na decisão para a lista de empréstimos não depender da transação.
+  revisoes: { tipo: ["decisao", "destinatario"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda"], "categoria_id?": "texto", "valor?": "numero", "data?": "data", "descricao?": "texto" },
   lancamentos: { data: "data", descricao: "texto", valor: "numero", "categoria_id?": "texto", "carteira?": "texto", "nota?": "texto" },
 };
 
