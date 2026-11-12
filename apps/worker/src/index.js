@@ -1,7 +1,7 @@
 import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
-import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "./mapa.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias } from "./ciclo.js";
 import { gerarAlertas, gravarAlertas, resumoSemanal, emSilencio } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
@@ -577,9 +577,15 @@ async function sincronizar(env, origem) {
         const banco = bancoDoItem(item);
         const aviso = avisoItem(item, banco);
         if (aviso) reconectar.push(aviso);
-        for (const c of contas) {
-          brutas.set(String(c.id), c);
-          linhasContas.push(mapearConta(c, banco, id, ts));
+        const daConexao = contas.map((c) => mapearConta(c, banco, id, ts));
+        for (const c of contas) brutas.set(String(c.id), c);
+        linhasContas.push(...daConexao);
+        // Erro nos investimentos mantém o snapshot anterior; 403/404 (produto não liberado na conexão) não vira aviso.
+        try {
+          await salvarSnapshot(db, "investimentos:" + id, mapearInvestimentos(await api.investimentos(id), banco, daConexao));
+        } catch (e) {
+          if (![403, 404].includes(e.status)) avisos.push(`Investimentos da conexão ${id}: ${e.message}`);
+          console.warn("Investimentos indisponíveis", id, e.message);
         }
       } catch (e) {
         avisos.push(`Conexão ${id}: ${e.message}`);

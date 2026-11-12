@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas } from "../src/mapa.js";
+import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "../src/mapa.js";
 import { valorGasto, valorParcela } from "../public/regras.js";
 
 const HOJE = "2026-11-08", TS = "2026-11-08T12:00:00.000Z";
@@ -74,4 +74,18 @@ test("faturas: aberta vem da conta; a de mesmo vencimento não duplica", () => {
   assert.equal(f.results[0].payment_status, "CLOSED");
   assert.deepEqual(f.open_bill, { available: true, due_date: "2026-11-17", total_amount: 420 });
   assert.equal(mapearFaturas({ balance: 1 }, []).open_bill, null);
+});
+
+test("investimentos: resgate total fica fora; banco vem da conta corrente no Meu Pluggy", () => {
+  const lista = [
+    { id: 1, name: "CDB", type: "FIXED_INCOME", balance: "1500.5", status: "ACTIVE" },
+    { id: 2, name: "Fundo", type: "MUTUAL_FUND", balance: 0, status: "TOTAL_WITHDRAWAL" },
+    { id: 3, type: "EQUITY", balance: null },
+  ];
+  const contas = [{ type: "CREDIT", name: "GOLD" }, { type: "BANK", name: "Banco Santander Pessoa Física ·57-2" }];
+  assert.deepEqual(mapearInvestimentos(lista, null, contas), [
+    { id: "1", nome: "CDB", tipo: "FIXED_INCOME", saldo: 1500.5, banco: "Banco Santander Pessoa Física" },
+  ]);
+  assert.equal(mapearInvestimentos(lista, "Santander", contas)[0].banco, "Santander");
+  assert.equal(mapearInvestimentos(lista, null, [])[0].banco, null);
 });
