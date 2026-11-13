@@ -1,6 +1,6 @@
 "use strict";
 // Service worker do Meu Banco. Troque VERSAO (o "pnpm push" faz isso) para renovar o cache do shell.
-const VERSAO = "v0.0.28";
+const VERSAO = "v0.0.29";
 const SHELL = "shell-" + VERSAO;
 const DADOS = "dados-" + VERSAO;
 const ARQUIVOS = ["/", "/login", "/regras.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
