@@ -5,7 +5,7 @@ import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mape
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
 import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
-import { REGEX_ITEM, idsConexoes, registrarItem, removerItem, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
+import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
@@ -40,7 +40,7 @@ export default {
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
-      else if (ROTAS_APARELHO.has(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
+      else if (ROTAS_APARELHO.has(caminho) || ROTA_CONEXAO.test(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
       } else if (caminho === "/api/sair" && request.method === "POST") {
@@ -403,6 +403,7 @@ async function entregarNotificacoes(request, env, url) {
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
 const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
@@ -436,6 +437,22 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
       return json({ erro: "Conexão não encontrada" }, 404);
     }
     return json({ accessToken: await new ApiCliente(env).connectToken(itemId) });
+  }
+  if (rota === "GET /api/pluggy/items") return json({ conexoes: await listarConexoes(env.DB, env, ts) });
+  if (request.method === "DELETE" && ROTA_CONEXAO.test(caminho)) {
+    const itemId = caminho.slice("/api/pluggy/items/".length);
+    if (!REGEX_ITEM.test(itemId)) return json({ erro: "itemId inválido" }, 400);
+    if (!(await idsConexoes(env.DB, env, ts)).includes(itemId)) {
+      const jaRemovido = await env.DB.prepare("SELECT 1 AS r FROM pluggy_items WHERE id = ?1 AND removido IS NOT NULL").bind(itemId).first("r");
+      return jaRemovido ? json({ ok: true }) : json({ erro: "Conexão não encontrada" }, 404);
+    }
+    try {
+      await new ApiCliente(env).removerItem(itemId);
+    } catch (e) {
+      if (e.status !== 404) return json({ erro: e.message }, 502); // já sumiu no Pluggy: segue e limpa aqui
+    }
+    await esquecerItem(env.DB, itemId, ts);
+    return json({ ok: true });
   }
   if (rota === "POST /api/pluggy/items") {
     const itemId = (await request.json().catch(() => null))?.itemId;
@@ -478,7 +495,7 @@ async function webhookPluggy(request, env, url, ctx) {
   if (acao) {
     const ts = agora();
     const tarefa = acao === "remover"
-      ? removerItem(env.DB, ev.itemId, ts)
+      ? esquecerItem(env.DB, ev.itemId, ts)
       : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
     ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
   }
@@ -668,6 +685,7 @@ async function sincronizar(env, origem) {
     console.error("Sincronização falhou", e?.stack || e);
   }
 
+  await limparRemovidas(db).catch((e) => console.error("Limpeza das conexões removidas", e?.stack || e));
   const mensagem = avisos.join(" | ").slice(0, 2000) || "OK";
   await db
     .prepare("UPDATE sync_log SET finished_at = ?1, ok = ?2, message = ?3 WHERE id = ?4")

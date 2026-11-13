@@ -2,7 +2,7 @@ import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { criarD1 } from "./d1.mjs";
 import { criarAmbiente, criarAparelho, entrarComSenha, simularPluggy, restaurarFetch } from "./ambiente.mjs";
-import { idsConexoes, registrarItem, removerItem } from "../src/pluggy.js";
+import { idsConexoes, registrarItem, esquecerItem } from "../src/pluggy.js";
 import { ApiCliente } from "../src/api.js";
 
 afterEach(restaurarFetch);
@@ -14,7 +14,7 @@ const PLUGGY = { PLUGGY_CLIENT_ID: "id", PLUGGY_CLIENT_SECRET: "segredo" };
 test("idsConexoes copia PLUGGY_ITEM_IDS uma vez e depois usa só o D1", async () => {
   const db = criarD1();
   assert.deepEqual(await idsConexoes(db, { PLUGGY_ITEM_IDS: ` ${ID_A} , ${ID_B} ` }, T), [ID_A, ID_B]);
-  await removerItem(db, ID_B, T);
+  await esquecerItem(db, ID_B, T);
   assert.deepEqual(await idsConexoes(db, { PLUGGY_ITEM_IDS: `${ID_A},${ID_B}` }, T), [ID_A], "removido não volta pelo secret");
   await registrarItem(db, ID_B, T);
   assert.deepEqual((await idsConexoes(db, {}, T)).sort(), [ID_A, ID_B], "registrar de novo reativa");
@@ -42,7 +42,7 @@ test("connect-token pede o accessToken ao Pluggy; itemId desconhecido é 404", a
   assert.equal((await post({ itemId: ID_A })).status, 404);
   await registrarItem(env.DB, ID_A, T);
   assert.equal((await post({ itemId: ID_A })).status, 200);
-  await removerItem(env.DB, ID_A, T);
+  await esquecerItem(env.DB, ID_A, T);
   assert.equal((await post({ itemId: ID_A })).status, 404);
   await registrarItem(env.DB, ID_A, T);
   assert.equal(chamadas.filter((c) => c.caminho === "/connect_token").at(-1).corpo.itemId, ID_A);
@@ -72,7 +72,7 @@ test("connect-token aceita itemId que só existe no secret (instalação nova)",
 test("sincronizar com todas as conexões removidas não busca os ids do secret", async () => {
   const { env, pedir } = criarAmbiente({ ...PLUGGY, PLUGGY_ITEM_IDS: ID_A });
   await idsConexoes(env.DB, env, T);
-  await removerItem(env.DB, ID_A, T);
+  await esquecerItem(env.DB, ID_A, T);
   const { chamadas } = simularPluggy(() => ({ results: [] }));
   await pedir("/api/atualizar", { method: "POST", headers: { origin: "https://meu-banco.test", cookie: await entrarComSenha(pedir) } });
   assert.equal(chamadas.filter((c) => c.caminho.startsWith("/items/") || c.caminho === "/accounts").length, 0);
@@ -123,4 +123,65 @@ test("POST /api/pluggy/items antes da 1ª sincronização mantém as conexões d
   assert.equal((await post(descoberta)).status, 201);
   await descoberta.esperar();
   assert.deepEqual((await idsConexoes(descoberta.env.DB, {}, T)).sort(), [ID_A, ID_B]);
+});
+
+test("GET /api/pluggy/items lista as conexões ativas com banco, status e contas", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  const token = await criarAparelho(env);
+  await registrarItem(env.DB, ID_A, T);
+  await registrarItem(env.DB, ID_B, T);
+  await esquecerItem(env.DB, ID_B, T);
+  await env.DB.prepare("UPDATE pluggy_items SET status = 'UPDATED', conector = 'Inter', atualizado = ?1 WHERE id = ?2").bind(T, ID_A).run();
+  await env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, balance, item_id, updated_at) VALUES ('c1', 'BANK', 'CHECKING_ACCOUNT', 'Conta Inter', 'Inter', 10.5, ?1, ?2)").bind(ID_A, T).run();
+
+  const sem = await pedir("/api/pluggy/items");
+  assert.equal(sem.status, 401);
+  const r = await pedir("/api/pluggy/items", { headers: { authorization: "Bearer " + token } });
+  assert.equal(r.status, 200);
+  const { conexoes } = await r.json();
+  assert.equal(conexoes.length, 1);
+  assert.deepEqual(conexoes[0], {
+    id: ID_A, banco: "Inter", status: "UPDATED", precisaReconectar: false, criado: T, atualizado: T,
+    contas: [{ id: "c1", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Conta Inter", bank: "Inter", balance: 10.5 }],
+  });
+});
+
+test("DELETE /api/pluggy/items/:id apaga no Pluggy, zera as contas, limpa faturas, investimentos e avisos e mantém transações", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  const token = await criarAparelho(env);
+  await registrarItem(env.DB, ID_A, T);
+  await env.DB.prepare("INSERT INTO accounts (id, type, name, bank, balance, item_id, updated_at) VALUES ('c1', 'CREDIT', 'Cartão', 'Inter', 1, ?1, ?2)").bind(ID_A, T).run();
+  await env.DB.prepare("INSERT INTO snapshots (key, data, updated_at) VALUES ('faturas:c1', '[]', ?1), (?2, '[]', ?1)").bind(T, "investimentos:" + ID_A).run();
+  await env.DB.prepare("INSERT INTO transactions (id, account_id, date, description, amount, updated_at) VALUES ('t1', 'c1', '2026-11-01', 'Mercado', -10, ?1)").bind(T).run();
+  const { chamadas } = simularPluggy(() => ({}));
+  const apagar = (id) => pedir("/api/pluggy/items/" + id, { method: "DELETE", headers: { authorization: "Bearer " + token } });
+
+  await env.DB.prepare("INSERT INTO snapshots (key, data, updated_at) VALUES ('avisos', ?1, ?2)")
+    .bind(JSON.stringify([{ item_id: ID_A, banco: "Inter" }, { item_id: ID_B, banco: "Nubank" }]), T).run();
+
+  assert.equal((await apagar("nao-e-uuid")).status, 400);
+  assert.equal((await apagar(ID_B)).status, 404);
+  assert.equal((await apagar(ID_A)).status, 200);
+  assert.equal((await apagar(ID_A)).status, 200, "remover de novo é idempotente");
+  assert.ok(chamadas.some((c) => c.metodo === "DELETE" && c.caminho === "/items/" + ID_A));
+  assert.deepEqual(await idsConexoes(env.DB, {}, T), []);
+  // a conta fica (tipo e banco servem às transações antigas), sem saldo
+  assert.deepEqual(await env.DB.prepare("SELECT type, balance FROM accounts WHERE id = 'c1'").first(), { type: "CREDIT", balance: 0 });
+  assert.deepEqual(JSON.parse(await env.DB.prepare("SELECT data FROM snapshots WHERE key = 'avisos'").first("data")), [{ item_id: ID_B, banco: "Nubank" }]);
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM snapshots WHERE key <> 'avisos'").first("n"), 0);
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM transactions").first("n"), 1);
+  const sync = await (await pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
+  assert.equal(sync.contas.find((c) => c.id === "c1").removida, 1);
+});
+
+test("DELETE /api/pluggy/items/:id segue quando o Pluggy já não tem o item (404) e para em outro erro", async () => {
+  const { env, pedir } = criarAmbiente(PLUGGY);
+  const token = await criarAparelho(env);
+  await registrarItem(env.DB, ID_A, T);
+  await registrarItem(env.DB, ID_B, T);
+  simularPluggy((u) => new Response(JSON.stringify({ message: "x" }), { status: u.pathname.endsWith(ID_A) ? 404 : 500 }));
+  const apagar = (id) => pedir("/api/pluggy/items/" + id, { method: "DELETE", headers: { authorization: "Bearer " + token } });
+  assert.equal((await apagar(ID_A)).status, 200);
+  assert.equal((await apagar(ID_B)).status, 502);
+  assert.deepEqual(await idsConexoes(env.DB, {}, T), [ID_B]);
 });
