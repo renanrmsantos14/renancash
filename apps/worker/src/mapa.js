@@ -1,7 +1,7 @@
 // Traduz o formato do Pluggy para o contrato interno (tabelas accounts/transactions e snapshot de faturas).
 
 const MEU_PLUGGY = /meu\s*pluggy/i;
-const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status do item que pede novo login (OUTDATED = só falha temporária)
+export const PROBLEMA = /LOGIN_ERROR|WAITING_USER/; // status do item que pede novo login (OUTDATED = só falha temporária)
 const ROTULO = { CREDIT: "Cartão", BANK: "Conta" };
 
 const num = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));

@@ -119,6 +119,9 @@ export class ApiCliente {
 
   item(id) { return this.obter(`/items/${encodeURIComponent(id)}`); }
 
+  // Apaga a conexão no Pluggy (credenciais e dados do item).
+  removerItem(id) { return this.#autenticado("DELETE", `/items/${encodeURIComponent(id)}`); }
+
   async contas(itemId) { return (await this.obter("/accounts", { itemId }))?.results || []; }
 
   // Investimentos da conexão (CDB, fundos, ações...). Página de 500; para depois de `maxPaginas`.
