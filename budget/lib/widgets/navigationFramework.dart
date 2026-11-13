@@ -24,6 +24,7 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/homePage/homePage.dart';
+import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/notificationsPage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/onBoardingPage.dart';
@@ -365,7 +366,11 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    HomePage(key: homePageStateKey), // 0
+    // Celular: Início nova (fixa); computador: seções antigas até a etapa do PainelDesktop.
+    Builder(
+        builder: (context) => ehDesktop(context)
+            ? HomePage(key: homePageStateKey)
+            : const InicioEditorial()), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
     Builder(
         builder: (context) => ehDesktop(context)

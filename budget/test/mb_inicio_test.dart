@@ -87,7 +87,57 @@ void main() {
     expect(haQuanto(DateTime(2026, 11, 9, 13), _agora), 'há 2 h');
   });
 
-  testWidgets('InicioEditorial mostra Disponível agora e CONTAS', (t) async {
+  Future<void> abrir(WidgetTester t, ModeloInicio m) async {
+    appStateSettings = {
+      'materialYou': false,
+      'accentSystemColor': false,
+      'batterySaver': false,
+      'increaseTextContrast': false,
+      'forceFullDarkBackground': false,
+    };
+    await t.pumpWidget(MaterialApp(
+      theme: temaEditorial(Brightness.light),
+      home: Scaffold(body: InicioEditorial.comModelo(m)),
+    ));
+    await t.pump(const Duration(seconds: 2));
+  }
+
+  ModeloInicio comCiclo(Map<String, dynamic> ciclo) => montarModeloInicio(
+      ciclo: ciclo, contas: [
+        {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Inter', 'balance': 1000.0}
+      ], faturas: {}, sincronizadoEm: null, ultimas: [], nome: 'Renan', agora: _agora);
+
+  testWidgets('cartão mostra o restante do ciclo e o ritmo diário', (t) async {
+    await abrir(t, _montar());
+    expect(find.text('Para gastar no ciclo'), findsOneWidget);
+    expect(find.text('R\$ 3.700,00'), findsOneWidget);
+    expect(find.text('Gasto R\$ 1.300,00 de R\$ 5.000,00'), findsOneWidget);
+    expect(find.text('faltam 16 dias'), findsOneWidget);
+    // 3.700 / 17 dias (hoje conta).
+    expect(find.text('Pode gastar R\$ 217,65/dia'), findsOneWidget);
+    expect(find.text('Contas e cartões'), findsOneWidget);
+    expect(find.text('Últimas'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('gasto acima do limite mostra o excedente, sem ritmo diário', (t) async {
+    await abrir(t, comCiclo({'consumido': 5320.0, 'limite': 5000.0, 'diasRestantes': 0}));
+    expect(find.text('Acima do limite do ciclo'), findsOneWidget);
+    expect(find.text('R\$ 320,00'), findsOneWidget);
+    expect(find.text('último dia'), findsOneWidget);
+    expect(find.textContaining('/dia'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('sem limite mostra o saldo das contas', (t) async {
+    await abrir(t, comCiclo({'consumido': 200.0}));
+    expect(find.text('Disponível nas contas · Inter'), findsOneWidget);
+    expect(find.text('R\$ 1.000,00'), findsWidgets);
+    expect(find.text('Para gastar no ciclo'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('InicioEditorial mostra Contas e Cartões em grupos', (t) async {
     appStateSettings = {
       'materialYou': false,
       'accentSystemColor': false,
@@ -100,8 +150,8 @@ void main() {
       home: Scaffold(body: InicioEditorial.comModelo(_montar())),
     ));
     await t.pump(const Duration(seconds: 2));
-    expect(find.textContaining('Disponível agora'), findsOneWidget);
     expect(find.text('Contas'), findsOneWidget);
+    expect(find.text('Cartões'), findsOneWidget);
     expect(find.text('Olá, Renan'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
@@ -121,8 +171,8 @@ void main() {
       home: Scaffold(body: InicioEditorial.comModelo(vazio)),
     ));
     await t.pump(const Duration(seconds: 2));
-    expect(find.text('Ainda sem dados. Toque em Atualizar.'), findsOneWidget);
-    expect(find.textContaining('Disponível agora'), findsNothing);
+    expect(find.text('Ainda sem dados. Puxe a tela para atualizar.'), findsOneWidget);
+    expect(find.textContaining('Disponível'), findsNothing);
     await t.pumpWidget(const SizedBox());
   });
   test('ModeloInicio: mesmo conteúdo é igual, saldo ou nome diferente não', () {

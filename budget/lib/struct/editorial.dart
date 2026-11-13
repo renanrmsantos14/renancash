@@ -201,6 +201,8 @@ class CartaoEscuro extends StatelessWidget {
               bg: e.card,
               surf: e.card,
               acc: e.accCartao,
+              // Estouro no cartão em terracota, sem o vermelho de erro.
+              warn: const Color(0xFFF0936A),
               line: const Color.fromRGBO(255, 255, 255, .12),
               chip: const Color.fromRGBO(255, 255, 255, .08)),
         ]),

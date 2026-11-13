@@ -3,6 +3,7 @@ import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editHomePage.dart';
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
@@ -428,9 +429,10 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
         NavBarShortcutSelection(
           shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "home",
-          onSettings: () {
-            pushRoute(context, EditHomePage());
-          },
+          // Celular: a Início é fixa (sem editor de seções).
+          onSettings: ehDesktop(context)
+              ? () => pushRoute(context, EditHomePage())
+              : null,
         ),
         NavBarShortcutSelection(
           shortcutAppSettingKey: shortcutAppSettingKey,
