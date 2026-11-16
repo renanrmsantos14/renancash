@@ -1,6 +1,5 @@
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/database/tables.dart';
-import 'package:budget/pages/sharedBudgetSettings.dart';
 import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/settings.dart';
@@ -1135,9 +1134,6 @@ class _BudgetSpenderSummaryState extends State<BudgetSpenderSummary> {
                         });
                       }
                     }
-                  },
-                  onLongPress: () {
-                    memberPopup(context, spender.member);
                   },
                   color: Colors.transparent,
                   child: AnimatedContainer(

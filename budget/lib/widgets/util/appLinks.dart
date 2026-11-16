@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
-import 'package:budget/pages/addEmailTemplate.dart';
 import 'package:budget/pages/addTransactionPage.dart';
-import 'package:budget/pages/autoTransactionsPageEmail.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/pareamento.dart';
 import 'package:budget/struct/settings.dart';
@@ -255,26 +253,6 @@ Future processAddTransactionRouteFromParams(
   });
 }
 
-Future processMessageToParse(
-    BuildContext context, Map<String, String?> params) async {
-  String messageString = params["messageToParse"].toString();
-  recentCapturedNotifications.insert(0, messageString);
-  recentCapturedNotifications.take(50);
-  dynamic result = await queueTransactionFromMessage(
-    messageString,
-    willPushRoute: true,
-    dateTime: await getDateTimeFromParams(params, context),
-  );
-  if (result == false) {
-    pushRoute(
-      null,
-      AddEmailTemplate(
-        messagesList: recentCapturedNotifications,
-      ),
-    );
-  }
-}
-
 Future executeAppLink(BuildContext? context, Uri uri,
     {Function(dynamic)? onDebug}) async {
   if (uri.scheme == 'meubanco') {
@@ -296,10 +274,7 @@ Future executeAppLink(BuildContext? context, Uri uri,
   switch (endPoint) {
     case "addTransaction":
       if (context != null) {
-        if (params["messageToParse"] != null &&
-            appStateSettings["notificationScanningDebug"] == true) {
-          processMessageToParse(context, params);
-        } else if (params["JSON"] != null) {
+        if (params["JSON"] != null) {
           try {
             Map<String, dynamic> jsonData = json.decode(params["JSON"] ?? "");
             for (dynamic transactionObject in jsonData["transactions"]) {
@@ -328,10 +303,7 @@ Future executeAppLink(BuildContext? context, Uri uri,
       break;
     case "addTransactionRoute":
       if (context != null) {
-        if (params["messageToParse"] != null &&
-            appStateSettings["notificationScanningDebug"] == true) {
-          processMessageToParse(context, params);
-        } else if (params["JSON"] != null) {
+        if (params["JSON"] != null) {
           try {
             Map<String, dynamic> jsonData = json.decode(params["JSON"] ?? "");
             for (dynamic transactionObject in jsonData["transactions"]) {

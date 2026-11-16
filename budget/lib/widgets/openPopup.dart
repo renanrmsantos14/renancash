@@ -1,4 +1,5 @@
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -62,38 +63,11 @@ Future<T?> openPopup<T extends Object?>(
     },
     transitionDuration: Duration(milliseconds: 200),
     pageBuilder: (_, __, ___) {
-      double borderRadius = getPlatform() == PlatformOS.isIOS ? 10 : 25;
-      Color tertiaryButtonColor = appStateSettings["materialYou"] == false &&
-              Theme.of(context).brightness == Brightness.light
-          ? dynamicPastel(context, Theme.of(context).colorScheme.tertiary,
-              amount: 0.3)
-          : appStateSettings["materialYou"]
-              ? dynamicPastel(context, Theme.of(context).colorScheme.tertiary,
-                  amount: 0.15)
-              : dynamicPastel(
-                  context, Theme.of(context).colorScheme.tertiaryContainer,
-                  amount: 0.15);
-      Color onTertiaryButtonColor = appStateSettings["materialYou"] ||
-              Theme.of(context).brightness == Brightness.light
-          ? dynamicPastel(context, Theme.of(context).colorScheme.onTertiary,
-              amount: 0.25)
-          : Theme.of(context).colorScheme.onTertiaryContainer;
-      Color primaryButtonColor = appStateSettings["materialYou"] == false &&
-              Theme.of(context).brightness == Brightness.light
-          ? dynamicPastel(context, Theme.of(context).colorScheme.primary,
-              amount: 0.3)
-          : appStateSettings["materialYou"]
-              ? dynamicPastel(context, Theme.of(context).colorScheme.primary,
-                  amount: 0.15)
-              : Theme.of(context).colorScheme.secondaryContainer;
-      Color onPrimaryButtonColor = appStateSettings["materialYou"] ||
-              Theme.of(context).brightness == Brightness.light
-          ? dynamicPastel(
-              context,
-              Theme.of(context).colorScheme.onPrimary,
-              amount: 0.25,
-            )
-          : Theme.of(context).colorScheme.onSecondaryContainer;
+      // Editorial: ação principal na cor do texto; as demais em chip.
+      double borderRadius = 20;
+      final e = cores(context);
+      Color tertiaryButtonColor = e.chip;
+      Color onTertiaryButtonColor = e.tx;
       return WillPopScope(
         //Stop back button
         onWillPop: () async => barrierDismissible,
@@ -108,13 +82,9 @@ Future<T?> openPopup<T extends Object?>(
                 bottom: MediaQuery.paddingOf(context).bottom + 20,
               ),
               decoration: BoxDecoration(
-                color: appStateSettings["materialYou"]
-                    ? dynamicPastel(context,
-                        Theme.of(context).colorScheme.secondaryContainer,
-                        amount: 0.5)
-                    : getColor(context, "lightDarkAccent"),
+                color: e.bg,
                 borderRadius: BorderRadiusDirectional.circular(borderRadius),
-                boxShadow: boxShadowGeneral(context),
+                border: Border.all(color: e.line),
               ),
               child: SingleChildScrollView(
                 child: Builder(builder: (context) {
@@ -135,9 +105,8 @@ Future<T?> openPopup<T extends Object?>(
                                   scale: iconScale ?? 1,
                                   child: Icon(
                                     icon,
-                                    size: 65,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
+                                    size: 36,
+                                    color: e.mu,
                                   ),
                                 ),
                               ),
@@ -148,12 +117,11 @@ Future<T?> openPopup<T extends Object?>(
                                 child: TextFont(
                                   textAlign: TextAlign.center,
                                   text: title,
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
                                   maxLines: 5,
-                                  textColor: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
+                                  textColor: e.tx,
                                 ),
                               ),
                             if (subtitle != null)
@@ -163,12 +131,10 @@ Future<T?> openPopup<T extends Object?>(
                                 child: TextFont(
                                   textAlign: TextAlign.center,
                                   text: subtitle,
-                                  fontSize: 21,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
                                   maxLines: 5,
-                                  textColor: Theme.of(context)
-                                      .colorScheme
-                                      .onTertiaryContainer,
+                                  textColor: e.tx,
                                 ),
                               ),
                             if (beforeDescriptionWidget != null)
@@ -180,8 +146,9 @@ Future<T?> openPopup<T extends Object?>(
                                 child: TextFont(
                                   textAlign: TextAlign.center,
                                   text: description,
-                                  fontSize: 16.5,
+                                  fontSize: 15,
                                   maxLines: 100,
+                                  textColor: e.mu,
                                 ),
                               ),
                             if (descriptionWidget != null) descriptionWidget,
@@ -231,8 +198,9 @@ Future<T?> openPopup<T extends Object?>(
                                                       horizontal: 8.0),
                                               child: Button(
                                                 expandedLayout: true,
-                                                color: primaryButtonColor,
-                                                textColor: onPrimaryButtonColor,
+                                                color: tertiaryButtonColor,
+                                                textColor:
+                                                    onTertiaryButtonColor,
                                                 label: onExtraLabel,
                                                 onTap: onExtra ?? () {},
                                               ),
@@ -247,8 +215,6 @@ Future<T?> openPopup<T extends Object?>(
                                                       .symmetric(
                                                       horizontal: 8.0),
                                               child: Button(
-                                                color: primaryButtonColor,
-                                                textColor: onPrimaryButtonColor,
                                                 label: onSubmitLabel,
                                                 onTap: onSubmit ?? () {},
                                               ),

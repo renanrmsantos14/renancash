@@ -4,7 +4,16 @@
 // Os PNGs vão para .verificacao/prints/ (fora do git; a renderização muda por máquina).
 import 'dart:io';
 
+import 'package:budget/database/tables.dart';
 import 'package:budget/pages/ajustesInicioPage.dart';
+import 'package:budget/pages/settingsPage.dart';
+import 'package:budget/widgets/dateDivider.dart';
+import 'package:budget/widgets/framework/popupFramework.dart';
+import 'package:budget/widgets/openBottomSheet.dart';
+import 'package:budget/widgets/openPopup.dart';
+import 'package:budget/widgets/settingsContainers.dart';
+import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
+import 'package:provider/provider.dart';
 import 'package:budget/pages/aparenciaPage.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/pages/homePage/inicioEditorial.dart';
@@ -15,6 +24,7 @@ import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/struct/mbSync/conexoes.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareadoConferido;
@@ -69,8 +79,76 @@ ModeloInicio _modelo() => montarModeloInicio(
 
 final _pular = Platform.environment['PRINTS'] != '1';
 
+// Telas herdadas do Cashew: sem EasyLocalization os textos .tr() saem como
+// chaves; o que importa nestes prints é o componente compartilhado.
+Map<String, dynamic> _padroes = {};
+Map<String, dynamic> _ajustesHerdados(String modo) => {
+      ..._padroes,
+      'materialYou': false,
+      'accentSystemColor': false,
+      'batterySaver': false,
+      'increaseTextContrast': false,
+      'forceFullDarkBackground': false,
+      'outlinedIcons': true,
+      'font': 'Geist',
+      'selectedWalletPk': '0',
+      'showExtraInfoText': true,
+      'nonCompactTransactions': false,
+      'netSpendingDayTotal': false,
+      'customCurrencyAmounts': <String, dynamic>{},
+      'locale': 'pt',
+      'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
+    };
+
+Transaction _tx(String pk, String nome, double valor, DateTime dia,
+        {bool receita = false, String cat = 'c1'}) =>
+    Transaction(
+      transactionPk: pk,
+      name: nome,
+      amount: valor,
+      note: '',
+      categoryFk: cat,
+      walletFk: '0',
+      dateCreated: dia,
+      income: receita,
+      paid: true,
+      skipPaid: true,
+    );
+
+TransactionCategory _cat(String pk, String nome, String cor, String icone) =>
+    TransactionCategory(
+        categoryPk: pk,
+        name: nome,
+        colour: cor,
+        iconName: icone,
+        dateCreated: DateTime(2026),
+        order: 0,
+        income: false,
+        methodAdded: null);
+
+Widget _herdado(String modo, Widget home) {
+  final b = modo == 'claro' ? Brightness.light : Brightness.dark;
+  return Provider<AllWallets>.value(
+    value: AllWallets(list: const [], indexedByPk: const {}),
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: temaFlutter(temaAtivo(b)),
+      home: home,
+    ),
+  );
+}
+
+Widget _botao(String rotulo, void Function(BuildContext) abrir) => Scaffold(
+      body: Builder(
+        builder: (c) => Center(
+          child: TextButton(onPressed: () => abrir(c), child: Text(rotulo)),
+        ),
+      ),
+    );
+
 void main() {
   setUpAll(() async {
+    _padroes = await getDefaultPreferences();
     const f = 'assets/fonts/';
     await _fonte('Geist', [
       '${f}Geist-Regular.ttf',
@@ -322,6 +400,137 @@ void main() {
       await t.pump(const Duration(seconds: 1));
       await expectLater(find.byType(MaterialApp),
           matchesGoldenFile('../../.verificacao/prints/contas_conectadas_$modo.png'));
+    });
+  }
+
+  for (final modo in ['claro', 'escuro']) {
+    testWidgets('print configurações $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_herdado(modo, const MoreOptionsPagePreferences()));
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/configuracoes_$modo.png'));
+    });
+
+    testWidgets('print mais $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 900 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_herdado(
+          modo, const Scaffold(body: SingleChildScrollView(child: MorePages()))));
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/mais_$modo.png'));
+    });
+
+    testWidgets('print folha e popup $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_herdado(
+          modo,
+          _botao(
+              'abrir',
+              (c) => openBottomSheet(
+                    c,
+                    PopupFramework(
+                      title: 'Ordenar por',
+                      subtitle: 'Escolha como a lista aparece',
+                      child: Column(children: [
+                        SettingsContainer(
+                            title: 'Data', icon: Icons.event_outlined, onTap: () {}),
+                        SettingsContainer(
+                            title: 'Valor', icon: Icons.payments_outlined, onTap: () {}),
+                        SettingsContainerSwitch(
+                            title: 'Agrupar por dia',
+                            icon: Icons.view_day_outlined,
+                            initialValue: true,
+                            onSwitched: (_) {}),
+                      ]),
+                    ),
+                  ))));
+      await t.tap(find.text('abrir'));
+      // A folha (sliding_sheet) anima em vários quadros.
+      for (var i = 0; i < 20; i++) {
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/folha_$modo.png'));
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('print popup $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_herdado(
+          modo,
+          _botao(
+              'popup',
+              (c) => openPopup(c,
+                  icon: Icons.delete_outlined,
+                  title: 'Excluir transação?',
+                  description: 'Essa ação não pode ser desfeita.',
+                  onCancelLabel: 'Cancelar',
+                  onCancel: () {},
+                  onSubmitLabel: 'Excluir',
+                  onSubmit: () {}))));
+      await t.tap(find.text('popup'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/popup_$modo.png'));
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('print lista de transações $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 520 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final cats = {
+        'c1': _cat('c1', 'Mercado', '0xff4caf50', 'groceries.png'),
+        'c2': _cat('c2', 'Transporte', '0xff2196f3', 'car.png'),
+        'c3': _cat('c3', 'Renda', '0xff9c27b0', 'coin.png'),
+      };
+      final hoje = DateTime(2026, 11, 12);
+      final ontem = DateTime(2026, 11, 11);
+      final dias = [
+        (hoje, '−R\$ 210,20', [
+          _tx('a', 'Pão de Açúcar', -182.3, hoje),
+          _tx('b', 'Uber', -27.9, hoje, cat: 'c2'),
+        ]),
+        (ontem, '', [_tx('c', 'Salário', 6500, ontem, receita: true, cat: 'c3')]),
+      ];
+      await t.pumpWidget(_herdado(
+          modo,
+          Scaffold(
+            body: ListView(children: [
+              for (final (dia, total, txs) in dias) ...[
+                DateDivider(date: dia, info: total),
+                for (final tx in txs)
+                  TransactionEntry(
+                    openPage: const SizedBox(),
+                    transaction: tx,
+                    category: cats[tx.categoryFk],
+                    listID: 'print',
+                  ),
+              ],
+            ]),
+          )));
+      // Ícones das categorias são PNG: decodificar fora do relógio falso.
+      await t.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));
+      await t.pump(const Duration(seconds: 2));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/transacoes_$modo.png'));
     });
   }
 }

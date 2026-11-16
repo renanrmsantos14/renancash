@@ -6,6 +6,7 @@ import 'package:budget/struct/listenableSelector.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/countNumber.dart';
 import 'package:budget/widgets/dateDivider.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/tappable.dart';
@@ -137,13 +138,16 @@ class _TransactionEntriesState extends State<TransactionEntries> {
               : false
           : true;
 
+  // Ordem do item na lista montada agora: só os primeiros entram em cascata.
+  int _ordemEntrada = 0;
+
   Widget createTransactionEntry(
     List<TransactionWithCategory> transactionListForDay,
     TransactionWithCategory item,
     int index,
     bool enableFutureTransactionsDivider,
   ) {
-    return TransactionEntry(
+    final entry = TransactionEntry(
       transactionBefore:
           nullIfIndexOutOfRange(transactionListForDay, index - 1)?.transaction,
       transactionAfter:
@@ -172,6 +176,11 @@ class _TransactionEntriesState extends State<TransactionEntries> {
       showExcludedBudgetTag: widget.showExcludedBudgetTag,
       enableFutureTransactionsDivider: enableFutureTransactionsDivider,
     );
+    return EntradaSuave(
+      key: ValueKey(item.transaction.transactionPk),
+      indice: _ordemEntrada++,
+      child: entry,
+    );
   }
 
   Widget transactionEntryListBuilder(double? initialNetValue) {
@@ -195,6 +204,7 @@ class _TransactionEntriesState extends State<TransactionEntries> {
       builder: (context, snapshot) {
         if (snapshot.data != null && snapshot.hasData) {
           List<TransactionWithCategory> data = snapshot.data ?? [];
+          _ordemEntrada = 0;
           int totalNumberTransactionsAll = data.length;
           if (loadAll == false)
             data = data.take(widget.initialLoadLimit ?? 30).toList();

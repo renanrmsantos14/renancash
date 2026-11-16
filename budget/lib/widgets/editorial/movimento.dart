@@ -1,4 +1,6 @@
+import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/settings.dart';
 import 'package:flutter/material.dart';
 
 const Curve curvaEditorial = Cubic(.23, 1, .32, 1);
@@ -199,6 +201,65 @@ class _ToqueEscalaState extends State<ToqueEscala> {
           curve: curvaEditorial,
           child: widget.child,
         ),
+      ),
+    );
+  }
+}
+
+/// Entrada curta de itens de lista e cartões: fade + 8 px em 200 ms, em
+/// cascata de 30 ms só nos primeiros [EntradaSuave.cascata] itens; os demais
+/// aparecem direto. Não bloqueia toques e some com "reduzir movimento" ou com
+/// as animações do app desligadas.
+class EntradaSuave extends StatefulWidget {
+  const EntradaSuave({super.key, required this.child, this.indice = 0});
+
+  final Widget child;
+  final int indice;
+
+  static const cascata = 8;
+
+  @override
+  State<EntradaSuave> createState() => _EntradaSuaveState();
+}
+
+class _EntradaSuaveState extends State<EntradaSuave>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _c;
+  Animation<double>? _v;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.indice >= EntradaSuave.cascata ||
+        appStateSettings["appAnimations"] != AppAnimations.all.index) return;
+    // Atraso dentro da própria animação (Interval), sem Timer pendente.
+    final atraso = 30 * widget.indice;
+    final c = AnimationController(
+        vsync: this, duration: Duration(milliseconds: 200 + atraso))
+      ..forward();
+    _c = c;
+    _v = CurvedAnimation(
+        parent: c,
+        curve: Interval(atraso / (200 + atraso), 1, curve: curvaEditorial));
+  }
+
+  @override
+  void dispose() {
+    _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _v;
+    if (v == null || semMovimento(context)) return widget.child;
+    return FadeTransition(
+      opacity: v,
+      child: AnimatedBuilder(
+        animation: v,
+        child: widget.child,
+        builder: (context, child) => Transform.translate(
+            offset: Offset(0, 8 * (1 - v.value)), child: child),
       ),
     );
   }

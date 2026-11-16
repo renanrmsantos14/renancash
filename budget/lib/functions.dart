@@ -25,6 +25,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:universal_io/io.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/randomConstants.dart';
 
@@ -1012,18 +1013,28 @@ Future<dynamic> pushRoute(BuildContext? context, Widget page,
   //   );
   // }
 
+  // Transição única do app: fade + 8 px para cima, curta; sem movimento com
+  // "reduzir movimento".
+  final parado = semMovimento(contextToPush);
   return await Navigator.push(
     contextToPush,
     PageRouteBuilder(
       opaque: true,
-      transitionDuration: Duration(milliseconds: 300),
-      reverseTransitionDuration: Duration(milliseconds: 125),
+      transitionDuration: Duration(milliseconds: parado ? 0 : 220),
+      reverseTransitionDuration: Duration(milliseconds: parado ? 0 : 160),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        final tween = Tween(begin: Offset(0, 0.05), end: Offset.zero)
-            .chain(CurveTween(curve: Curves.easeOut));
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: FadeTransition(opacity: animation, child: child),
+        final a = CurvedAnimation(
+            parent: animation,
+            curve: curvaEditorial,
+            reverseCurve: Curves.easeIn);
+        return FadeTransition(
+          opacity: a,
+          child: AnimatedBuilder(
+            animation: a,
+            child: child,
+            builder: (context, child) => Transform.translate(
+                offset: Offset(0, 8 * (1 - a.value)), child: child),
+          ),
         );
       },
       pageBuilder: (context, animation, secondaryAnimation) {

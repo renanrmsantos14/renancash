@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/scrollbarWrap.dart';
@@ -464,7 +466,8 @@ class PageFrameworkState extends State<PageFramework>
                   horizontal: horizontalPadding),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  ...widget.listWidgets!,
+                  for (final (i, w) in widget.listWidgets!.indexed)
+                    EntradaSuave(indice: i, child: w),
                   widget.bottomPadding
                       ? SizedBox(
                           height: MediaQuery.paddingOf(context).bottom + 15)
@@ -592,11 +595,10 @@ class PageFrameworkState extends State<PageFramework>
           child: Transform.rotate(
             angle: pi / 2,
             child: Material(
-              elevation: 10,
-              shadowColor:
-                  Theme.of(context).colorScheme.shadow.withOpacity(0.8),
-              borderRadius: BorderRadiusDirectional.circular(
-                  getPlatform() == PlatformOS.isIOS ? 10 : 15),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: cores(context).line)),
+              clipBehavior: Clip.antiAlias,
               child: ButtonIcon(
                 icon: appStateSettings["outlinedIcons"]
                     ? Icons.chevron_left_outlined
@@ -646,12 +648,12 @@ class PageFrameworkState extends State<PageFramework>
             double iconInset = 7;
             // same as the FAB height
             double height = getIsFullScreen(context) == false ? 60 : 70;
-            double borderRadius = getPlatform() == PlatformOS.isIOS ? 10 : 15;
+            double borderRadius = 12;
             return Material(
-              elevation: 10,
-              shadowColor:
-                  Theme.of(context).colorScheme.shadow.withOpacity(0.8),
-              borderRadius: BorderRadiusDirectional.circular(borderRadius),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  side: BorderSide(color: cores(context).line)),
+              clipBehavior: Clip.antiAlias,
               child: Container(
                 height: height,
                 width: size,
@@ -865,9 +867,9 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
     Widget appBar = SliverAppBar(
       surfaceTintColor: Colors.transparent,
       bottom: bottom,
-      shadowColor: getPlatform() == PlatformOS.isIOS
-          ? Colors.transparent
-          : Theme.of(context).shadowColor.withAlpha(130),
+      // Visual plano: sem sombra quando o conteúdo passa por baixo.
+      shadowColor: Colors.transparent,
+      scrolledUnderElevation: 0,
       leading: backButtonEnabled == true && animationControllerOpacity != null
           ? FadeTransition(
               opacity: animationControllerOpacity!,
@@ -952,8 +954,9 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
                             : titleString,
                         fontSize: centeredTitleSmallWithDefault
                             ? (enableDoubleColumn(context) ? 19 : 16)
-                            : 22,
-                        fontWeight: FontWeight.bold,
+                            : 20,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.4,
                         textColor: textColor == null
                             ? Theme.of(context).colorScheme.onSecondaryContainer
                             : textColor,

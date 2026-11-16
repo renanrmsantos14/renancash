@@ -1,4 +1,5 @@
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -146,16 +147,13 @@ class TextInput extends StatelessWidget {
       child: Padding(
         padding: padding,
         child: Container(
+          // Campo editorial: fundo surf e raio 12; a borda fina (e a do foco,
+          // no acento) vem do inputDecorationTheme.
           decoration: BoxDecoration(
             color: bubbly == false
                 ? Colors.transparent
-                : backgroundColor ??
-                    (appStateSettings["materialYou"]
-                        ? Theme.of(context).colorScheme.secondaryContainer
-                        : getColor(context, "canvasContainer")),
-            borderRadius: borderRadius ??
-                BorderRadiusDirectional.circular(
-                    getPlatform() == PlatformOS.isIOS ? 8 : 15),
+                : backgroundColor ?? cores(context).surf,
+            borderRadius: borderRadius ?? BorderRadiusDirectional.circular(12),
           ),
           child: Center(
             child: TextFormField(
@@ -241,7 +239,7 @@ class TextInput extends StatelessWidget {
                             Icon(
                               icon,
                               size: 20,
-                              color: Theme.of(context).colorScheme.secondary,
+                              color: cores(context).mu,
                             ),
                           ],
                         ),
@@ -250,8 +248,8 @@ class TextInput extends StatelessWidget {
                     ? icon != null
                         ? Icon(
                             icon,
-                            size: 30,
-                            color: Theme.of(context).colorScheme.secondary,
+                            size: 22,
+                            color: cores(context).mu,
                           )
                         : null
                     : null,
@@ -259,15 +257,8 @@ class TextInput extends StatelessWidget {
                     ? UnderlineInputBorder(
                         borderRadius:
                             BorderRadius.vertical(top: Radius.circular(10)),
-                        borderSide: BorderSide(
-                          color: appStateSettings["materialYou"]
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withOpacity(0.2)
-                              : getColor(context, "lightDarkAccentHeavy"),
-                          width: 2,
-                        ),
+                        borderSide:
+                            BorderSide(color: cores(context).line, width: 1),
                       )
                     : null,
                 hoverColor: bubbly == false
@@ -281,8 +272,8 @@ class TextInput extends StatelessWidget {
                         borderRadius:
                             BorderRadius.vertical(top: Radius.circular(5.0)),
                         borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.secondary,
-                          width: 2,
+                          color: cores(context).acc,
+                          width: 1.5,
                         ),
                       )
                     : null,

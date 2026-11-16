@@ -67,7 +67,8 @@ class StickyLabelDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: color == null ? Theme.of(context).colorScheme.background : color,
-      padding: EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 5),
+      padding: EdgeInsetsDirectional.only(
+          start: 18, end: 18, top: 10, bottom: 4),
       alignment: AlignmentDirectional.centerStart,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -76,6 +77,7 @@ class StickyLabelDivider extends StatelessWidget {
             child: TextFont(
               text: info,
               fontSize: fontSize,
+              fontWeight: FontWeight.w500,
               textColor: getColor(context, "textLight"),
               maxLines: maxLines,
             ),
@@ -84,6 +86,7 @@ class StickyLabelDivider extends StatelessWidget {
             TextFont(
               text: extraInfo ?? "",
               fontSize: fontSize,
+              fontWeight: FontWeight.w500,
               textColor: getColor(context, "textLight"),
               textAlign: TextAlign.end,
             ),

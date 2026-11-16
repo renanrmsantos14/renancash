@@ -1,5 +1,5 @@
-import 'package:budget/colors.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
@@ -141,7 +141,7 @@ class PlatformSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     if (getPlatform() == PlatformOS.isIOS) {
       return CupertinoSwitch(
-        activeColor: Theme.of(context).colorScheme.primary,
+        activeColor: cores(context).acc,
         value: value,
         onChanged: (_) {
           onTap();
@@ -149,7 +149,6 @@ class PlatformSwitch extends StatelessWidget {
       );
     } else {
       return Switch(
-        activeColor: Theme.of(context).colorScheme.primary,
         value: value,
         onChanged: (_) {
           onTap();
@@ -198,7 +197,6 @@ class SettingsContainerOpenPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ColorScheme colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: isOutlined == false || isOutlined == null
           ? EdgeInsetsDirectional.zero
@@ -209,9 +207,9 @@ class SettingsContainerOpenPage extends StatelessWidget {
         closedColor:
             backgroundColor ?? Theme.of(context).colorScheme.background,
         borderRadius: isOutlined == true
-            ? 10
+            ? 12
             : getIsFullScreen(context)
-                ? 20
+                ? 12
                 : 0,
         button: (openContainer) {
           return SettingsContainer(
@@ -249,9 +247,7 @@ class SettingsContainerOpenPage extends StatelessWidget {
                 : Row(
                     children: [
                       if (afterWidget != null) afterWidget!,
-                      MoreChevron(
-                          color: colorScheme.secondary,
-                          size: isOutlined == true ? 20 : 30),
+                      MoreChevron(color: cores(context).mu, size: 20),
                     ],
                   ),
             isOutlined: isOutlined,
@@ -344,7 +340,7 @@ class _SettingsContainerDropdownState extends State<SettingsContainerDropdown> {
               : widget.initial,
           items: widget.items,
           onChanged: widget.onChanged,
-          backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+          backgroundColor: cores(context).chip,
           getLabel: widget.getLabel,
           faintValues: widget.faintValues,
         ),
@@ -387,19 +383,17 @@ class SettingsContainerOutlined extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double defaultIconSize = 25;
+    double defaultIconSize = 22;
+    final e = cores(context);
+    final cartao = BoxDecoration(
+      color: e.surf,
+      border: Border.all(color: e.line),
+      borderRadius: BorderRadiusDirectional.circular(12),
+    );
     Widget content;
     if (isOutlinedColumn == true) {
       content = Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: (appStateSettings["materialYou"]
-                ? Theme.of(context).colorScheme.secondary.withOpacity(0.5)
-                : getColor(context, "lightDarkAccentHeavy")),
-            width: 2,
-          ),
-          borderRadius: BorderRadiusDirectional.circular(10),
-        ),
+        decoration: cartao,
         padding: EdgeInsetsDirectional.only(
           start: horizontalPadding ?? 3,
           end: horizontalPadding ?? 3,
@@ -415,15 +409,16 @@ class SettingsContainerOutlined extends StatelessWidget {
                     scale: iconScale ?? 1,
                     child: Icon(
                       icon,
-                      size: iconSize ?? defaultIconSize + 5,
-                      color: Theme.of(context).colorScheme.secondary,
+                      size: iconSize ?? defaultIconSize,
+                      color: e.tx,
                     ),
                   ),
-            SizedBox(height: 10),
+            SizedBox(height: 8),
             TextFont(
               text: title,
               fontSize: 13,
-              textColor: getColor(context, "black").withOpacity(0.8),
+              fontWeight: FontWeight.w500,
+              textColor: e.tx,
               maxLines: 2,
               autoSizeText: true,
               textAlign: TextAlign.center,
@@ -436,7 +431,8 @@ class SettingsContainerOutlined extends StatelessWidget {
           ? TextFont(
               fixParagraphMargin: true,
               text: title,
-              fontSize: isExpanded == false ? 16 : 14.5,
+              fontSize: isExpanded == false ? 15 : 14.5,
+              fontWeight: FontWeight.w500,
               maxLines: 1,
               overflow: TextOverflow.clip,
             )
@@ -447,33 +443,22 @@ class SettingsContainerOutlined extends StatelessWidget {
                 TextFont(
                   fixParagraphMargin: true,
                   text: title,
-                  fontSize: 16,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
                   maxLines: 1,
                 ),
                 Container(height: 3),
                 TextFont(
                   text: description!,
-                  fontSize: 11,
+                  fontSize: 12.5,
                   maxLines: 5,
-                  textColor: appStateSettings["increaseTextContrast"]
-                      ? getColor(context, "textLight")
-                      : Theme.of(context)
-                          .colorScheme
-                          .secondary
-                          .withOpacity(0.5),
+                  textColor: e.mu,
                 ),
               ],
             );
       content = Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: (appStateSettings["materialYou"]
-                ? Theme.of(context).colorScheme.secondary.withOpacity(0.5)
-                : getColor(context, "lightDarkAccentHeavy")),
-            width: 2,
-          ),
-          borderRadius: BorderRadiusDirectional.circular(10),
-        ),
+        constraints: BoxConstraints(minHeight: 56),
+        decoration: cartao,
         padding: EdgeInsetsDirectional.only(
           start: horizontalPadding ?? 13,
           end: horizontalPadding ?? 4,
@@ -498,7 +483,7 @@ class SettingsContainerOutlined extends StatelessWidget {
                       child: Icon(
                         icon,
                         size: iconSize ?? defaultIconSize,
-                        color: Theme.of(context).colorScheme.secondary,
+                        color: e.tx,
                       ),
                     ),
                   ),
@@ -520,7 +505,7 @@ class SettingsContainerOutlined extends StatelessWidget {
       onLongPress: onLongPress,
       color: Colors.transparent,
       onTap: onTap,
-      borderRadius: 10,
+      borderRadius: 12,
       child: content,
     );
   }
@@ -573,9 +558,7 @@ class SettingsContainer extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadiusDirectional.circular(
           (enableBorderRadius || getIsFullScreen(context)) && isOutlined != true
-              ? getPlatform() == PlatformOS.isIOS
-                  ? 10
-                  : 15
+              ? 12
               : 0),
       child: isOutlined == true
           ? SettingsContainerOutlined(
@@ -596,15 +579,11 @@ class SettingsContainer extends StatelessWidget {
               color: backgroundColor ?? Colors.transparent,
               onTap: onTap,
               onLongPress: onLongPress,
-              child: Padding(
+              child: Container(
+                constraints: BoxConstraints(minHeight: 56),
                 padding: EdgeInsetsDirectional.symmetric(
                   horizontal: horizontalPadding ?? 18,
-                  // (enableBorderRadius &&
-                  //         getWidthNavigationSidebar(context) <= 0 &&
-                  //         icon != null
-                  //     ? 10
-                  //     : 18),
-                  vertical: verticalPadding ?? 11,
+                  vertical: verticalPadding ?? 10,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -624,10 +603,8 @@ class SettingsContainer extends StatelessWidget {
                                       scale: iconScale ?? 1,
                                       child: Icon(
                                         icon,
-                                        size: iconSize ?? 30,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .secondary,
+                                        size: iconSize ?? 22,
+                                        color: cores(context).mu,
                                       ),
                                     ),
                                   ),
@@ -638,8 +615,8 @@ class SettingsContainer extends StatelessWidget {
                                 ? TextFont(
                                     fixParagraphMargin: true,
                                     text: title,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
                                     maxLines: 5,
                                   )
                                 : Column(
@@ -650,8 +627,8 @@ class SettingsContainer extends StatelessWidget {
                                       TextFont(
                                         fixParagraphMargin: true,
                                         text: title,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
                                         maxLines: 5,
                                       ),
                                       if (descriptionWidget != null)
@@ -666,9 +643,10 @@ class SettingsContainer extends StatelessWidget {
                                               key: ValueKey(
                                                   description.toString()),
                                               text: description ?? "",
-                                              fontSize: 14,
+                                              fontSize: 13,
                                               maxLines: 5,
-                                              textColor: descriptionColor,
+                                              textColor: descriptionColor ??
+                                                  cores(context).mu,
                                             ),
                                           ),
                                         ),
@@ -701,16 +679,19 @@ class SettingsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsetsDirectional.only(
-        start: 63,
-        end: 63,
-        top: 15,
-        bottom: 7,
+        start: 18,
+        end: 18,
+        top: 22,
+        bottom: 6,
       ),
-      child: TextFont(
-        text: title.capitalizeFirst,
-        fontSize: 15,
-        fontWeight: FontWeight.bold,
-        textColor: Theme.of(context).colorScheme.primary,
+      child: Semantics(
+        header: true,
+        child: TextFont(
+          text: title.capitalizeFirst,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          textColor: cores(context).mu,
+        ),
       ),
     );
   }

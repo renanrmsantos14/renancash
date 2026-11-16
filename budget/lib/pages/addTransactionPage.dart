@@ -9,9 +9,7 @@ import 'package:budget/pages/addObjectivePage.dart';
 import 'package:budget/pages/addWalletPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/settingsPage.dart';
-import 'package:budget/pages/sharedBudgetSettings.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/navBarIconsData.dart';
@@ -600,13 +598,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
       // recentlyAddedTransactionID.value =
 
-      if (widget.transaction == null &&
-          appStateSettings["purchaseID"] == null) {
-        updateSettings("premiumPopupAddTransactionCount",
-            (appStateSettings["premiumPopupAddTransactionCount"] ?? 0) + 1,
-            updateGlobalState: false);
-      }
-
       return true;
     } catch (e) {
       if (e.toString() == "category-no-longer-exists") {
@@ -789,7 +780,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           openTransferBalancePopup();
           return;
         }
-        await premiumPopupAddTransaction(context);
         if (widget.startInitialAddTransactionSequence == false) return;
         if (appStateSettings["askForTransactionTitle"]) {
           openBottomSheet(
@@ -1523,9 +1513,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                     },
                     getSelected: (String item) {
                       return selectedPayer == item;
-                    },
-                    onLongPress: (String item) {
-                      memberPopup(context, item);
                     },
                   ),
                 ),

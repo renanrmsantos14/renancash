@@ -110,7 +110,6 @@ Future<bool> createSyncBackup(
   bool hasSignedIn = false;
   if (googleUser == null) {
     hasSignedIn = await signInGoogle(
-      gMailPermissions: false,
       waitForCompletion: false,
       silentSignIn: true,
     );
@@ -191,7 +190,6 @@ Future<bool> runForceSignIn(BuildContext context) async {
   if (appStateSettings["forceAutoLogin"] == false) return false;
   if (appStateSettings["hasSignedIn"] == false) return false;
   return await signInGoogle(
-    gMailPermissions: false,
     waitForCompletion: false,
     silentSignIn: true,
     context: context,
@@ -232,7 +230,6 @@ Future<bool> _syncData(BuildContext context) async {
   bool hasSignedIn = false;
   if (googleUser == null) {
     hasSignedIn = await signInGoogle(
-      gMailPermissions: false,
       waitForCompletion: false,
       silentSignIn: true,
     );

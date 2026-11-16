@@ -1,12 +1,11 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
-import 'package:budget/struct/settings.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/linearGradientFadedEdges.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:budget/colors.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'package:budget/pages/addButton.dart';
@@ -129,6 +128,9 @@ class _SelectChipsState<T> extends State<SelectChips<T>> {
               opacity = 0.3;
             }
           }
+          final e = cores(context);
+          final Color? customSelectedColor =
+              widget.getCustomSelectedColor?.call(item) ?? widget.selectedColor;
           return Opacity(
             opacity: opacity,
             child: Padding(
@@ -165,22 +167,10 @@ class _SelectChipsState<T> extends State<SelectChips<T>> {
                           avatar == null,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       backgroundColor: widget.backgroundColor,
-                      selectedColor: widget.getCustomSelectedColor != null &&
-                              widget.getCustomSelectedColor!(item) != null
-                          ? widget.getCustomSelectedColor!(item)
-                          : widget.selectedColor ??
-                              (appStateSettings["materialYou"]
-                                  ? null
-                                  : (Theme.of(context).brightness ==
-                                          Brightness.light
-                                      ? dynamicPastel(
-                                          context,
-                                          getColor(
-                                              context, "lightDarkAccentHeavy"),
-                                          inverse: true,
-                                          amount: 0.05)
-                                      : getColor(
-                                          context, "lightDarkAccentHeavy"))),
+                      // Selecionado sem cor própria: chip invertido (fundo na
+                      // cor do texto), como o botão principal.
+                      selectedColor: customSelectedColor ?? e.tx,
+                      checkmarkColor: e.bg,
                       side: widget.getCustomBorderColor == null ||
                               widget.getCustomBorderColor!(item) == null ||
                               widget.getCustomBorderColor!(item) == null
@@ -190,7 +180,11 @@ class _SelectChipsState<T> extends State<SelectChips<T>> {
                             ),
                       label: TextFont(
                         text: label,
-                        fontSize: 15,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        textColor: selected && customSelectedColor == null
+                            ? e.bg
+                            : null,
                       ),
                       selected: selected,
                       onSelected: (bool selected) {
