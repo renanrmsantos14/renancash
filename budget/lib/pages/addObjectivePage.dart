@@ -7,6 +7,7 @@ import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/widgets/mbAplicacoesDaMeta.dart';
 import 'package:budget/struct/settings.dart';
@@ -639,7 +640,7 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                         },
                         padding: EdgeInsetsDirectional.zero,
                         fontSize: getIsFullScreen(context) ? 34 : 27,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         topContentPadding: 40,
                         initialValue: selectedTitle,
                       ),
@@ -721,8 +722,8 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                                                     ? "lent".tr()
                                                     : "borrowed".tr()
                                                 : "goal".tr() + " ",
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
@@ -759,7 +760,7 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                                           selectAmount(context);
                                         },
                                         fontSize: 32,
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w600,
                                         internalPadding:
                                             EdgeInsetsDirectional.symmetric(
                                                 vertical: 2, horizontal: 4),
@@ -856,7 +857,7 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                                       selectAmount(context, allowZero: true);
                                     },
                                     fontSize: 32,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w600,
                                     internalPadding:
                                         EdgeInsetsDirectional.symmetric(
                                             vertical: 2, horizontal: 4),
@@ -1258,8 +1259,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                               onTap: () {
                                 selectInstallmentLength(context);
                               },
-                              fontSize: 23,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
                               internalPadding: EdgeInsetsDirectional.symmetric(
                                   vertical: 4, horizontal: 4),
                               padding: EdgeInsetsDirectional.symmetric(
@@ -1272,8 +1273,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                                 text: numberOfInstallmentPayments == 1
                                     ? "payment-of".tr()
                                     : "payments-of".tr(),
-                                fontSize: 23,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             TappableTextEntry(
@@ -1288,8 +1289,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                               onTap: () {
                                 selectAmountPerInstallment(context);
                               },
-                              fontSize: 23,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
                               internalPadding: EdgeInsetsDirectional.symmetric(
                                   vertical: 4, horizontal: 4),
                               padding: EdgeInsetsDirectional.symmetric(
@@ -1302,8 +1303,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                               vertical: 5),
                           child: TextFont(
                             text: "until-goal-reached".tr().toLowerCase(),
-                            fontSize: 23,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -1320,8 +1321,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                   children: [
                     TextFont(
                       text: "repeat-every".tr(),
-                      fontSize: 23,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1349,8 +1350,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                               ),
                             );
                           },
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
                           internalPadding: EdgeInsetsDirectional.symmetric(
                               vertical: 4, horizontal: 4),
                           padding: EdgeInsetsDirectional.symmetric(
@@ -1380,8 +1381,8 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                               },
                             );
                           },
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
                           internalPadding: EdgeInsetsDirectional.symmetric(
                               vertical: 4, horizontal: 4),
                           padding: EdgeInsetsDirectional.symmetric(
@@ -1393,12 +1394,7 @@ class _InstallmentObjectivePopupState extends State<InstallmentObjectivePopup> {
                 ),
               ),
               SizedBox(height: 10),
-              HorizontalBreak(
-                color: Theme.of(context)
-                    .colorScheme
-                    .secondaryContainer
-                    .withOpacity(0.5),
-              ),
+              HorizontalBreak(color: cores(context).line),
               SizedBox(height: 4),
               if (selectedCategory != null)
                 SelectCategory(

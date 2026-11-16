@@ -8,8 +8,8 @@ import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/fab.dart';
@@ -223,7 +223,7 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                         children: [
                           CategoryIcon(
                             categoryPk: "-1",
-                            size: 31,
+                            size: 22,
                             category: TransactionCategory(
                               categoryPk: "-1",
                               name: "",
@@ -236,8 +236,8 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                               emojiIconName: objective.emojiIconName,
                             ),
                             canEditByLongPress: false,
-                            borderRadius: 1000,
-                            sizePadding: 23,
+                            borderRadius: 12,
+                            sizePadding: 18,
                           ),
                           SizedBox(width: 5),
                           Expanded(
@@ -247,8 +247,8 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                               children: [
                                 TextFont(
                                   text: objective.name,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 19,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
                                 ),
                                 TextFont(
                                   textAlign: TextAlign.start,
@@ -263,9 +263,8 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                                                   ObjectiveType.loan
                                               ? "borrowed-funds".tr()
                                               : "expense-goal".tr(),
-                                  fontSize: 14,
-                                  textColor: getColor(context, "black")
-                                      .withOpacity(0.65),
+                                  fontSize: 13,
+                                  textColor: cores(context).mu,
                                 ),
                                 WatchTotalAndAmountOfObjective(
                                   objective: objective,
@@ -309,9 +308,8 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                                                   .toLowerCase())
                                           : (amountSpentLabel +
                                               amountRemainingLabel),
-                                      fontSize: 14,
-                                      textColor: getColor(context, "black")
-                                          .withOpacity(0.65),
+                                      fontSize: 13,
+                                      textColor: cores(context).mu,
                                       maxLines: 2,
                                     );
                                   },

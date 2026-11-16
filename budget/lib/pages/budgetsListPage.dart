@@ -13,7 +13,9 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart'
     hide SliverReorderableList, ReorderableDelayedDragStartListener;
-import 'addButton.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/button.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 
 class BudgetsListPage extends StatefulWidget {
   const BudgetsListPage({required this.enableBackButton, Key? key})
@@ -26,6 +28,8 @@ class BudgetsListPage extends StatefulWidget {
 
 class BudgetsListPageState extends State<BudgetsListPage> {
   GlobalKey<PageFrameworkState> pageState = GlobalKey();
+  // Entrada dos cartões só logo após abrir (rolar de volta não reanima).
+  final _aberta = DateTime.now();
 
   void refreshState() {
     setState(() {});
@@ -86,94 +90,83 @@ class BudgetsListPageState extends State<BudgetsListPage> {
         StreamBuilder<List<Budget>>(
           stream: database.watchAllBudgets(hideArchived: true),
           builder: (context, snapshot) {
-            if (snapshot.hasData && (snapshot.data ?? []).length <= 0) {
-              return SliverPadding(
-                padding: EdgeInsetsDirectional.symmetric(
-                    vertical: 7, horizontal: 13),
-                sliver: SliverToBoxAdapter(
-                  child: AddButton(
-                    onTap: () {},
-                    openPage: AddBudgetPage(
-                      routesToPopAfterDelete:
-                          RoutesToPopAfterDelete.PreventDelete,
-                    ),
-                    height: 180,
-                    labelUnder: "add-budget".tr(),
-                  ),
-                ),
-              );
+            final orcamentos = snapshot.data;
+            if (orcamentos == null) return const SliverToBoxAdapter();
+            if (orcamentos.isEmpty) {
+              return const SliverToBoxAdapter(child: SemOrcamentos());
             }
-            if (snapshot.hasData) {
-              return SliverPadding(
-                padding: EdgeInsetsDirectional.symmetric(
-                    vertical: 7, horizontal: 13),
-                sliver: enableDoubleColumn(context)
-                    ? SliverGrid(
-                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 600.0,
-                          mainAxisExtent: 190,
-                          mainAxisSpacing: 15.0,
-                          crossAxisSpacing: 15.0,
-                          childAspectRatio: 5,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (BuildContext context, int index) {
-                            if (index == snapshot.data?.length) {
-                              return AddButton(
-                                onTap: () {},
-                                openPage: AddBudgetPage(
-                                  routesToPopAfterDelete:
-                                      RoutesToPopAfterDelete.PreventDelete,
-                                ),
-                                labelUnder: "add-budget".tr(),
-                              );
-                            } else {
-                              return BudgetContainer(
-                                budget: snapshot.data![index],
-                              );
-                            }
-                          },
-                          childCount: (snapshot.data?.length ?? 0) + 1,
-                        ),
-                      )
-                    : SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (BuildContext context, int index) {
-                            if (index == snapshot.data?.length) {
-                              return AddButton(
-                                onTap: () {},
-                                openPage: AddBudgetPage(
-                                  routesToPopAfterDelete:
-                                      RoutesToPopAfterDelete.PreventDelete,
-                                ),
-                                height: 180,
-                                labelUnder: "add-budget".tr(),
-                              );
-                            } else {
-                              return Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                    bottom: 16.0),
-                                child: BudgetContainer(
-                                  budget: snapshot.data![index],
-                                  squishInactiveBudgetContainerHeight: true,
-                                ),
-                              );
-                            }
-                          },
-                          childCount: (snapshot.data?.length ?? 0) +
-                              1, //snapshot.data?.length
-                        ),
+            Widget item(int i) => EntradaSuave(
+                  key: ValueKey(orcamentos[i].budgetPk),
+                  indice: i,
+                  animar: DateTime.now().difference(_aberta) <
+                      const Duration(milliseconds: 600),
+                  child: BudgetContainer(budget: orcamentos[i]),
+                );
+            return SliverPadding(
+              padding:
+                  const EdgeInsetsDirectional.symmetric(vertical: 4, horizontal: 13),
+              sliver: enableDoubleColumn(context)
+                  ? SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 600,
+                        mainAxisExtent: 150,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
                       ),
-              );
-            } else {
-              return SliverToBoxAdapter();
-            }
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => item(i),
+                        childCount: orcamentos.length,
+                      ),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => Padding(
+                          padding: const EdgeInsetsDirectional.only(bottom: 12),
+                          child: item(i),
+                        ),
+                        childCount: orcamentos.length,
+                      ),
+                    ),
+            );
           },
         ),
         SliverToBoxAdapter(
           child: SizedBox(height: 50),
         ),
       ],
+    );
+  }
+}
+
+/// Lista vazia: uma frase e uma ação.
+class SemOrcamentos extends StatelessWidget {
+  const SemOrcamentos({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(13, 24, 13, 0),
+      child: Column(
+        children: [
+          Icon(Icons.donut_large_rounded, size: 32, color: cores(context).mu),
+          const SizedBox(height: 12),
+          Text('Nenhum orçamento ainda',
+              style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text('Defina um limite e acompanhe quanto resta no ciclo.',
+              textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
+          const SizedBox(height: 16),
+          Button(
+            label: 'Criar orçamento',
+            onTap: () => pushRoute(
+              context,
+              AddBudgetPage(
+                  routesToPopAfterDelete: RoutesToPopAfterDelete.PreventDelete),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

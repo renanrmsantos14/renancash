@@ -2,18 +2,14 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
-import 'package:budget/pages/editCategoriesPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/struct/shareBudget.dart';
-import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
-import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/noResults.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openPopup.dart';
@@ -24,6 +20,8 @@ import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/editRowEntry.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/budgetContainer.dart' show textoPeriodoOrcamento;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide SliverReorderableList;
@@ -216,10 +214,10 @@ class _EditBudgetPageState extends State<EditBudgetPage> {
                                 Theme.of(context).colorScheme.primary),
                         amountLight: 0.55,
                         amountDark: 0.35);
-                    return Stack(
+                    final rotulo = EdTexto.rotulo(context);
+                    return KeyedSubtree(
                       key: ValueKey(index),
-                      children: [
-                        EditRowEntry(
+                      child: EditRowEntry(
                           key: ValueKey(budget.budgetPk),
                           extraIcon: budget.archived
                               ? appStateSettings["outlinedIcons"]
@@ -257,177 +255,56 @@ class _EditBudgetPageState extends State<EditBudgetPage> {
                           content: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              TextFont(
-                                text: budget.name,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 21,
-                              ),
-                              Container(height: 2),
-                              Row(
-                                children: [
-                                  TextFont(
-                                    text: convertToMoney(
+                              Text(budget.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: EdTexto.corpo(context).copyWith(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 4),
+                              Text(
+                                convertToMoney(
                                         Provider.of<AllWallets>(context),
                                         budget.amount,
                                         currencyKey:
                                             Provider.of<AllWallets>(context)
                                                 .indexedByPk[budget.walletFk]
-                                                ?.currency),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                  TextFont(
-                                    text: " / ",
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                  // budget.reoccurrence!.index != 0
-                                  //     ? TextFont(
-                                  //         text: budget.periodLength.toString() + " ",
-                                  //         fontWeight: FontWeight.bold,
-                                  //         fontSize: 16,
-                                  //       )
-                                  //     : SizedBox(),
-                                  TextFont(
-                                    text: budget.periodLength == 1
-                                        ? nameRecurrence[budget.reoccurrence]
-                                            .toString()
-                                            .toLowerCase()
-                                            .tr()
-                                            .toLowerCase()
-                                        : namesRecurrence[budget.reoccurrence]
-                                            .toString()
-                                            .toLowerCase()
-                                            .tr()
-                                            .toLowerCase(),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ],
+                                                ?.currency) +
+                                    " / " +
+                                    (budget.periodLength == 1
+                                            ? nameRecurrence[
+                                                budget.reoccurrence]
+                                            : namesRecurrence[
+                                                budget.reoccurrence])
+                                        .toString()
+                                        .toLowerCase()
+                                        .tr()
+                                        .toLowerCase(),
+                                style: EdTexto.corpo(context)
+                                    .copyWith(fontWeight: FontWeight.w500),
                               ),
-                              TextFont(
-                                text: getWordedDateShort(budgetRange.start) +
-                                    " – " +
-                                    getWordedDateShort(budgetRange.end),
-                                fontSize: 15,
-                              ),
-                              Container(height: 2),
-                              budget.sharedKey == null &&
-                                      !budget.addedTransactionsOnly
-                                  ? TextFont(
-                                      text: budget.categoryFks == null ||
-                                              budget.categoryFks!.length == 0
-                                          ? "all-categories-budget".tr()
-                                          : budget.categoryFks!.length
-                                                  .toString() +
-                                              " " +
-                                              "category-budget".tr(),
-                                      fontSize: 14,
-                                    )
-                                  : FutureBuilder<int?>(
-                                      future: database
-                                          .getTotalCountOfTransactionsInBudget(
-                                              budget.budgetPk),
-                                      builder: (context, snapshot) {
-                                        if (snapshot.hasData &&
-                                            snapshot.data != null) {
-                                          return TextFont(
-                                            textAlign: TextAlign.start,
-                                            text: snapshot.data!.toString() +
-                                                " " +
-                                                (snapshot.data! == 1
-                                                    ? "transaction"
-                                                        .tr()
-                                                        .toLowerCase()
-                                                    : "transactions"
-                                                        .tr()
-                                                        .toLowerCase()),
-                                            fontSize: 14,
-                                            textColor:
-                                                getColor(context, "black")
-                                                    .withOpacity(0.65),
-                                          );
-                                        } else {
-                                          return TextFont(
-                                            textAlign: TextAlign.start,
-                                            text:
-                                                "/" + " " + "transactions".tr(),
-                                            fontSize: 14,
-                                            textColor:
-                                                getColor(context, "black")
-                                                    .withOpacity(0.65),
-                                          );
-                                        }
-                                      },
-                                    ),
-                              // List transaction category names on edit budgets page
-                              // Wrap(
-                              //   spacing: 0,
-                              //   runSpacing: 0,
-                              //   children: [
-                              //     ...budget.categoryFks!
-                              //         .asMap()
-                              //         .entries
-                              //         .map((categoryFk) {
-                              //       return Padding(
-                              //         padding: const EdgeInsetsDirectional.only(top: 1.4),
-                              //         child: FutureBuilder(
-                              //             future: database
-                              //                 .getCategoryInstance(categoryFk.value),
-                              //             builder: (context,
-                              //                 AsyncSnapshot<TransactionCategory>
-                              //                     snapshot) {
-                              //               if (snapshot.hasData) {
-                              //                 return Opacity(
-                              //                   opacity: 0.4,
-                              //                   child: TextFont(
-                              //                     text: (snapshot.data?.name ?? "") +
-                              //                         (budget.categoryFks!.length -
-                              //                                     1 ==
-                              //                                 categoryFk.key.toInt()
-                              //                             ? ""
-                              //                             : ", "),
-                              //                     fontSize: 13,
-                              //                   ),
-                              //                 );
-                              //               } else {
-                              //                 return TextFont(
-                              //                   text: " ",
-                              //                   fontSize: 13,
-                              //                 );
-                              //               }
-                              //             }),
-                              //       );
-                              //     }).toList(),
-                              //   ],
-                              // ),
+                              const SizedBox(height: 2),
+                              Text(
+                                  textoPeriodoOrcamento(budgetRange) +
+                                      (budget.addedTransactionsOnly
+                                          ? ""
+                                          : " · " +
+                                              (budget.categoryFks == null ||
+                                                      budget.categoryFks!
+                                                          .isEmpty
+                                                  ? "all-categories".tr()
+                                                  : budget.categoryFks!.length
+                                                          .toString() +
+                                                      " " +
+                                                      "categories"
+                                                          .tr()
+                                                          .toLowerCase())),
+                                  maxLines: 2,
+                                  style: rotulo),
                             ],
                           ),
-                          index: index,
-                        ),
-                        budget.sharedKey != null
-                            ? Padding(
-                                padding: const EdgeInsetsDirectional.only(
-                                    top: 15, end: 20),
-                                child: Align(
-                                  alignment: AlignmentDirectional.topEnd,
-                                  child: Icon(
-                                    appStateSettings["outlinedIcons"]
-                                        ? Icons.people_alt_outlined
-                                        : Icons.people_alt_rounded,
-                                    size: 18,
-                                    color: budget.colour == null
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .secondary
-                                        : dynamicPastel(
-                                            context, HexColor(budget.colour),
-                                            inverse: true, amount: 0.5),
-                                  ),
-                                ),
-                              )
-                            : SizedBox.shrink(),
-                      ],
+                        index: index,
+                      ),
                     );
                   },
                   itemCount: snapshot.data!.length,
@@ -474,9 +351,7 @@ Future<DeletePopupAction?> deleteBudgetPopup(
   );
   if (action == DeletePopupAction.Delete) {
     dynamic result = true;
-    if (budget.sharedKey != null) {
-      result = await deleteSharedBudgetPopup(context, budget);
-    } else if (budget.addedTransactionsOnly) {
+    if (budget.addedTransactionsOnly) {
       int? numTransactions =
           await database.getTotalCountOfTransactionsInBudget(budget.budgetPk);
       if (numTransactions != null && numTransactions > 0) {
@@ -517,46 +392,6 @@ Future<DeletePopupAction?> deleteBudgetPopup(
     }
   }
   return action;
-}
-
-Future<dynamic> deleteSharedBudgetPopup(context, Budget budget) {
-  if (budget.sharedOwnerMember == SharedOwnerMember.owner) {
-    return openPopup(
-      context,
-      title: "Delete Shared Budget?",
-      description:
-          "You own this budget. Deleting it will remove it from the server. All transactions belonging to this budget will no longer be connected to a budget.",
-      icon: appStateSettings["outlinedIcons"]
-          ? Icons.delete_outlined
-          : Icons.delete_rounded,
-      onCancel: () {
-        popRoute(context, false);
-      },
-      onCancelLabel: "cancel".tr(),
-      onSubmit: () async {
-        popRoute(context, true);
-      },
-      onSubmitLabel: "delete".tr(),
-    );
-  } else {
-    return openPopup(
-      context,
-      title: "Leave Shared Budget?",
-      description:
-          "You are a member of this budget. Deleting it will remove you from the shared group. All transactions belonging to this budget will no longer be connected to a budget, until you are added back.",
-      icon: appStateSettings["outlinedIcons"]
-          ? Icons.delete_outlined
-          : Icons.delete_rounded,
-      onCancel: () {
-        popRoute(context, false);
-      },
-      onCancelLabel: "cancel".tr(),
-      onSubmit: () async {
-        popRoute(context, true);
-      },
-      onSubmitLabel: "delete".tr(),
-    );
-  }
 }
 
 // either "none", null, or a Budget type

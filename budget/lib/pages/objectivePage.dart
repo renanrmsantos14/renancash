@@ -5,11 +5,9 @@ import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/animatedCircularProgress.dart';
-import 'package:budget/widgets/animatedExpanded.dart';
-import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/extraInfoBoxes.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
@@ -18,20 +16,17 @@ import 'package:budget/widgets/selectCategoryImage.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
-import 'package:budget/widgets/tappable.dart';
-import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/transactionEntries.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/colors.dart';
 import 'package:provider/provider.dart';
-import 'package:budget/widgets/countNumber.dart';
 import 'package:confetti/confetti.dart';
 
 class ObjectivePage extends StatelessWidget {
@@ -148,32 +143,6 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
 
   @override
   Widget build(BuildContext context) {
-    Widget numberTransactionsWidget = StreamBuilder<int?>(
-      stream: database
-          .getTotalCountOfTransactionsInObjective(widget.objective.objectivePk)
-          .$1,
-      builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data != null) {
-          return TextFont(
-            textAlign: TextAlign.center,
-            text: snapshot.data.toString() +
-                " " +
-                (snapshot.data == 1
-                    ? "transaction".tr().toLowerCase()
-                    : "transactions".tr().toLowerCase()),
-            fontSize: 16,
-            maxLines: 3,
-          );
-        } else {
-          return TextFont(
-            textAlign: TextAlign.center,
-            text: "/ transactions",
-            fontSize: 16,
-            maxLines: 3,
-          );
-        }
-      },
-    );
     Color? pageBackgroundColor =
         Theme.of(context).brightness == Brightness.dark &&
                 appStateSettings["forceFullDarkBackground"]
@@ -259,322 +228,46 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
             ],
             title: widget.objective.name,
             capitalizeTitle: false,
-            appBarBackgroundColor:
-                Theme.of(context).colorScheme.secondaryContainer,
-            appBarBackgroundColorStart:
-                Theme.of(context).colorScheme.secondaryContainer,
-            textColor: getColor(context, "black"),
             dragDownToDismiss: true,
             slivers: [
               SliverToBoxAdapter(
-                child: WatchTotalAndAmountOfObjective(
-                  objective: widget.objective,
-                  builder: (double objectiveAmount, double totalAmount,
-                      double percentageTowardsGoal) {
-                    if (percentageTowardsGoal >= 1 &&
-                        hasPlayedConfetti == false) {
-                      confettiController.play();
-                      hasPlayedConfetti = true;
-                    }
-                    // Only play the confetti once, so leave this out
-                    // else {
-                    //   hasPlayedConfetti = false;
-                    // }
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(
-                              top: 40, bottom: 5),
-                          child: Stack(
-                            alignment: AlignmentDirectional.center,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Flexible(
-                                    child: Container(
-                                      constraints:
-                                          BoxConstraints(maxWidth: 250),
-                                      child: AspectRatio(
-                                        aspectRatio: 1,
-                                        child: AnimatedCircularProgress(
-                                          percent: clampDouble(
-                                              percentageTowardsGoal, 0, 1),
-                                          backgroundColor: Theme.of(context)
-                                              .colorScheme
-                                              .secondaryContainer,
-                                          foregroundColor: dynamicPastel(
-                                            context,
-                                            Theme.of(context)
-                                                .colorScheme
-                                                .primary,
-                                            amountLight: 0.4,
-                                            amountDark: 0.2,
-                                          ),
-                                          strokeWidth: 5,
-                                          valueStrokeWidth: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Column(
-                                children: [
-                                  CategoryIcon(
-                                    categoryPk: "-1",
-                                    category: TransactionCategory(
-                                      categoryPk: "-1",
-                                      name: "",
-                                      dateCreated: DateTime.now(),
-                                      dateTimeModified: null,
-                                      order: 0,
-                                      income: false,
-                                      iconName: widget.objective.iconName,
-                                      colour: widget.objective.colour,
-                                      emojiIconName:
-                                          widget.objective.emojiIconName,
-                                    ),
-                                    size: 40,
-                                    sizePadding: 30,
-                                    borderRadius: 100,
-                                    canEditByLongPress: false,
-                                    margin: EdgeInsetsDirectional.zero,
-                                    onLongPress: () {
-                                      openSelectIconPopup();
-                                    },
-                                    onTap: () {
-                                      openSelectIconPopup();
-                                    },
-                                  ),
-                                  SizedBox(height: 10),
-                                  getIsDifferenceOnlyLoan(widget.objective)
-                                      ? SizedBox.shrink()
-                                      : CountNumber(
-                                          count: percentageTowardsGoal * 100,
-                                          duration:
-                                              Duration(milliseconds: 1000),
-                                          initialCount: (0),
-                                          textBuilder: (value) {
-                                            return TextFont(
-                                              text: convertToPercent(
-                                                value,
-                                                finalNumber:
-                                                    percentageTowardsGoal * 100,
-                                                useLessThanZero: true,
-                                              ),
-                                              fontSize: 28,
-                                              fontWeight: FontWeight.bold,
-                                            );
-                                          },
-                                        ),
-                                  Builder(builder: (context) {
-                                    String amountSpentLabel =
-                                        getObjectiveAmountSpentLabel(
-                                      objective: widget.objective,
-                                      context: context,
-                                      showTotalSpent: showTotalSpent,
-                                      objectiveAmount: objectiveAmount,
-                                      totalAmount: totalAmount,
-                                    );
-                                    return AnimatedSizeSwitcher(
-                                      child: IntrinsicWidth(
-                                        key: ValueKey(showTotalSpent),
-                                        child: Tappable(
-                                          borderRadius: 15,
-                                          onLongPress: () {
-                                            copyToClipboard(amountSpentLabel);
-                                          },
-                                          onTap: () {
-                                            if (getIsDifferenceOnlyLoan(
-                                                    widget.objective) ==
-                                                false) {
-                                              _swapTotalSpentDisplay();
-                                            }
-                                          },
-                                          color: Colors.transparent,
-                                          child: Padding(
-                                            padding:
-                                                const EdgeInsetsDirectional.all(
-                                                    8.0),
-                                            child: getIsDifferenceOnlyLoan(
-                                                    widget.objective)
-                                                ? TextFont(
-                                                    text: amountSpentLabel,
-                                                    fontSize: 28,
-                                                    fontWeight: FontWeight.bold,
-                                                    textColor:
-                                                        percentageTowardsGoal ==
-                                                                1
-                                                            ? getColor(context,
-                                                                "black")
-                                                            : getDifferenceOfLoan(
-                                                                      widget
-                                                                          .objective,
-                                                                      totalAmount,
-                                                                      objectiveAmount,
-                                                                    ) <
-                                                                    0
-                                                                ? getColor(
-                                                                    context,
-                                                                    "unPaidUpcoming",
-                                                                  )
-                                                                : getColor(
-                                                                    context,
-                                                                    "unPaidOverdue",
-                                                                  ),
-                                                  )
-                                                : Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment.end,
-                                                    children: [
-                                                      TextFont(
-                                                        text: amountSpentLabel,
-                                                        fontSize: 18,
-                                                        textColor: totalAmount >=
-                                                                objectiveAmount
-                                                            ? getColor(context,
-                                                                "incomeAmount")
-                                                            : getColor(context,
-                                                                "black"),
-                                                      ),
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsetsDirectional
-                                                                .only(
-                                                                bottom: 1),
-                                                        child: TextFont(
-                                                          text:
-                                                              objectiveRemainingAmountText(
-                                                            objectiveAmount:
-                                                                objectiveAmount,
-                                                            totalAmount:
-                                                                totalAmount,
-                                                            context: context,
-                                                          ),
-                                                          fontSize: 13,
-                                                          textColor: getColor(
-                                                                  context,
-                                                                  "black")
-                                                              .withOpacity(0.4),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                  if (widget.objective.type ==
-                                      ObjectiveType.loan)
-                                    TextFont(
-                                      text: getIsDifferenceOnlyLoan(
-                                              widget.objective)
-                                          ? percentageTowardsGoal == 1
-                                              ? "all-settled".tr()
-                                              : (getDifferenceOfLoan(
-                                                          widget.objective,
-                                                          totalAmount,
-                                                          objectiveAmount) >
-                                                      0)
-                                                  ? "to-pay".tr()
-                                                  : "to-collect".tr()
-                                          : ((showTotalSpent ||
-                                                  totalAmount >=
-                                                      objectiveAmount)
-                                              ? (widget.objective.income
-                                                  ? "collected".tr()
-                                                  : "paid".tr())
-                                              : (widget.objective.income
-                                                  ? "to-collect".tr()
-                                                  : "to-pay".tr())),
-                                      fontSize: 18,
-                                      textColor: getColor(context, "black"),
-                                    ),
-                                  if (getIsDifferenceOnlyLoan(widget.objective))
-                                    numberTransactionsWidget,
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (getIsDifferenceOnlyLoan(widget.objective) == false)
-                          Padding(
-                            padding: EdgeInsetsDirectional.symmetric(
-                                horizontal:
-                                    getHorizontalPaddingConstrained(context)),
-                            child: Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                  top: 20.0, start: 20, end: 20),
-                              child: Column(
-                                children: [
-                                  TextFont(
-                                    text: getWordedDateShortMore(
-                                          widget.objective.dateCreated,
-                                          includeYear: widget
-                                                  .objective.dateCreated.year !=
-                                              DateTime.now().year,
-                                        ) +
-                                        (widget.objective.endDate != null
-                                            ? " – " +
-                                                getWordedDateShortMore(
-                                                  widget.objective.endDate!,
-                                                  includeYear: widget.objective
-                                                          .endDate!.year !=
-                                                      DateTime.now().year,
-                                                )
-                                            : ""),
-                                    maxLines: 3,
-                                    textAlign: TextAlign.center,
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  if (widget.objective.endDate != null)
-                                    Padding(
-                                      padding: const EdgeInsetsDirectional.only(
-                                          top: 12),
-                                      child: TextFont(
-                                        text: getObjectiveStatus(
-                                          context,
-                                          widget.objective,
-                                          totalAmount,
-                                          percentageTowardsGoal,
-                                          objectiveAmount,
-                                          addSpendingSavingIndication: true,
-                                        ),
-                                        maxLines: 3,
-                                        textAlign: TextAlign.center,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+                child: Padding(
+                  padding: EdgeInsetsDirectional.symmetric(
+                      horizontal: getHorizontalPaddingConstrained(context)),
+                  child: StreamBuilder<int?>(
+                    stream: database
+                        .getTotalCountOfTransactionsInObjective(
+                            widget.objective.objectivePk)
+                        .$1,
+                    builder: (context, contagem) =>
+                        WatchTotalAndAmountOfObjective(
+                      objective: widget.objective,
+                      builder: (double objectiveAmount, double totalAmount,
+                          double percentageTowardsGoal) {
+                        // Confete uma vez só, e nunca com "reduzir movimento".
+                        if (percentageTowardsGoal >= 1 &&
+                            hasPlayedConfetti == false &&
+                            !semMovimento(context)) {
+                          confettiController.play();
+                          hasPlayedConfetti = true;
+                        }
+                        return ResumoMeta(
+                          objective: widget.objective,
+                          alvo: objectiveAmount,
+                          total: totalAmount,
+                          fracao: percentageTowardsGoal,
+                          mostrarTotal: showTotalSpent,
+                          transacoes: contagem.data,
+                          onTrocar: getIsDifferenceOnlyLoan(widget.objective)
+                              ? null
+                              : _swapTotalSpentDisplay,
+                          onIcone: openSelectIconPopup,
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
-              if (getIsDifferenceOnlyLoan(widget.objective) == true)
-                SliverToBoxAdapter(child: SizedBox(height: 20)),
-              if (getIsDifferenceOnlyLoan(widget.objective) == false)
-                SliverPadding(
-                  padding: EdgeInsetsDirectional.only(
-                    top: 5,
-                    start: 20,
-                    end: 20,
-                    bottom: 30,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: numberTransactionsWidget,
-                  ),
-                ),
               TransactionEntries(
                 null,
                 null,
@@ -607,27 +300,7 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
                                 ? Icons.punch_clock_outlined
                                 : Icons.punch_clock_rounded,
                             text: "setup-installment-payments".tr(),
-                            color: dynamicPastel(
-                              context,
-                              Theme.of(context).colorScheme.secondaryContainer,
-                              amountLight:
-                                  appStateSettings["materialYou"] ? 0.25 : 0.4,
-                              amountDark:
-                                  appStateSettings["materialYou"] ? 0.4 : 0.55,
-                            ),
-                            buttonIconColor: dynamicPastel(
-                                context,
-                                HexColor(widget.objective.colour,
-                                    defaultColor:
-                                        Theme.of(context).colorScheme.primary),
-                                amount: 0.5),
-                            buttonIconColorIcon: dynamicPastel(
-                                context,
-                                HexColor(widget.objective.colour,
-                                    defaultColor:
-                                        Theme.of(context).colorScheme.primary),
-                                amount: 0.7,
-                                inverse: true),
+                            color: cores(context).surf,
                           )
                         : null,
                 renderType: appStateSettings["appAnimations"] !=
@@ -686,4 +359,132 @@ String objectiveRemainingAmountText({
   result += convertToMoney(Provider.of<AllWallets>(context), objectiveAmount);
 
   return result;
+}
+
+/// Topo da meta sem acesso ao banco: valor em destaque (toque alterna total e
+/// restante, segurar copia), medidor, "de R$ X · 45%", datas e ritmo.
+class ResumoMeta extends StatelessWidget {
+  const ResumoMeta({
+    super.key,
+    required this.objective,
+    required this.alvo,
+    required this.total,
+    required this.fracao,
+    required this.mostrarTotal,
+    this.transacoes,
+    this.onTrocar,
+    this.onIcone,
+  });
+  final Objective objective;
+  final double alvo, total, fracao;
+  final bool mostrarTotal;
+  final int? transacoes;
+  final VoidCallback? onTrocar, onIcone;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    String dinheiro(double v) =>
+        convertToMoney(Provider.of<AllWallets>(context), v);
+    String data(DateTime d) =>
+        getWordedDateShortMore(d, includeYear: d.year != DateTime.now().year);
+    final diferenca = getIsDifferenceOnlyLoan(objective);
+    final semAlvo = objective.type == ObjectiveType.goal && alvo <= 0;
+    final String rotulo;
+    final double valor;
+    if (diferenca) {
+      final d = getDifferenceOfLoan(objective, total, alvo);
+      rotulo = fracao == 1 ? 'Tudo quitado' : rotuloDiferenca(d, false);
+      valor = d.abs();
+    } else {
+      final d = destaqueMeta(objective,
+          alvo: alvo, total: total, mostrarTotal: mostrarTotal || semAlvo);
+      rotulo = d.rotulo;
+      valor = d.valor;
+    }
+    final concluida = objective.type == ObjectiveType.goal &&
+        !semAlvo &&
+        total >= alvo;
+    final fim = objective.endDate;
+    final status = fim == null || diferenca
+        ? ''
+        : getObjectiveStatus(context, objective, total, fracao, alvo,
+            addSpendingSavingIndication: true);
+    final contagem =
+        transacoes == null ? null : textoTransacoes(transacoes!);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Semantics(
+              button: onIcone != null,
+              label: 'Trocar ícone',
+              child: iconeMeta(objective,
+                  size: 22, sizePadding: 16, onTap: onIcone),
+            ),
+            const SizedBox(width: 12),
+            if (!diferenca)
+              Expanded(
+                child: Text(
+                    data(objective.dateCreated) +
+                        (fim == null ? '' : ' – ${data(fim)}'),
+                    maxLines: 2,
+                    style: EdTexto.rotulo(context)),
+              ),
+          ]),
+          const SizedBox(height: 18),
+          Text(rotulo, style: EdTexto.rotulo(context)),
+          const SizedBox(height: 8),
+          Semantics(
+            button: onTrocar != null,
+            hint: onTrocar == null ? null : 'Alterna entre total e restante',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTrocar,
+              onLongPress: () => copyToClipboard(dinheiro(valor)),
+              child: ContagemValor(
+                valor: valor,
+                formatar: (v) => convertToMoney(
+          Provider.of<AllWallets>(context), v,
+          allDecimals: true),
+                centavosMenores: true,
+                estilo: EdTexto.numeroGrande(context)
+                    .copyWith(color: concluida ? e.pos : null),
+              ),
+            ),
+          ),
+          if (!diferenca && !semAlvo) ...[
+            const SizedBox(height: 14),
+            MedidorEditorial(fracao: fracao),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: Text(
+                    detalheMeta(context, objective, alvo: alvo, fracao: fracao),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.rotulo(context)),
+              ),
+              if (contagem != null) ...[
+                const SizedBox(width: 8),
+                Text(contagem, style: EdTexto.rotulo(context)),
+              ],
+            ]),
+          ] else if (contagem != null) ...[
+            const SizedBox(height: 10),
+            Text(contagem, style: EdTexto.rotulo(context)),
+          ],
+          if (status != '') ...[
+            const SizedBox(height: 12),
+            Text(status,
+                maxLines: 3,
+                style: EdTexto.corpo(context)
+                    .copyWith(fontWeight: FontWeight.w500)),
+          ],
+        ],
+      ),
+    );
+  }
 }

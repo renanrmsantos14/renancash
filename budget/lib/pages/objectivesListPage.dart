@@ -1,5 +1,4 @@
 import 'package:budget/pages/investimentosEvolucaoPage.dart';
-import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addObjectivePage.dart';
@@ -7,18 +6,15 @@ import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/struct/randomConstants.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/budgetContainer.dart';
+import 'package:budget/widgets/button.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/categoryIcon.dart';
-import 'package:budget/widgets/editRowEntry.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
-import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/openPopup.dart';
-import 'package:budget/widgets/tappable.dart';
-import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart'
     hide SliverReorderableList, ReorderableDelayedDragStartListener;
@@ -121,7 +117,7 @@ class ObjectivesListPageState extends State<ObjectivesListPage> {
   }
 }
 
-class ObjectiveList extends StatelessWidget {
+class ObjectiveList extends StatefulWidget {
   const ObjectiveList({
     required this.showExamplesIfEmpty,
     required this.objectiveType,
@@ -130,200 +126,135 @@ class ObjectiveList extends StatelessWidget {
     this.isIncome,
     super.key,
   });
+
+  /// Lista vazia mostra o estado vazio com uma ação (antes: metas de exemplo).
   final bool showExamplesIfEmpty;
   final ObjectiveType objectiveType;
   final bool showAddButton;
   final String? searchFor;
   final bool? isIncome;
+
+  @override
+  State<ObjectiveList> createState() => _ObjectiveListState();
+}
+
+class _ObjectiveListState extends State<ObjectiveList> {
+  // Entrada só ao abrir: itens que voltam à tela ao rolar aparecem direto.
+  final DateTime _aberta = DateTime.now();
+
   @override
   Widget build(BuildContext context) {
+    final emprestimo = widget.objectiveType == ObjectiveType.loan;
+    final novaPagina = AddObjectivePage(
+      routesToPopAfterDelete: RoutesToPopAfterDelete.PreventDelete,
+      objectiveType: widget.objectiveType,
+      selectedIncome: widget.isIncome,
+    );
+    final Widget adicionar = widget.showAddButton
+        ? AddButton(
+            onTap: () {},
+            openPage: novaPagina,
+            width: null,
+            height: 150,
+            labelUnder: emprestimo ? "add-loan".tr() : "add-goal".tr(),
+          )
+        : const SizedBox.shrink();
     return StreamBuilder<List<Objective>>(
       stream: database.watchAllObjectives(
-        objectiveType: objectiveType,
-        searchFor: searchFor,
-        isIncome: isIncome,
+        objectiveType: widget.objectiveType,
+        searchFor: widget.searchFor,
+        isIncome: widget.isIncome,
         hideArchived: true,
         showDifferenceLoans: false,
       ),
       builder: (context, snapshot) {
-        bool showDemoObjectives = false;
-        // Need to use spread operator or else demo objectives glitches in and out when first loaded
-        List<Objective> objectivesList = [...(snapshot.data ?? [])];
-        if (showExamplesIfEmpty &&
-            (snapshot.hasData == false ||
-                (objectivesList.length <= 0 && snapshot.hasData))) {
-          showDemoObjectives = true;
-          objectivesList.add(
-            Objective(
-                objectivePk: "-3",
-                name: "example-goals-1".tr(),
-                amount: 1500,
-                order: 0,
-                dateCreated: DateTime.now().subtract(Duration(days: 40)),
-                income: false,
-                pinned: false,
-                iconName: "coconut-tree.png",
-                colour: toHexString(Colors.greenAccent),
-                walletFk: "0",
-                archived: false,
-                type: ObjectiveType.goal),
-          );
-          objectivesList.add(
-            Objective(
-                objectivePk: "-2",
-                name: "example-goals-2".tr(),
-                amount: 2000,
-                order: 0,
-                dateCreated: DateTime.now().subtract(Duration(days: 10)),
-                income: false,
-                pinned: false,
-                iconName: "car(1).png",
-                colour: toHexString(Colors.orangeAccent),
-                walletFk: "0",
-                archived: false,
-                type: ObjectiveType.goal),
+        if (!snapshot.hasData) return const SliverToBoxAdapter();
+        final objetivos = snapshot.data!;
+        if (objetivos.isEmpty && widget.showExamplesIfEmpty) {
+          return SliverToBoxAdapter(
+            child: VazioMetas(
+              emprestimo: emprestimo,
+              onCriar: () => pushRoute(context, novaPagina),
+            ),
           );
         }
-        Widget addButton = showAddButton == false
-            ? SizedBox.shrink()
-            : Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsetsDirectional.only(
-                            top: getPlatform() == PlatformOS.isIOS ? 10 : 0,
-                            bottom: 20,
-                          ),
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.symmetric(
-                              horizontal:
-                                  getPlatform() == PlatformOS.isIOS ? 13 : 0,
-                            ),
-                            child: AddButton(
-                              onTap: () {},
-                              openPage: AddObjectivePage(
-                                routesToPopAfterDelete:
-                                    RoutesToPopAfterDelete.PreventDelete,
-                                objectiveType: objectiveType,
-                                selectedIncome: isIncome,
-                              ),
-                              height: 150,
-                              labelUnder: objectiveType == ObjectiveType.loan
-                                  ? "add-loan".tr()
-                                  : "add-goal".tr(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (showDemoObjectives)
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-                      child: TextFont(
-                        text: "example-goals".tr(),
-                        textColor: getColor(context, "black").withOpacity(0.25),
-                        fontSize: 16,
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                ],
+        final animar = DateTime.now().difference(_aberta) <
+            const Duration(milliseconds: 600);
+        Widget item(int i) => i == objetivos.length
+            ? adicionar
+            : EntradaSuave(
+                key: ValueKey(objetivos[i].objectivePk),
+                indice: i,
+                animar: animar,
+                child: ObjectiveContainer(
+                  index: i,
+                  objective: objetivos[i],
+                  isGridView: enableDoubleColumn(context),
+                ),
               );
         return SliverPadding(
-          padding: EdgeInsetsDirectional.symmetric(
-            vertical: getPlatform() == PlatformOS.isIOS ? 3 : 7,
-            horizontal: getPlatform() == PlatformOS.isIOS ? 0 : 13,
-          ),
+          padding: const EdgeInsetsDirectional.symmetric(
+              vertical: 7, horizontal: 13),
           sliver: enableDoubleColumn(context)
               ? SliverGrid(
-                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 500.0,
-                    mainAxisExtent: 160,
-                    mainAxisSpacing:
-                        getPlatform() == PlatformOS.isIOS ? 0 : 15.0,
-                    crossAxisSpacing:
-                        getPlatform() == PlatformOS.isIOS ? 0 : 15.0,
-                    childAspectRatio: 5,
+                    mainAxisExtent: 172,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (BuildContext context, int index) {
-                      if ((showDemoObjectives && index == 0) ||
-                          (showDemoObjectives == false &&
-                              index == objectivesList.length)) {
-                        return showAddButton == false
-                            ? SizedBox.shrink()
-                            : AddButton(
-                                onTap: () {},
-                                openPage: AddObjectivePage(
-                                  routesToPopAfterDelete:
-                                      RoutesToPopAfterDelete.PreventDelete,
-                                  objectiveType: objectiveType,
-                                  selectedIncome: isIncome,
-                                ),
-                                labelUnder: objectiveType == ObjectiveType.loan
-                                    ? "add-loan".tr()
-                                    : "add-goal".tr(),
-                              );
-                      } else {
-                        Objective objective = objectivesList[
-                            index - (showDemoObjectives ? 1 : 0)];
-                        return ObjectiveContainer(
-                          index: index,
-                          objective: objective,
-                          demoObjective: showDemoObjectives,
-                          isGridView: true,
-                          forcedTotalAmount: showDemoObjectives
-                              ? (objective.income
-                                      ? randomInt[index].toDouble() * -1
-                                      : randomInt[index].toDouble()) *
-                                  15
-                              : null,
-                          forcedNumberTransactions:
-                              showDemoObjectives ? randomInt[index] : null,
-                        );
-                      }
-                    },
-                    childCount: (objectivesList.length) + 1,
+                    (context, i) => item(i),
+                    childCount: objetivos.length + 1,
                   ),
                 )
               : SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (BuildContext context, int index) {
-                      if ((showDemoObjectives && index == 0) ||
-                          (showDemoObjectives == false &&
-                              index == objectivesList.length)) {
-                        return addButton;
-                      } else {
-                        Objective objective = objectivesList[
-                            index - (showDemoObjectives ? 1 : 0)];
-                        return Padding(
-                          padding: EdgeInsetsDirectional.only(
-                            bottom:
-                                getPlatform() == PlatformOS.isIOS ? 0 : 16.0,
-                          ),
-                          child: ObjectiveContainer(
-                            index: index,
-                            objective: objective,
-                            demoObjective: showDemoObjectives,
-                            forcedTotalAmount: showDemoObjectives
-                                ? (objective.income
-                                        ? randomInt[index].toDouble() * -1
-                                        : randomInt[index].toDouble()) *
-                                    15
-                                : null,
-                            forcedNumberTransactions:
-                                showDemoObjectives ? randomInt[index] : null,
-                          ),
-                        );
-                      }
-                    },
-                    childCount: (objectivesList.length) + 1,
+                    (context, i) => Padding(
+                      padding: const EdgeInsetsDirectional.only(bottom: 12),
+                      child: item(i),
+                    ),
+                    childCount: objetivos.length + 1,
                   ),
                 ),
         );
       },
+    );
+  }
+}
+
+/// Vazio curto: ícone, uma frase e uma ação.
+class VazioMetas extends StatelessWidget {
+  const VazioMetas(
+      {super.key, required this.emprestimo, required this.onCriar});
+  final bool emprestimo;
+  final VoidCallback onCriar;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(30, 48, 30, 0),
+      child: Column(
+        children: [
+          Icon(
+            emprestimo ? Icons.handshake_outlined : Icons.savings_outlined,
+            size: 32,
+            color: e.mu,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            emprestimo ? 'Nenhum empréstimo ainda' : 'Nenhuma meta ainda',
+            textAlign: TextAlign.center,
+            style: EdTexto.corpo(context).copyWith(color: e.mu),
+          ),
+          const SizedBox(height: 16),
+          Button(
+            label: emprestimo ? 'Adicionar empréstimo' : 'Criar meta',
+            onTap: onCriar,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -355,21 +286,15 @@ class ObjectiveListDifferenceLoan extends StatelessWidget {
             child: SizedBox.shrink(),
           );
         return SliverPadding(
-          padding: EdgeInsetsDirectional.symmetric(
-            vertical: getPlatform() == PlatformOS.isIOS ? 3 : 7,
-            horizontal: getPlatform() == PlatformOS.isIOS ? 0 : 13,
-          ),
+          padding: const EdgeInsetsDirectional.symmetric(
+              vertical: 7, horizontal: 13),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (BuildContext context, int index) {
                 Objective objective = objectivesList[index];
                 return Padding(
                   padding: EdgeInsetsDirectional.only(
-                    bottom: getPlatform() == PlatformOS.isIOS
-                        ? 0
-                        : index == objectivesList.length - 1
-                            ? 0
-                            : 10,
+                    bottom: index == objectivesList.length - 1 ? 0 : 8,
                   ),
                   child: ObjectiveContainerDifferenceLoan(
                     index: index,
@@ -390,594 +315,363 @@ class ObjectiveContainer extends StatelessWidget {
   const ObjectiveContainer({
     required this.objective,
     required this.index,
-    this.forcedTotalAmount,
-    this.forcedNumberTransactions,
-    this.forceAndroidBubbleDesign = false, //forced on the homepage
-    this.demoObjective = false,
     this.isGridView,
     super.key,
   });
   final Objective objective;
   final int index;
-  final double? forcedTotalAmount;
-  final int? forcedNumberTransactions;
-  final bool forceAndroidBubbleDesign;
-  final bool demoObjective;
   final bool? isGridView;
 
   @override
   Widget build(BuildContext context) {
-    double borderRadius =
-        getPlatform() == PlatformOS.isIOS && forceAndroidBubbleDesign == false
-            ? 0
-            : 20;
-    Color containerColor =
-        getPlatform() == PlatformOS.isIOS && forceAndroidBubbleDesign == false
-            ? Theme.of(context).colorScheme.background
-            : getColor(context, "lightDarkAccentHeavyLight");
-    EdgeInsetsDirectional containerPadding = EdgeInsetsDirectional.only(
-      start:
-          getPlatform() == PlatformOS.isIOS && forceAndroidBubbleDesign == false
-              ? 23
-              : 30,
-      end:
-          getPlatform() == PlatformOS.isIOS && forceAndroidBubbleDesign == false
-              ? 23
-              : 20,
-    );
-    Widget child = WatchTotalAndAmountOfObjective(
-      objective: objective,
-      builder: (objectiveAmount, totalAmount, percentageTowardsGoal) {
-        if (forcedTotalAmount != null) {
-          totalAmount = forcedTotalAmount ?? totalAmount;
-          percentageTowardsGoal = (forcedTotalAmount ?? 0) / objectiveAmount;
-        }
-
-        return Container(
-          decoration: BoxDecoration(
-            boxShadow: getPlatform() == PlatformOS.isIOS &&
-                    forceAndroidBubbleDesign == false
-                ? []
-                : boxShadowCheck(boxShadowGeneral(context)),
-          ),
-          child: OpenContainerNavigation(
-            openPage: ObjectivePage(objectivePk: objective.objectivePk),
-            borderRadius: borderRadius,
-            closedColor: containerColor,
-            button: (openContainer()) {
-              return Tappable(
-                onLongPress: () {
-                  pushRoute(
-                    context,
-                    AddObjectivePage(
-                      routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-                      objective: objective,
-                    ),
-                  );
-                },
-                color: containerColor,
-                onTap: () {
-                  openContainer();
-                },
-                child: Padding(
-                  padding: EdgeInsetsDirectional.only(
-                    top: 18,
-                    bottom: 23,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Padding(
-                        padding: containerPadding,
-                        child: Column(children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    TextFont(
-                                      text: objective.name,
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Padding(
-                                            padding: const EdgeInsetsDirectional
-                                                .only(end: 3),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsetsDirectional
-                                                      .only(bottom: 3),
-                                              child:
-                                                  Builder(builder: (context) {
-                                                String content =
-                                                    getWordedDateShortMore(
-                                                  objective.dateCreated,
-                                                  includeYear: objective
-                                                          .dateCreated.year !=
-                                                      DateTime.now().year,
-                                                );
-                                                if (objective.endDate != null) {
-                                                  content = getObjectiveStatus(
-                                                    context,
-                                                    objective,
-                                                    totalAmount,
-                                                    percentageTowardsGoal,
-                                                    objectiveAmount,
-                                                  );
-                                                }
-                                                return TextFont(
-                                                  text: content,
-                                                  fontSize: 15,
-                                                  textColor:
-                                                      getColor(context, "black")
-                                                          .withOpacity(0.65),
-                                                  maxLines: 1,
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(width: 5),
-                              CategoryIcon(
-                                categoryPk: "-1",
-                                category: TransactionCategory(
-                                  categoryPk: "-1",
-                                  name: "",
-                                  dateCreated: DateTime.now(),
-                                  dateTimeModified: null,
-                                  order: 0,
-                                  income: false,
-                                  iconName: objective.iconName,
-                                  colour: objective.colour,
-                                  emojiIconName: objective.emojiIconName,
-                                ),
-                                size: 30,
-                                sizePadding: 20,
-                                borderRadius: 100,
-                                canEditByLongPress: false,
-                                margin: EdgeInsetsDirectional.zero,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Flexible(
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    if (constraints.maxWidth <= 73) {
-                                      return SizedBox.shrink();
-                                    }
-                                    return StreamBuilder<int?>(
-                                      stream: database
-                                          .getTotalCountOfTransactionsInObjective(
-                                              objective.objectivePk)
-                                          .$1,
-                                      builder: (context, snapshot) {
-                                        int numberTransactions =
-                                            forcedNumberTransactions ??
-                                                snapshot.data ??
-                                                0;
-                                        return Padding(
-                                          padding:
-                                              const EdgeInsetsDirectional.only(
-                                                  bottom: 2),
-                                          child: TextFont(
-                                            textAlign: TextAlign.start,
-                                            text: (objective.type ==
-                                                    ObjectiveType.loan
-                                                ? (objective.income
-                                                    ? "lent".tr()
-                                                    : "borrowed".tr())
-                                                : (numberTransactions
-                                                        .toString() +
-                                                    " " +
-                                                    (numberTransactions == 1
-                                                        ? "transaction"
-                                                            .tr()
-                                                            .toLowerCase()
-                                                        : "transactions"
-                                                            .tr()
-                                                            .toLowerCase()))),
-                                            fontSize: 15,
-                                            textColor:
-                                                getColor(context, "black")
-                                                    .withOpacity(0.65),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                              Builder(builder: (context) {
-                                String amountSpentLabel =
-                                    getObjectiveAmountSpentLabel(
-                                  context: context,
-                                  showTotalSpent: appStateSettings[
-                                      "showTotalSpentForObjective"],
-                                  objectiveAmount: objectiveAmount,
-                                  totalAmount: totalAmount,
-                                  objective: objective,
-                                );
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    TextFont(
-                                      fontWeight: FontWeight.bold,
-                                      text: amountSpentLabel,
-                                      fontSize: 20,
-                                      textColor: objective.type ==
-                                              ObjectiveType.loan
-                                          ? totalAmount >= objectiveAmount
-                                              ? getColor(context, "black")
-                                              : objective.income
-                                                  ? getColor(
-                                                      context, "unPaidUpcoming")
-                                                  : getColor(
-                                                      context, "unPaidOverdue")
-                                          : totalAmount >= objectiveAmount
-                                              ? getColor(
-                                                  context, "incomeAmount")
-                                              : getColor(context, "black"),
-                                    ),
-                                    if (objective.type == ObjectiveType.goal &&
-                                        objectiveAmount <= 0)
-                                      // Meta sem valor alvo (ex.: Reserva de emergência): o saldo é o das aplicações.
-                                      Tappable(
-                                        color: Colors.transparent,
-                                        borderRadius: 8,
-                                        onTap: () => pushRoute(
-                                          context,
-                                          AddObjectivePage(
-                                            routesToPopAfterDelete:
-                                                RoutesToPopAfterDelete.One,
-                                            objective: objective,
-                                          ),
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsetsDirectional
-                                              .only(start: 6, top: 4, bottom: 4),
-                                          child: TextFont(
-                                            text: "Definir valor",
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            textColor: Theme.of(context)
-                                                .colorScheme
-                                                .primary,
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                    Padding(
-                                      padding: const EdgeInsetsDirectional.only(
-                                          bottom: 2),
-                                      child: TextFont(
-                                        text: objectiveRemainingAmountText(
-                                          objectiveAmount: objectiveAmount,
-                                          totalAmount: totalAmount,
-                                          context: context,
-                                        ),
-                                        fontSize: 15,
-                                        textColor: getColor(context, "black")
-                                            .withOpacity(0.3),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }),
-                            ],
-                          ),
-                          SizedBox(height: 8),
-                        ]),
-                      ),
-                      Padding(
-                        padding: objective.endDate == null
-                            ? containerPadding
-                            : const EdgeInsetsDirectional.symmetric(
-                                horizontal: 15),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (objective.endDate != null)
-                              Padding(
-                                padding:
-                                    const EdgeInsetsDirectional.only(end: 7),
-                                child: TextFont(
-                                  textAlign: TextAlign.center,
-                                  text: getWordedDateShort(
-                                    objective.dateCreated,
-                                    includeYear: objective.dateCreated.year !=
-                                        DateTime.now().year,
-                                  ),
-                                  fontSize: 12,
-                                  textColor: getColor(context, "black")
-                                      .withOpacity(0.3),
-                                ),
-                              ),
-                            Expanded(
-                              child: BudgetProgress(
-                                color: HexColor(
-                                  objective.colour,
-                                  defaultColor:
-                                      Theme.of(context).colorScheme.primary,
-                                ),
-                                ghostPercent: 0,
-                                percent: percentageTowardsGoal * 100,
-                                todayPercent: -1,
-                                showToday: false,
-                                yourPercent: 0,
-                                padding: EdgeInsetsDirectional.zero,
-                                enableShake: false,
-                                backgroundColor: (getPlatform() ==
-                                                PlatformOS.isIOS &&
-                                            forceAndroidBubbleDesign ==
-                                                false) ||
-                                        appStateSettings["materialYou"] == false
-                                    ? null
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .secondaryContainer,
-                              ),
-                            ),
-                            if (objective.endDate != null)
-                              Padding(
-                                padding:
-                                    const EdgeInsetsDirectional.only(start: 7),
-                                child: TextFont(
-                                  textAlign: TextAlign.center,
-                                  text: getWordedDateShort(
-                                    objective.endDate!,
-                                    includeYear: objective.endDate?.year !=
-                                        DateTime.now().year,
-                                  ),
-                                  fontSize: 12,
-                                  textColor: getColor(context, "black")
-                                      .withOpacity(0.3),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+    void editar() => pushRoute(
+          context,
+          AddObjectivePage(
+            routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+            objective: objective,
           ),
         );
-      },
-    );
-    if (demoObjective) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.25,
-          child: ClipRRect(
-            borderRadius: BorderRadiusDirectional.circular(borderRadius),
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                Colors.grey,
-                BlendMode.saturation,
-              ),
-              child: child,
-            ),
-          ),
+    return StreamBuilder<int?>(
+      stream: database
+          .getTotalCountOfTransactionsInObjective(objective.objectivePk)
+          .$1,
+      builder: (context, contagem) => WatchTotalAndAmountOfObjective(
+        objective: objective,
+        builder: (alvo, total, fracao) => CartaoMeta(
+          objective: objective,
+          alvo: alvo,
+          total: total,
+          fracao: fracao,
+          transacoes: contagem.data,
+          preencher: isGridView == true,
+          onTap: () => pushRoute(
+              context, ObjectivePage(objectivePk: objective.objectivePk)),
+          onLongPress: editar,
+          onDefinirValor: editar,
         ),
-      );
-    } else {
-      return AddTopAndBottomBorderIfIOS(
-        enabled: getPlatform() == PlatformOS.isIOS,
-        child: child,
-      );
-    }
+      ),
+    );
   }
 }
 
+/// Rótulo e valor em destaque de uma meta ou empréstimo. Com [mostrarTotal]
+/// (opção "total gasto" das metas) mostra o acumulado; senão, o que falta.
+({String rotulo, double valor}) destaqueMeta(
+  Objective objective, {
+  required double alvo,
+  required double total,
+  required bool mostrarTotal,
+}) {
+  final emprestimo = objective.type == ObjectiveType.loan;
+  final receita = objective.income;
+  if (!mostrarTotal && total < alvo) {
+    return (
+      rotulo: emprestimo
+          ? (receita ? 'A receber' : 'A pagar')
+          : (receita ? 'Falta guardar' : 'Falta pagar'),
+      valor: alvo - total,
+    );
+  }
+  final concluida = alvo > 0 && total >= alvo;
+  return (
+    rotulo: concluida
+        ? (emprestimo ? 'Quitado' : 'Meta alcançada')
+        : emprestimo
+            ? (receita ? 'Recebido' : 'Pago')
+            : (receita ? 'Guardado' : 'Pago'),
+    valor: total,
+  );
+}
+
+/// "de R$ 1.500,00 · 33%" (empréstimo: "Emprestado R$ 1.500,00 · 33%").
+String detalheMeta(BuildContext context, Objective objective,
+    {required double alvo, required double fracao}) {
+  final valor = convertToMoney(Provider.of<AllWallets>(context), alvo);
+  final pct = '${(fracao * 100).clamp(0, 999).round()}%';
+  final inicio = objective.type == ObjectiveType.loan
+      ? (objective.income ? 'Emprestado' : 'Pego emprestado')
+      : 'de';
+  return '$inicio $valor · $pct';
+}
+
+String textoTransacoes(int n) => n == 1 ? '1 transação' : '$n transações';
+
+Widget iconeMeta(Objective objective,
+        {double size = 18, double sizePadding = 14, VoidCallback? onTap}) =>
+    CategoryIcon(
+      categoryPk: "-1",
+      category: TransactionCategory(
+        categoryPk: "-1",
+        name: "",
+        dateCreated: DateTime.now(),
+        dateTimeModified: null,
+        order: 0,
+        income: false,
+        iconName: objective.iconName,
+        colour: objective.colour,
+        emojiIconName: objective.emojiIconName,
+      ),
+      size: size,
+      sizePadding: sizePadding,
+      borderRadius: 12,
+      canEditByLongPress: false,
+      margin: EdgeInsetsDirectional.zero,
+      onTap: onTap,
+    );
+
+BoxDecoration cartaoPlano(EditorialCores e) => BoxDecoration(
+      color: e.surf,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: e.line),
+    );
+
+/// Cartão de meta/empréstimo sem acesso ao banco: valor em destaque, medidor
+/// e uma linha secundária. Tocar abre a meta; segurar edita.
+class CartaoMeta extends StatelessWidget {
+  const CartaoMeta({
+    super.key,
+    required this.objective,
+    required this.alvo,
+    required this.total,
+    required this.fracao,
+    this.transacoes,
+    this.mostrarTotal,
+    this.preencher = false,
+    this.onTap,
+    this.onLongPress,
+    this.onDefinirValor,
+  });
+  final Objective objective;
+  final double alvo, total, fracao;
+  final int? transacoes;
+
+  /// Nulo: segue appStateSettings["showTotalSpentForObjective"].
+  final bool? mostrarTotal;
+
+  /// Grade do computador: ocupa a altura da célula.
+  final bool preencher;
+  final VoidCallback? onTap, onLongPress, onDefinirValor;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    String dinheiro(double v) =>
+        convertToMoney(Provider.of<AllWallets>(context), v);
+    final semAlvo = objective.type == ObjectiveType.goal && alvo <= 0;
+    final d = destaqueMeta(objective,
+        alvo: alvo,
+        total: total,
+        mostrarTotal: semAlvo ||
+            (mostrarTotal ??
+                appStateSettings["showTotalSpentForObjective"] == true));
+    final concluida = !semAlvo && total >= alvo;
+    final status = objective.endDate == null || semAlvo
+        ? ''
+        : getObjectiveStatus(context, objective, total, fracao, alvo);
+    final valor = ContagemValor(
+      valor: d.valor,
+      formatar: (v) => convertToMoney(
+          Provider.of<AllWallets>(context), v,
+          allDecimals: true),
+      centavosMenores: true,
+      estilo: EdTexto.numeroGrande(context).copyWith(
+          fontSize: 26,
+          letterSpacing: -.78,
+          color: concluida && objective.type == ObjectiveType.goal
+              ? e.pos
+              : null),
+    );
+    final cartao = Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 14),
+      decoration: cartaoPlano(e),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: preencher
+            ? MainAxisAlignment.spaceBetween
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            iconeMeta(objective),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(objective.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
+            ),
+            if (transacoes != null) ...[
+              const SizedBox(width: 8),
+              Text(textoTransacoes(transacoes!),
+                  style: EdTexto.rotulo(context)),
+            ],
+          ]),
+          const SizedBox(height: 12),
+          Text(d.rotulo, style: EdTexto.rotulo(context)),
+          const SizedBox(height: 4),
+          if (semAlvo)
+            Row(children: [
+              Flexible(child: valor),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onDefinirValor,
+                style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: e.acc),
+                child: const Text('Definir valor'),
+              ),
+            ])
+          else ...[
+            valor,
+            const SizedBox(height: 12),
+            MedidorEditorial(fracao: fracao),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                child: Text(
+                    detalheMeta(context, objective, alvo: alvo, fracao: fracao),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.rotulo(context)),
+              ),
+              if (status != '') ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(status,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: EdTexto.rotulo(context)),
+                ),
+              ],
+            ]),
+          ],
+        ],
+      ),
+    );
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: ToqueEscala(onTap: onTap, child: cartao),
+      ),
+    );
+  }
+}
+
+/// Empréstimo por diferença: linha plana com o saldo à direita.
 class ObjectiveContainerDifferenceLoan extends StatelessWidget {
   const ObjectiveContainerDifferenceLoan({
     required this.objective,
     required this.index,
-    this.forceAndroidBubbleDesign = false, //forced on the homepage
-    this.rowEntry = false,
     super.key,
   });
   final Objective objective;
   final int index;
-  final bool forceAndroidBubbleDesign;
-  final bool rowEntry;
 
   @override
   Widget build(BuildContext context) {
-    double borderRadius = rowEntry ||
-            (getPlatform() == PlatformOS.isIOS &&
-                forceAndroidBubbleDesign == false)
-        ? 0
-        : 20;
-    Color containerColor =
-        getPlatform() == PlatformOS.isIOS && forceAndroidBubbleDesign == false
-            ? Theme.of(context).colorScheme.background
-            : getColor(context, "lightDarkAccentHeavyLight");
-    Widget child = WatchTotalAndAmountOfObjective(
-      objective: objective,
-      builder: (objectiveAmount, totalAmount, percentageTowardsGoal) {
-        String amountSpentLabel = getObjectiveAmountSpentLabel(
+    return StreamBuilder<int?>(
+      stream: database
+          .getTotalCountOfTransactionsInObjective(objective.objectivePk)
+          .$1,
+      builder: (context, contagem) => WatchTotalAndAmountOfObjective(
+        objective: objective,
+        builder: (alvo, total, fracao) => LinhaEmprestimoDiferenca(
           objective: objective,
-          context: context,
-          showTotalSpent: appStateSettings["showTotalSpentForObjective"],
-          objectiveAmount: objectiveAmount,
-          totalAmount: totalAmount,
-        );
-        return Container(
-          decoration: BoxDecoration(
-            boxShadow: rowEntry ||
-                    (getPlatform() == PlatformOS.isIOS &&
-                        forceAndroidBubbleDesign == false)
-                ? []
-                : boxShadowCheck(boxShadowGeneral(context)),
+          diferenca: getDifferenceOfLoan(objective, total, alvo),
+          quitado: fracao == 1,
+          transacoes: contagem.data,
+          onTap: () => pushRoute(
+              context, ObjectivePage(objectivePk: objective.objectivePk)),
+          onLongPress: () => pushRoute(
+            context,
+            AddObjectivePage(
+              routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+              objective: objective,
+            ),
           ),
-          child: OpenContainerNavigation(
-            openPage: ObjectivePage(objectivePk: objective.objectivePk),
-            borderRadius: borderRadius,
-            closedColor: containerColor,
-            button: (openContainer()) {
-              return Tappable(
-                onLongPress: () {
-                  pushRoute(
-                    context,
-                    AddObjectivePage(
-                      routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-                      objective: objective,
-                    ),
-                  );
-                },
-                color: containerColor,
-                onTap: () {
-                  openContainer();
-                },
-                child: Padding(
-                  padding: EdgeInsetsDirectional.only(
-                    top: rowEntry ? 7 : 10,
-                    bottom: rowEntry ? 7 : 10,
-                    start: 15,
-                    end: 20,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Row(
-                          children: [
-                            CategoryIcon(
-                              categoryPk: "-1",
-                              category: TransactionCategory(
-                                categoryPk: "-1",
-                                name: "",
-                                dateCreated: DateTime.now(),
-                                dateTimeModified: null,
-                                order: 0,
-                                income: false,
-                                iconName: objective.iconName,
-                                colour: objective.colour,
-                                emojiIconName: objective.emojiIconName,
-                              ),
-                              size: 30,
-                              sizePadding: 20,
-                              borderRadius: 100,
-                              canEditByLongPress: false,
-                              margin: EdgeInsetsDirectional.zero,
-                            ),
-                            SizedBox(width: 10),
-                            Flexible(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  TextFont(
-                                    text: objective.name,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  SizedBox(height: 1),
-                                  StreamBuilder<int?>(
-                                    stream: database
-                                        .getTotalCountOfTransactionsInObjective(
-                                            objective.objectivePk)
-                                        .$1,
-                                    builder: (context, snapshot) {
-                                      int numberTransactions =
-                                          snapshot.data ?? 0;
-                                      return TextFont(
-                                        textAlign: TextAlign.start,
-                                        text: numberTransactions.toString() +
-                                            " " +
-                                            (numberTransactions == 1
-                                                ? "transaction"
-                                                    .tr()
-                                                    .toLowerCase()
-                                                : "transactions"
-                                                    .tr()
-                                                    .toLowerCase()),
-                                        fontSize: 14,
-                                        textColor: getColor(context, "black")
-                                            .withOpacity(0.65),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          TextFont(
-                            fontWeight: FontWeight.bold,
-                            text: amountSpentLabel,
-                            fontSize: 20,
-                            textColor: percentageTowardsGoal == 1
-                                ? getColor(context, "black")
-                                : getDifferenceOfLoan(
-                                          objective,
-                                          totalAmount,
-                                          objectiveAmount,
-                                        ) <
-                                        0
-                                    ? getColor(
-                                        context,
-                                        "unPaidUpcoming",
-                                      )
-                                    : getColor(
-                                        context,
-                                        "unPaidOverdue",
-                                      ),
-                          ),
-                          SizedBox(height: 1),
-                          Padding(
-                            padding:
-                                const EdgeInsetsDirectional.only(bottom: 2),
-                            child: TextFont(
-                              textAlign: TextAlign.end,
-                              text: percentageTowardsGoal == 1
-                                  ? "settled".tr().capitalizeFirst
-                                  : (getDifferenceOfLoan(objective, totalAmount,
-                                                  objectiveAmount) >
-                                              0
-                                          ? "to-pay".tr()
-                                          : "to-collect".tr())
-                                      .capitalizeFirst,
-                              fontSize: 14,
-                              textColor:
-                                  getColor(context, "black").withOpacity(0.65),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+        ),
+      ),
     );
-    return child;
+  }
+}
+
+/// Positivo: você deve; negativo: devem a você.
+String rotuloDiferenca(double diferenca, bool quitado) => quitado
+    ? 'Quitado'
+    : diferenca > 0
+        ? 'A pagar'
+        : 'A receber';
+
+class LinhaEmprestimoDiferenca extends StatelessWidget {
+  const LinhaEmprestimoDiferenca({
+    super.key,
+    required this.objective,
+    required this.diferenca,
+    required this.quitado,
+    this.transacoes,
+    this.onTap,
+    this.onLongPress,
+  });
+  final Objective objective;
+
+  /// getDifferenceOfLoan: positivo = a pagar, negativo = a receber.
+  final double diferenca;
+  final bool quitado;
+  final int? transacoes;
+  final VoidCallback? onTap, onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final linha = Container(
+      constraints: const BoxConstraints(minHeight: 60),
+      padding:
+          const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 10),
+      decoration: cartaoPlano(cores(context)),
+      child: Row(children: [
+        iconeMeta(objective),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(objective.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
+              if (transacoes != null)
+                Text(textoTransacoes(transacoes!),
+                    style: EdTexto.rotulo(context)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                convertToMoney(
+                    Provider.of<AllWallets>(context), diferenca.abs()),
+                style: EdTexto.corpo(context)
+                    .copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+            Text(rotuloDiferenca(diferenca, quitado),
+                style: EdTexto.rotulo(context)),
+          ],
+        ),
+      ]),
+    );
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: ToqueEscala(onTap: onTap, child: linha),
+      ),
+    );
   }
 }
 
