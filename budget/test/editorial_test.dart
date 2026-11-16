@@ -88,23 +88,6 @@ void main() {
         const Color(0xFFFFFFFF));
   });
 
-  testWidgets('EntradaEditorial sem movimento mostra o filho direto',
-      (t) async {
-    await t.pumpWidget(_app(
-        const EntradaEditorial(indice: 3, child: Text('oi')),
-        reduzir: true));
-    expect(find.text('oi'), findsOneWidget);
-    expect(find.byType(Opacity), findsNothing);
-  });
-
-  testWidgets('EntradaEditorial anima e termina opaca', (t) async {
-    await t
-        .pumpWidget(_app(const EntradaEditorial(indice: 1, child: Text('oi'))));
-    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, 0);
-    await t.pump(const Duration(milliseconds: 500));
-    expect(t.widget<Opacity>(find.byType(Opacity)).opacity, 1);
-  });
-
   testWidgets('ContagemValor chega ao texto final após 900ms', (t) async {
     await t.pumpWidget(
         _app(ContagemValor(valor: 100, formatar: (v) => 'R\$ ${v.round()}')));

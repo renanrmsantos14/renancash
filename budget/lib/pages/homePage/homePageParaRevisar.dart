@@ -1,5 +1,7 @@
 import 'package:budget/colors.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/editorial/movimento.dart' show ToqueEscala;
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/struct/mbSync/reembolso.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
@@ -209,12 +211,12 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
   @override
   Widget build(BuildContext context) {
     final i = widget.item;
-    final cor = Theme.of(context).colorScheme;
     final data = DateTime.tryParse(i.data ?? '');
     final titulo = i.ehSalario
         ? 'Salário não detectado'
         : switch (i.tipo) {
-            'pix_enviado' => 'Pix enviado${i.destinatario == null ? '' : ' a ${i.destinatario}'}',
+            'pix_enviado' =>
+              'Pix enviado${i.destinatario == null ? '' : ' a ${i.destinatario}'}',
             'envio_santander' => 'Enviado ao Santander',
             _ => 'Pix recebido',
           };
@@ -224,34 +226,49 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     return Opacity(
       opacity: _enviando ? 0.5 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextFont(text: titulo, fontSize: 15, fontWeight: FontWeight.bold),
-        TextFont(
-            text: detalhe,
-            fontSize: 13,
-            textColor: getColor(context, "textLight")),
-        const SizedBox(height: 8),
+        Text(titulo,
+            style: EdTexto.corpo(context).copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: cores(context).tx)),
+        const SizedBox(height: 2),
+        Text(detalhe, style: EdTexto.rotulo(context)),
+        const SizedBox(height: 14),
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (i.tipo == 'pix_enviado')
-            _botao('Escolher categoria', cor, _escolherCategoria),
+            _botao('Escolher categoria', _escolherCategoria),
           for (final r in i.respostas)
-            _botao(_rotulos[r]!, cor,
+            _botao(_rotulos[r]!,
                 r == 'reembolso' ? _escolherReembolso : () => _responder(r)),
           for (final c in i.candidatos)
-            _botao('${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',
-                cor, () => _marcarSalario(c.txId)),
+            _botao(
+                '${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',
+                () => _marcarSalario(c.txId)),
         ]),
       ]),
     );
   }
 
-  Widget _botao(String rotulo, ColorScheme cor, VoidCallback onTap) => Button(
+  Widget _botao(String rotulo, VoidCallback onTap) {
+    final e = cores(context);
+    return Semantics(
+        button: true,
         label: rotulo,
-        fontSize: 14,
-        padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 10),
-        color: cor.secondaryContainer,
-        textColor: cor.onSecondaryContainer,
-        onTap: _enviando ? () {} : onTap,
-      );
+        excludeSemantics: true,
+        // excludeSemantics tira a ação do GestureDetector interno: o toque do leitor de tela vem daqui.
+        onTap: _enviando ? null : onTap,
+        child: ToqueEscala(
+          onTap: _enviando ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+                color: e.chip, borderRadius: BorderRadius.circular(10)),
+            child: Text(rotulo,
+                style: EdTexto.corpo(context)
+                    .copyWith(fontWeight: FontWeight.w500)),
+          ),
+        ));
+  }
 }
 
 const String semGastoReembolso = 'sem_gasto';

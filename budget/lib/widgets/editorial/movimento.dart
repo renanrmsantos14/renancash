@@ -5,40 +5,20 @@ const Curve curvaEditorial = Cubic(.23, 1, .32, 1);
 
 bool semMovimento(BuildContext c) => MediaQuery.of(c).disableAnimations;
 
-class EntradaEditorial extends StatelessWidget {
-  const EntradaEditorial(
-      {super.key, required this.indice, required this.child});
-
-  final int indice;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (semMovimento(context)) return child;
-    final atraso = 55 * indice;
-    const duracao = 420;
-    final total = atraso + duracao;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: total),
-      curve: Interval(atraso / total, 1, curve: curvaEditorial),
-      child: child,
-      builder: (context, t, child) => Opacity(
-        opacity: t,
-        child:
-            Transform.translate(offset: Offset(0, 8 * (1 - t)), child: child),
-      ),
-    );
-  }
-}
-
 class ContagemValor extends StatefulWidget {
   const ContagemValor(
-      {super.key, required this.valor, required this.formatar, this.estilo});
+      {super.key,
+      required this.valor,
+      required this.formatar,
+      this.estilo,
+      this.centavosMenores = false});
 
   final double valor;
   final String Function(double) formatar;
   final TextStyle? estilo;
+
+  /// Mostra ",00" com 55% do tamanho, como nos apps de banco.
+  final bool centavosMenores;
 
   @override
   State<ContagemValor> createState() => _ContagemValorState();
@@ -67,11 +47,27 @@ class _ContagemValorState extends State<ContagemValor> {
     );
   }
 
-  Widget _ajustado(String texto) => FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(texto, style: widget.estilo, maxLines: 1),
-      );
+  Widget _ajustado(String texto) {
+    final virgula = widget.centavosMenores ? texto.lastIndexOf(',') : -1;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: virgula < 0
+          ? Text(texto, style: widget.estilo, maxLines: 1)
+          : Text.rich(
+              TextSpan(text: texto.substring(0, virgula), children: [
+                TextSpan(
+                    text: texto.substring(virgula),
+                    style: TextStyle(
+                        fontSize: (widget.estilo?.fontSize ??
+                                DefaultTextStyle.of(context).style.fontSize ??
+                                14) *
+                            .55)),
+              ]),
+              style: widget.estilo,
+              maxLines: 1),
+    );
+  }
 }
 
 class MedidorEditorial extends StatelessWidget {

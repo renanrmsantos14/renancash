@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/avisos.dart' show mbAtualizarAvisos, meuBancoAvisos;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
@@ -183,6 +184,9 @@ List<MbItemRevisao> mbFilaVisivel(List<MbItemRevisao> itens, MbRevisoes revisoes
 /// Fila que a Início mostra, lida do que está no aparelho.
 final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const []);
 
+/// Itens Para revisar + bancos desconectados (selo da aba Pendências).
+int mbTotalPendencias() => meuBancoRevisar.value.length + meuBancoAvisos.value.length;
+
 Future<void> mbAtualizarRevisar() async {
   try {
     await mbCriarTabelas();
@@ -199,6 +203,8 @@ Future<void> mbAtualizarRevisar() async {
   } catch (e) {
     if (kDebugMode) debugPrint('Meu Banco: falha ao ler a fila Para revisar: $e');
   }
+  // Fora do try: banco desconectado aparece mesmo se a fila falhar (mbLerAvisos não lança).
+  await mbAtualizarAvisos();
 }
 
 /// Registros a gravar ao responder: a decisão da transação e, no Pix enviado com categoria, a memória do destinatário.

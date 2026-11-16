@@ -24,6 +24,8 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/homePage/homePage.dart';
+import 'package:budget/pages/homePage/inicioEditorial.dart';
+import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/pages/notificationsPage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/onBoardingPage.dart';
@@ -365,7 +367,13 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    HomePage(key: homePageStateKey), // 0
+    // Celular pareado: Início nova (fixa); computador e app não pareado: seções antigas
+    // (a Início nova só lê dados do Meu Banco).
+    ValueListenableBuilder<bool>(
+        valueListenable: meuBancoPareado,
+        builder: (context, pareado, _) => pareado && !ehDesktop(context)
+            ? const InicioEditorial()
+            : HomePage(key: homePageStateKey)), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
     Builder(
         builder: (context) => ehDesktop(context)
@@ -392,6 +400,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
         key: upcomingOverdueTransactionsStateKey,
         overdueTransactions: null), //16
     CreditDebtTransactions(key: creditDebtTransactionsKey, isCredit: null), //17
+    const PendenciasPage(), //18 (aba do modo Meu Banco)
   ];
 
   late int currentPage = widget.widthSideNavigationBar <= 0

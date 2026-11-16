@@ -1,27 +1,11 @@
-import 'dart:convert';
-
 import 'package:budget/colors.dart';
-import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/pluggy.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-/// Avisos de conexão do último pull (`avisos` do estado): item com login pendente ou com erro.
-Future<List<Map<String, dynamic>>> mbLerAvisos() async {
-  try {
-    final bruto = await mbLerEstado('avisos');
-    if (bruto != null) {
-      return [
-        for (final a in jsonDecode(bruto) as List)
-          if (a is Map) Map<String, dynamic>.from(a)
-      ];
-    }
-  } catch (_) {}
-  return [];
-}
 
 Future<void> mbReconectarAviso(BuildContext context, Map<String, dynamic> aviso) async {
   final itemId = aviso['item_id'];

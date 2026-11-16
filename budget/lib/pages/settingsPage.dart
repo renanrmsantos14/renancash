@@ -9,6 +9,8 @@ import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
 import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/editHomePage.dart';
+import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/objectivesListPage.dart';
@@ -447,6 +449,8 @@ class SettingsPageContent extends StatelessWidget {
         // EnterName(),
         SettingsHeader(title: "preferences".tr()),
 
+        // Celular pareado: a Início é fixa (sem editor de seções).
+        if (ehDesktop(context) || !meuBancoPareado.value)
         SettingsContainerOpenPage(
           openPage: EditHomePage(),
           title: "edit-home-page".tr(),
