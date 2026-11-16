@@ -4,7 +4,7 @@ import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/homePage/homePagePieChart.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
 import 'package:flutter/material.dart';
 
 /// Gráficos e patrimônio no topo de Orçamentos, no celular pareado (a Início nova não os mostra mais).
@@ -15,13 +15,13 @@ class AnaliseOrcamentos extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
         valueListenable: meuBancoPareado,
-        builder: (context, pareado, _) {
-          if (!pareado || ehDesktop(context)) return const SizedBox.shrink();
+        builder: (context, _, __) {
+          if (!inicioNovaAtiva(context)) return const SizedBox.shrink();
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(18, 4, 18, 10),
+                padding: const EdgeInsetsDirectional.fromSTEB(13, 4, 13, 10),
                 child: Text('Análise', style: EdTexto.h2(context)),
               ),
               const HomePagePatrimonio(),

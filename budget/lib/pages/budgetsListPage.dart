@@ -80,7 +80,9 @@ class BudgetsListPageState extends State<BudgetsListPage> {
           ),
       ],
       slivers: [
-        const SliverToBoxAdapter(child: AnaliseOrcamentos()),
+        // Só na aba; a página empilhada (pelo Mais) mostra só a lista.
+        if (!widget.enableBackButton)
+          const SliverToBoxAdapter(child: AnaliseOrcamentos()),
         StreamBuilder<List<Budget>>(
           stream: database.watchAllBudgets(hideArchived: true),
           builder: (context, snapshot) {

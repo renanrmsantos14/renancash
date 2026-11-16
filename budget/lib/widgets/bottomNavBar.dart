@@ -3,7 +3,7 @@ import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editHomePage.dart';
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar, mbTotalPendencias;
@@ -457,7 +457,7 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
           shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "home",
           // Celular: a Início é fixa (sem editor de seções).
-          onSettings: ehDesktop(context) || !meuBancoPareado.value
+          onSettings: !inicioNovaAtiva(context)
               ? () => pushRoute(context, EditHomePage())
               : null,
         ),

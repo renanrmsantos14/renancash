@@ -1,5 +1,5 @@
 import 'package:budget/widgets/editorial/layoutDesktop.dart'
-    show ehDesktop, mbPaginaAtual, ObservadorPaginas;
+    show ehDesktop, inicioNovaAtiva, mbPaginaAtual, ObservadorPaginas;
 import 'package:budget/widgets/editorial/versaoCanto.dart'
     show FaixaVersao, mbAlturaFaixaVersao;
 import 'dart:async';
@@ -371,7 +371,7 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
     // (a Início nova só lê dados do Meu Banco).
     ValueListenableBuilder<bool>(
         valueListenable: meuBancoPareado,
-        builder: (context, pareado, _) => pareado && !ehDesktop(context)
+        builder: (context, _, __) => inicioNovaAtiva(context)
             ? const InicioEditorial()
             : HomePage(key: homePageStateKey)), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
