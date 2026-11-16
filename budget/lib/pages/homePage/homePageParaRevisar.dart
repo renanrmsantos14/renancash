@@ -255,6 +255,8 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
         button: true,
         label: rotulo,
         excludeSemantics: true,
+        // excludeSemantics tira a ação do GestureDetector interno: o toque do leitor de tela vem daqui.
+        onTap: _enviando ? null : onTap,
         child: ToqueEscala(
           onTap: _enviando ? null : onTap,
           child: Container(

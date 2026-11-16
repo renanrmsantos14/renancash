@@ -70,3 +70,4 @@ As etapas 1 e 2 saem juntas no mesmo build publicado, para que Para revisar e co
 - "Pular" (botão ou deslizar à esquerda) manda o item para o fim da fila só nesta sessão; nada é gravado.
 - Banco desconectado fica numa faixa fixa no topo da aba, com "Reconectar".
 - No modo Meu Banco a barra é Início · Transações · Pendências · Orçamentos · Metas (o "Mais" já não aparecia nesse modo).
+- Revisão de código: a barra pareada volta a ter "Mais" no 5º lugar (Metas sai, porque as metas aparecem na Início com "Ver todas"), senão não haveria caminho para configurações. A Início nova só vale para celular pareado; app não pareado mantém a Início antiga e o "Editar Início".

@@ -42,7 +42,8 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class BottomNavBarState extends State<BottomNavBar> {
-  // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Metas ("Mais" sai).
+  // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Mais.
+  // As metas ficam na Início ("Ver todas"); Mais é o caminho para configurações, backup e sobre.
   static const int _indicePendencias = 18;
 
   List<String> get _atalhosPareado => [
@@ -50,15 +51,23 @@ class BottomNavBarState extends State<BottomNavBar> {
         "${appStateSettings["customNavBarShortcut1"]}",
         "pendencias",
         "${appStateSettings["customNavBarShortcut2"]}",
-        "goals",
+        "more",
       ];
 
-  List<int> get _indicesPareado => [
-        for (final a in _atalhosPareado)
-          a == "pendencias"
-              ? _indicePendencias
-              : navBarIconsData[a]?.navigationIndexedStackIndex ?? 0,
-      ];
+  // Atalho inválido cai no índice padrão da posição, como na barra normal (0, 1, 2).
+  static const List<int> _padraoPareado = [0, 1, _indicePendencias, 2, 3];
+
+  List<int> get _indicesPareado {
+    final atalhos = _atalhosPareado;
+    return [
+      for (var i = 0; i < atalhos.length; i++)
+        // "more" abre a mesma página (3) da barra normal, não a cópia sem chave (4).
+        atalhos[i] == "more"
+            ? _padraoPareado[i]
+            : navBarIconsData[atalhos[i]]?.navigationIndexedStackIndex ??
+                _padraoPareado[i],
+    ];
+  }
 
   @override
   void initState() {
@@ -448,7 +457,7 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
           shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "home",
           // Celular: a Início é fixa (sem editor de seções).
-          onSettings: ehDesktop(context)
+          onSettings: ehDesktop(context) || !meuBancoPareado.value
               ? () => pushRoute(context, EditHomePage())
               : null,
         ),
@@ -666,6 +675,7 @@ const Map<String, String> _rotulosEditorial = {
   "transactions": "Transações",
   "budgets": "Orçamentos",
   "goals": "Metas",
+  "more": "Mais",
   "pendencias": "Pendências",
 };
 

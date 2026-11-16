@@ -32,7 +32,7 @@ description: "Verifica o tema Editorial (modos claro/escuro e 4 acentos), a tela
 - Textos pt-BR em caixa de frase ("Selecione a categoria"), não "Cada Palavra Maiúscula".
 - Tema antigo salvo (um dos 18 removidos, ex.: `nord`) cai em Sistema sem crash; acento inválido cai em Verde.
 - Peso 600 da Geist/GeistMono precisa de arquivo próprio no pubspec (sem `style: italic` perdido); sem ele o texto sai em 500.
-- Aba Pendências (só no modo Meu Banco, índice 18; barra pareada: Início · Transações · Pendências · Orçamentos · Metas, rótulo só na aba ativa): selo = itens Para revisar + bancos desconectados e some em zero; um item por vez; "Pular" e deslizar à esquerda (distância > 30% ou velocidade > 0,11 px/ms) mandam o item para o fim da fila só na sessão; item único não tem Pular; segundo dedo durante o arraste é ignorado; sem nada mostra "Tudo em dia". `test/mb_revisao_test.dart` precisa do `sqlite3.dll` no Windows (sem ele, os testes Drift falham por ambiente).
+- Aba Pendências (só no modo Meu Banco, índice 18; barra pareada: Início · Transações · Pendências · Orçamentos · Mais; a Início nova só aparece no celular pareado, rótulo só na aba ativa): selo = itens Para revisar + bancos desconectados e some em zero; um item por vez; "Pular" e deslizar à esquerda (distância > 30% ou velocidade > 0,11 px/ms) mandam o item para o fim da fila só na sessão; item único não tem Pular; segundo dedo durante o arraste é ignorado; sem nada mostra "Tudo em dia". `test/mb_revisao_test.dart` precisa do `sqlite3.dll` no Windows (sem ele, os testes Drift falham por ambiente).
 - Início vazia e carregando; app não pareado mantém o fluxo original do RenanCash; página empilhada no desktop mantém a versão visível.
 
 ## Evidência obrigatória

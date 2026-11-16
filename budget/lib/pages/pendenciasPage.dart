@@ -167,7 +167,7 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
   late final AnimationController _dx =
       AnimationController.unbounded(vsync: this);
   int? _ponteiro;
-  double _origem = 0;
+  double _origem = 0, _origemY = 0;
   Duration _inicio = Duration.zero;
   bool _arrastando = false;
 
@@ -181,6 +181,7 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
     if (_ponteiro != null || widget.aoPular == null) return;
     _ponteiro = ev.pointer;
     _origem = ev.position.dx - _dx.value;
+    _origemY = ev.position.dy;
     _inicio = ev.timeStamp;
     _arrastando = false;
     _dx.stop();
@@ -189,7 +190,16 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
   void _mover(PointerMoveEvent ev) {
     if (ev.pointer != _ponteiro) return;
     final dx = ev.position.dx - _origem;
-    if (!_arrastando && dx.abs() < kTouchSlop) return;
+    if (!_arrastando) {
+      final dy = (ev.position.dy - _origemY).abs();
+      if (dx.abs() < kTouchSlop && dy < kTouchSlop) return;
+      // Gesto mais vertical que horizontal é rolagem da lista: solta o cartão.
+      if (dy > dx.abs()) {
+        _ponteiro = null;
+        _voltar();
+        return;
+      }
+    }
     _arrastando = true;
     _dx.value = dx > 0 ? dx * .15 : dx;
   }
@@ -220,7 +230,11 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
 
   Future<void> _sair() async {
     final pular = widget.aoPular;
-    if (pular == null) return;
+    // A fila pode ter ficado com um item só durante o arraste: volta o cartão.
+    if (pular == null) {
+      _voltar();
+      return;
+    }
     if (!semMovimento(context)) {
       final largura = context.size?.width ?? 400;
       await _dx.animateTo(-largura * 1.1,

@@ -367,11 +367,13 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    // Celular: Início nova (fixa); computador: seções antigas até a etapa do PainelDesktop.
-    Builder(
-        builder: (context) => ehDesktop(context)
-            ? HomePage(key: homePageStateKey)
-            : const InicioEditorial()), // 0
+    // Celular pareado: Início nova (fixa); computador e app não pareado: seções antigas
+    // (a Início nova só lê dados do Meu Banco).
+    ValueListenableBuilder<bool>(
+        valueListenable: meuBancoPareado,
+        builder: (context, pareado, _) => pareado && !ehDesktop(context)
+            ? const InicioEditorial()
+            : HomePage(key: homePageStateKey)), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
     Builder(
         builder: (context) => ehDesktop(context)

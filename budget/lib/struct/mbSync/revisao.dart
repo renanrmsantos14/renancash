@@ -200,10 +200,11 @@ Future<void> mbAtualizarRevisar() async {
     final revisoes = MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]);
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
     meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values);
-    await mbAtualizarAvisos();
   } catch (e) {
     if (kDebugMode) debugPrint('Meu Banco: falha ao ler a fila Para revisar: $e');
   }
+  // Fora do try: banco desconectado aparece mesmo se a fila falhar (mbLerAvisos não lança).
+  await mbAtualizarAvisos();
 }
 
 /// Registros a gravar ao responder: a decisão da transação e, no Pix enviado com categoria, a memória do destinatário.
