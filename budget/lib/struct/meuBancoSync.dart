@@ -45,8 +45,12 @@ final ValueNotifier<MbFila> meuBancoFila = ValueNotifier(const MbFila(0, []));
 // Verdadeiro quando o app está pareado (token guardado) ou na web, que usa o cookie da mesma origem.
 final ValueNotifier<bool> meuBancoPareado = ValueNotifier(kIsWeb);
 
+/// Vira true quando meuBancoPareado já reflete o token salvo (a leitura é assíncrona).
+final ValueNotifier<bool> meuBancoPareadoConferido = ValueNotifier(kIsWeb);
+
 Future<void> meuBancoVerificarPareado() async {
   meuBancoPareado.value = kIsWeb || (await meuBancoLerToken())?.isNotEmpty == true;
+  meuBancoPareadoConferido.value = true;
 }
 
 Future<String?> meuBancoLerToken() async {

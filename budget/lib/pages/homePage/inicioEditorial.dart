@@ -3,6 +3,8 @@ import 'dart:math' show max;
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addBudgetPage.dart';
+import 'package:budget/pages/budgetsListPage.dart';
+import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/budgetPage.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/pages/objectivePage.dart';
@@ -18,6 +20,7 @@ import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/painelTransacao.dart' show abrirTransacao;
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/widgets/navigationFramework.dart' show runAllCloudFunctions;
@@ -123,6 +126,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
               onDefinirLimite:
                   _real ? () => mbAbrirOrcamentoCiclo(context, editar: true) : null,
             ),
+          if (_real) const AtalhosInicio(),
           if (_real) const MetasEmprestimosInicio(),
           if (m.contas.isNotEmpty)
             ContasInicio(
@@ -224,6 +228,95 @@ class SemDadosInicio extends StatelessWidget {
                 child: const Text('Conectar banco'),
               ),
             ]),
+    );
+  }
+}
+
+/// Sem banco conectado: atalhos para o uso manual, em grade 2×2.
+/// Some quando o banco é conectado ou com Configurações › Início › Mostrar atalhos sem banco desligado.
+class AtalhosInicio extends StatelessWidget {
+  const AtalhosInicio({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge(
+            [meuBancoPareado, meuBancoPareadoConferido, mbAjustesMudaram]),
+        builder: (context, _) {
+          if (!meuBancoPareadoConferido.value ||
+              meuBancoPareado.value ||
+              !AjustesInicio.atalhos) {
+            return const SizedBox.shrink();
+          }
+          Widget linha(_Atalho a, _Atalho b) => IntrinsicHeight(
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: a),
+                      const SizedBox(width: 10),
+                      Expanded(child: b),
+                    ]),
+              );
+          return Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: Column(children: [
+              linha(
+                _Atalho(Icons.add, 'Nova transação',
+                    () => abrirTransacao(context)),
+                _Atalho(Icons.account_balance_wallet_outlined, 'Contas',
+                    () => pushRoute(context, EditWalletsPage())),
+              ),
+              const SizedBox(height: 10),
+              linha(
+                _Atalho(
+                    Icons.donut_large_outlined,
+                    'Orçamentos',
+                    () => pushRoute(
+                        context, const BudgetsListPage(enableBackButton: true))),
+                _Atalho(
+                    Icons.flag_outlined,
+                    'Metas',
+                    () => pushRoute(
+                        context, const ObjectivesListPage(backButton: true))),
+              ),
+            ]),
+          );
+        },
+      );
+}
+
+class _Atalho extends StatelessWidget {
+  const _Atalho(this.icone, this.rotulo, this.onTap);
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Semantics(
+      button: true,
+      label: rotulo,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: ToqueEscala(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+              color: e.chip, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            Icon(icone, size: 20, color: e.tx),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(rotulo,
+                  maxLines: 2,
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontWeight: FontWeight.w500)),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }

@@ -17,6 +17,7 @@ import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
+import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareadoConferido;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -109,6 +110,36 @@ void main() {
             matchesGoldenFile('../../.verificacao/prints/inicio_${modo}_$acento.png'));
       });
     }
+    testWidgets('print atalhos sem banco $modo', skip: _pular, (t) async {
+      appStateSettings = {
+        'materialYou': false, 'accentSystemColor': false, 'batterySaver': false,
+        'increaseTextContrast': false, 'forceFullDarkBackground': false, 'font': 'Geist',
+        'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
+      };
+      meuBancoPareadoConferido.value = true;
+      addTearDown(() => meuBancoPareadoConferido.value = false);
+      t.view.physicalSize = const Size(390 * 2, 400 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final b = modo == 'claro' ? Brightness.light : Brightness.dark;
+      await t.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: temaFlutter(temaAtivo(b)),
+        home: Scaffold(
+            body: Builder(
+                builder: (c) => ColoredBox(
+                    color: cores(c).bg,
+                    child: const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Column(children: [
+                          SemDadosInicio(dica: ''),
+                          AtalhosInicio(),
+                        ]))))),
+      ));
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/atalhos_sem_banco_$modo.png'));
+    });
     for (final vazio in [false, true]) {
       testWidgets('print pendências $modo${vazio ? ' vazio' : ''}', skip: _pular, (t) async {
         appStateSettings = {
