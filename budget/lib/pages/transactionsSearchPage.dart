@@ -2,7 +2,9 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/struct/defaultPreferences.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/openPopup.dart';
@@ -234,12 +236,10 @@ class TransactionsSearchPageState extends State<TransactionsSearchPage>
                           ),
                           color: searchFilters.dateTimeRange == null
                               ? null
-                              : Theme.of(context).colorScheme.tertiaryContainer,
+                              : cores(context).tx,
                           iconColor: searchFilters.dateTimeRange == null
                               ? null
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onTertiaryContainer,
+                              : cores(context).bg,
                           onTap: () {
                             selectDateRange(context);
                           },
@@ -264,13 +264,13 @@ class TransactionsSearchPageState extends State<TransactionsSearchPage>
                           ignoreSearchQuery: true,
                         )
                             ? null
-                            : Theme.of(context).colorScheme.tertiaryContainer,
+                            : cores(context).tx,
                         iconColor: searchFilters.isClear(
                           ignoreDateTimeRange: true,
                           ignoreSearchQuery: true,
                         )
                             ? null
-                            : Theme.of(context).colorScheme.onTertiaryContainer,
+                            : cores(context).bg,
                         onTap: () {
                           selectFilters(context);
                         },
@@ -398,49 +398,38 @@ class AppliedFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Chip de filtro aplicado: plano (superfície + borda), cor da categoria
+    // só no ponto; o toque reabre os filtros.
+    final e = cores(context);
     return Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 4),
-      child: Tappable(
-        onTap: () {
-          openFiltersSelection();
-        },
-        borderRadius: 8,
-        color: (appStateSettings["materialYou"]
-            ? Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5)
-            : null),
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 3),
+      child: ToqueEscala(
+        onTap: () => openFiltersSelection(),
         child: Container(
-          padding:
-              EdgeInsetsDirectional.only(start: 14, end: 14, top: 7, bottom: 7),
+          height: 36,
+          padding: const EdgeInsetsDirectional.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadiusDirectional.circular(8),
-            border: Border.all(
-              color: customBorderColor == null
-                  ? Theme.of(context).colorScheme.secondaryContainer
-                  : customBorderColor!.withOpacity(0.4),
-            ),
+            color: e.surf,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: e.line),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              icon == null
-                  ? SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 5),
-                      child: Icon(icon, size: 23),
-                    ),
-              TextFont(
-                text: label,
-                fontSize: 14,
-              ),
-              // Padding(
-              //   padding: EdgeInsetsDirectional.only(start: 4.5),
-              //   child: Opacity(
-              //     opacity: 0.6,
-              //     child: Icon(
-              //       Icons.close,
-              //       size: 14,
-              //     ),
-              //   ),
-              // ),
+              if (customBorderColor != null) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                      color: customBorderColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: e.mu),
+                const SizedBox(width: 6),
+              ],
+              Text(label, style: EdTexto.corpo(context).copyWith(fontSize: 13)),
             ],
           ),
         ),

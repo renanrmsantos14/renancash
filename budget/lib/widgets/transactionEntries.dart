@@ -4,14 +4,13 @@ import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/listenableSelector.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
-import 'package:budget/widgets/countNumber.dart';
 import 'package:budget/widgets/dateDivider.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/resumoTransacoes.dart';
 import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
-import 'package:budget/widgets/transactionEntry/incomeAmountArrow.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:budget/widgets/viewAllTransactionsButton.dart';
 import 'package:flutter/material.dart';
@@ -530,16 +529,11 @@ class _TransactionEntriesState extends State<TransactionEntries> {
                         bottom: 8,
                       ),
                       child: TextFont(
-                        text: "total-cash-flow".tr() +
-                            ": " +
+                        text: "Saldo " +
                             convertToMoney(
                                 Provider.of<AllWallets>(context), totalSpent) +
-                            "\n" +
-                            totalNumberTransactions.toString() +
-                            " " +
-                            (totalNumberTransactions == 1
-                                ? "transaction".tr().toLowerCase()
-                                : "transactions".tr().toLowerCase()),
+                            " · " +
+                            contagemTransacoes(totalNumberTransactions),
                         fontSize: 13,
                         textAlign: TextAlign.center,
                         textColor: getColor(context, "textLight"),
@@ -594,7 +588,6 @@ class _TransactionEntriesState extends State<TransactionEntries> {
               0,
               TransactionsEntriesSpendingSummary(
                 show: widget.showSpendingSummary,
-                netSpending: totalIncome + totalExpense,
                 income: totalIncome,
                 expense: totalExpense,
                 onLongPress: widget.onLongPressSpendingSummary,
@@ -990,7 +983,6 @@ class Section implements ExpandableListSection<Widget> {
 class TransactionsEntriesSpendingSummary extends StatelessWidget {
   const TransactionsEntriesSpendingSummary({
     required this.show,
-    required this.netSpending,
     required this.income,
     required this.expense,
     required this.dateTimeRange,
@@ -999,7 +991,6 @@ class TransactionsEntriesSpendingSummary extends StatelessWidget {
   });
 
   final bool show;
-  final double netSpending;
   final double income;
   final double expense;
   final DateTimeRange? dateTimeRange;
@@ -1023,123 +1014,12 @@ class TransactionsEntriesSpendingSummary extends StatelessWidget {
               dateTimeRange: dateTimeRange,
             ),
           ),
-          button: (openContainer) {
-            return Tappable(
-              borderRadius: 12,
-              color: getColor(context, "standardContainerColor"),
-              onTap: () {
-                // setState(() {
-                //   isExpanded = !isExpanded;
-                // });
-                openContainer();
-              },
-              onLongPress: onLongPress,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.symmetric(
-                    vertical: 5, horizontal: 5),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IncomeOutcomeArrow(
-                            color: getColor(context, "expenseAmount"),
-                            isIncome: false,
-                            iconSize: 20,
-                            width: 17,
-                          ),
-                          Flexible(
-                            child: CountNumber(
-                              count: expense.abs(),
-                              duration: Duration(milliseconds: 450),
-                              initialCount: (0),
-                              textBuilder: (number) {
-                                return TextFont(
-                                  text: convertToMoney(
-                                      Provider.of<AllWallets>(context), number,
-                                      finalNumber: expense.abs()),
-                                  fontSize: 15,
-                                  textColor: getColor(context, "expenseAmount"),
-                                  autoSizeText: true,
-                                  minFontSize: 9,
-                                  maxLines: 1,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IncomeOutcomeArrow(
-                            color: getColor(context, "incomeAmount"),
-                            isIncome: true,
-                            iconSize: 20,
-                            width: 17,
-                          ),
-                          Flexible(
-                            child: CountNumber(
-                              count: income.abs(),
-                              duration: Duration(milliseconds: 450),
-                              initialCount: (0),
-                              textBuilder: (number) {
-                                return TextFont(
-                                  text: convertToMoney(
-                                      Provider.of<AllWallets>(context), number,
-                                      finalNumber: income.abs()),
-                                  fontSize: 15,
-                                  textColor: getColor(context, "incomeAmount"),
-                                  autoSizeText: true,
-                                  minFontSize: 9,
-                                  maxLines: 1,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: CountNumber(
-                              count: netSpending,
-                              duration: Duration(milliseconds: 450),
-                              initialCount: (0),
-                              textBuilder: (number) {
-                                return TextFont(
-                                  text: "=" +
-                                      " " +
-                                      convertToMoney(
-                                          Provider.of<AllWallets>(context),
-                                          number,
-                                          finalNumber: netSpending.abs()),
-                                  fontSize: 15,
-                                  textColor: getColor(context, "black"),
-                                  autoSizeText: true,
-                                  minFontSize: 9,
-                                  maxLines: 1,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+          button: (openContainer) => ResumoPeriodo(
+            entradas: income,
+            saidas: expense,
+            onTap: openContainer,
+            onLongPress: onLongPress,
+          ),
         ),
       ),
     );

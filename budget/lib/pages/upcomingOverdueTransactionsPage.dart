@@ -4,12 +4,15 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/initializeNotifications.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/upcomingTransactionsFunctions.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/resumoTransacoes.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
@@ -51,6 +54,8 @@ class UpcomingOverdueTransactionsState
   SelectedSubscriptionsType selectedType = SelectedSubscriptionsType
       .values[appStateSettings["selectedSubscriptionType"]];
   GlobalKey<PageFrameworkState> pageState = GlobalKey();
+  // Entrada suave só logo após abrir (não ao filtrar nem rolar de volta).
+  final DateTime _aberta = DateTime.now();
 
   void scrollToTop() {
     pageState.currentState?.scrollToTop();
@@ -140,11 +145,12 @@ class UpcomingOverdueTransactionsState
                       isOverdueTransactions: overdueTransactions,
                       searchString: searchValue,
                     ),
-                    textColor: overdueTransactions == null
-                        ? getColor(context, "black")
-                        : overdueTransactions == true
-                            ? getColor(context, "unPaidOverdue")
-                            : getColor(context, "unPaidUpcoming"),
+                    rotulo: overdueTransactions == true
+                        ? "Total atrasado"
+                        : "Total a vencer",
+                    textColor: overdueTransactions == true
+                        ? cores(context).warn
+                        : null,
                   ),
           )),
           SliverToBoxAdapter(
@@ -247,8 +253,29 @@ class UpcomingOverdueTransactionsState
               if (snapshot.hasData) {
                 if (snapshot.data!.length <= 0) {
                   return SliverToBoxAdapter(
-                    child: Center(
-                      child: NoResults(message: "no-transactions-found".tr()),
+                    child: Column(
+                      children: [
+                        NoResults(
+                          noSearchResultsVariation: searchValue != null,
+                          message: searchValue != null
+                              ? "Nenhum resultado."
+                              : overdueTransactions == true
+                                  ? "Nada atrasado."
+                                  : "Nenhuma transação agendada.",
+                        ),
+                        if (searchValue == null && overdueTransactions != true)
+                          AcaoVazio(
+                            rotulo: "Agendar transação",
+                            onTap: () => pushRoute(
+                              context,
+                              AddTransactionPage(
+                                selectedType: TransactionSpecialType.upcoming,
+                                routesToPopAfterDelete:
+                                    RoutesToPopAfterDelete.None,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 }
@@ -267,31 +294,36 @@ class UpcomingOverdueTransactionsState
                       sizeFraction: 0.7,
                       curve: Curves.easeInOut,
                       animation: animation,
-                      child: Column(
+                      child: EntradaSuave(
                         key: ValueKey(item.transactionPk),
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          HorizontalBreak(
-                              padding: EdgeInsetsDirectional.only(
-                                  top: 4, bottom: 6)),
-                          TransactionEntry(
-                            aboveWidget: UpcomingTransactionDateHeader(
-                              selectedType: selectedType,
-                              transaction: item,
-                            ),
-                            openPage: AddTransactionPage(
-                              transaction: item,
-                              routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.One,
-                            ),
-                            transaction: item,
-                            listID: pageId,
-                          ),
-                          if (index == (snapshot.data?.length ?? 0) - 1)
+                        indice: index,
+                        animar: DateTime.now().difference(_aberta) <
+                            const Duration(milliseconds: 600),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             HorizontalBreak(
                                 padding: EdgeInsetsDirectional.only(
                                     top: 4, bottom: 6)),
-                        ],
+                            TransactionEntry(
+                              aboveWidget: UpcomingTransactionDateHeader(
+                                selectedType: selectedType,
+                                transaction: item,
+                              ),
+                              openPage: AddTransactionPage(
+                                transaction: item,
+                                routesToPopAfterDelete:
+                                    RoutesToPopAfterDelete.One,
+                              ),
+                              transaction: item,
+                              listID: pageId,
+                            ),
+                            if (index == (snapshot.data?.length ?? 0) - 1)
+                              HorizontalBreak(
+                                  padding: EdgeInsetsDirectional.only(
+                                      top: 4, bottom: 6)),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -362,89 +394,46 @@ class CenteredAmountAndNumTransactions extends StatelessWidget {
   const CenteredAmountAndNumTransactions({
     required this.totalWithCountStream,
     this.totalWithCountStream2,
-    required this.textColor,
+    this.textColor,
     this.getTextColor,
     this.getInitialText,
     this.showIncomeArrow = true,
+    this.rotulo = "Total",
     super.key,
   });
 
   final Stream<TotalWithCount?> totalWithCountStream;
   final Stream<TotalWithCount?>? totalWithCountStream2;
-  final Color textColor;
+  final Color? textColor;
+  final String rotulo;
   final String? Function(double totalAmount)? getInitialText;
   final Color? Function(double totalAmount)? getTextColor;
   final bool showIncomeArrow;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(height: 10),
-        DoubleTotalWithCountStreamBuilder(
-          totalWithCountStream: totalWithCountStream,
-          totalWithCountStream2: totalWithCountStream2,
-          builder: (context, snapshot) {
-            double totalSpent = snapshot.data?.total ?? 0;
-            int totalCount = snapshot.data?.count ?? 0;
-            return Column(
-              children: [
-                AnimatedSizeSwitcher(
-                  child: getInitialText != null &&
-                          getInitialText!(totalSpent) != null
-                      ? TextFont(
-                          key: ValueKey(getInitialText!(totalSpent) ?? ""),
-                          text: getInitialText!(totalSpent) ?? "",
-                          fontSize: 16,
-                          textColor: getColor(context, "textLight"),
-                        )
-                      : Container(
-                          key: ValueKey(2),
-                        ),
-                ),
-                Tappable(
-                  color: Colors.transparent,
-                  borderRadius: 15,
-                  onLongPress: () {
-                    copyToClipboard(
-                      convertToMoney(
-                        Provider.of<AllWallets>(context, listen: false),
-                        totalSpent.abs(),
-                        finalNumber: totalSpent,
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.all(10),
-                    child: AmountWithColorAndArrow(
-                      showIncomeArrow: showIncomeArrow,
-                      totalSpent: totalSpent,
-                      absoluteValueWhenNoArrow: true,
-                      fontSize: 30,
-                      iconSize: 30,
-                      iconWidth: 20,
-                      getTextColor: getTextColor,
-                      textColor: textColor,
-                    ),
-                  ),
-                ),
-                TextFont(
-                  text: totalCount.toString() +
-                      " " +
-                      (totalCount == 1
-                          ? "transaction".tr().toLowerCase()
-                          : "transactions".tr().toLowerCase()),
-                  fontSize: 16,
-                  textColor: getColor(context, "textLight"),
-                ),
-              ],
+    return DoubleTotalWithCountStreamBuilder(
+      totalWithCountStream: totalWithCountStream,
+      totalWithCountStream2: totalWithCountStream2,
+      builder: (context, snapshot) {
+        double totalSpent = snapshot.data?.total ?? 0;
+        int totalCount = snapshot.data?.count ?? 0;
+        return TotalDestaque(
+          rotulo: getInitialText?.call(totalSpent) ?? rotulo,
+          valor: showIncomeArrow ? totalSpent : totalSpent.abs(),
+          legenda: contagemTransacoes(totalCount),
+          cor: getTextColor?.call(totalSpent) ?? textColor,
+          onLongPress: () {
+            copyToClipboard(
+              convertToMoney(
+                Provider.of<AllWallets>(context, listen: false),
+                totalSpent.abs(),
+                finalNumber: totalSpent,
+              ),
             );
           },
-        ),
-        SizedBox(height: 20),
-      ],
+        );
+      },
     );
   }
 }

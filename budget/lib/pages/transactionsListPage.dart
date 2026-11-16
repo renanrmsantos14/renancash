@@ -3,6 +3,9 @@ import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/button.dart';
+import 'package:budget/widgets/editorial/painelTransacao.dart'
+    show abrirTransacao;
+import 'package:budget/widgets/editorial/resumoTransacoes.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -261,13 +264,21 @@ class TransactionsListPageState extends State<TransactionsListPage>
                                 new DateTime(startDate.year,
                                     startDate.month + 1, startDate.day - 1),
                                 listID: pageId,
-                                noResultsMessage: "no-transactions-for".tr() +
-                                    " " +
+                                noResultsMessage: "Nenhuma transação em " +
                                     getMonth(startDate,
-                                        includeYear: startDate.year !=
-                                            DateTime.now().year) +
+                                            includeYear: startDate.year !=
+                                                DateTime.now().year)
+                                        .toLowerCase() +
                                     ".",
-                                showTotalCashFlow: true,
+                                noResultsExtraWidget: AcaoVazio(
+                                  rotulo: "Nova transação",
+                                  onTap: () => abrirTransacao(context),
+                                ),
+                                // Com o resumo do topo ligado o saldo já aparece;
+                                // sem ele, o total volta ao fim da lista.
+                                showTotalCashFlow: appStateSettings[
+                                        "showTransactionsMonthlySpendingSummary"] !=
+                                    true,
                                 enableSpendingSummary: true,
                                 showSpendingSummary: appStateSettings[
                                     "showTransactionsMonthlySpendingSummary"],

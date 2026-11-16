@@ -27,6 +27,8 @@ import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/slidingSelectorIncomeExpense.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:budget/widgets/util/sliverPinnedOverlapInjector.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/resumoTransacoes.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -58,6 +60,8 @@ class CreditDebtTransactionsState extends State<CreditDebtTransactions>
   FocusNode _searchFocusNode = FocusNode();
   int? numberLongTerm;
   GlobalKey<PageFrameworkState> pageState = GlobalKey();
+  // Entrada suave só logo após abrir (não ao filtrar nem rolar de volta).
+  final DateTime _aberta = DateTime.now();
 
   void scrollToTop() {
     pageState.currentState?.scrollToTop();
@@ -98,8 +102,23 @@ class CreditDebtTransactionsState extends State<CreditDebtTransactions>
                   child: Column(
                     children: [
                       NoResults(
-                        message: "no-transactions-found".tr(),
+                        noSearchResultsVariation: searchValue != null,
+                        message: searchValue != null
+                            ? "Nenhum resultado."
+                            : "Nenhum empréstimo.",
                       ),
+                      if (searchValue == null && !hasSomeLongTermLoans)
+                        AcaoVazio(
+                          rotulo: "Adicionar empréstimo",
+                          onTap: () => openBottomSheet(
+                            context,
+                            AddLoanPopup(
+                              selectedTransactionType: isCredit == false
+                                  ? TransactionSpecialType.debt
+                                  : TransactionSpecialType.credit,
+                            ),
+                          ),
+                        ),
                       if (hasSomeLongTermLoans)
                         Padding(
                           padding: const EdgeInsetsDirectional.only(top: 20),
@@ -137,18 +156,23 @@ class CreditDebtTransactionsState extends State<CreditDebtTransactions>
                   key: ValueKey(item.transactionPk),
                   curve: Curves.easeInOut,
                   animation: animation,
-                  child: TransactionEntry(
-                    openPage: AddTransactionPage(
+                  child: EntradaSuave(
+                    indice: index,
+                    animar: DateTime.now().difference(_aberta) <
+                        const Duration(milliseconds: 600),
+                    child: TransactionEntry(
+                      openPage: AddTransactionPage(
+                        transaction: item,
+                        routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+                      ),
                       transaction: item,
-                      routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+                      listID: "CreditDebt",
+                      key: ValueKey(item.transactionPk),
+                      transactionAfter:
+                          nullIfIndexOutOfRange(snapshot.data!, index + 1),
+                      transactionBefore:
+                          nullIfIndexOutOfRange(snapshot.data!, index - 1),
                     ),
-                    transaction: item,
-                    listID: "CreditDebt",
-                    key: ValueKey(item.transactionPk),
-                    transactionAfter:
-                        nullIfIndexOutOfRange(snapshot.data!, index + 1),
-                    transactionBefore:
-                        nullIfIndexOutOfRange(snapshot.data!, index - 1),
                   ),
                 );
               },

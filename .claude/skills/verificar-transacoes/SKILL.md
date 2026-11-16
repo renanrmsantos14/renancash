@@ -1,0 +1,42 @@
+---
+name: verificar-transacoes
+description: "Verifica as telas de transações no padrão editorial: lista do mês com resumo (entradas, saídas, saldo), busca, filtros e chips de filtro, nova/editar transação (valor no topo, tipo, categoria, Salvar), Agendadas, Assinaturas e Empréstimos. Use após mudar budget/lib/pages/transactionsListPage.dart, transactionsSearchPage.dart, transactionFilters.dart, addTransactionPage.dart, upcomingOverdueTransactionsPage.dart, subscriptionsPage.dart, creditDebtTransactionsPage.dart, budget/lib/widgets/editorial/resumoTransacoes.dart, o resumo/saldo em transactionEntries.dart ou as traduções pt dessas telas."
+---
+# Verificar Transações
+
+## Cobre
+- `pages/transactionsListPage.dart`: lista do mês (PageView por mês), resumo no topo, chips de filtro aplicados, vazio com ação.
+- `pages/transactionsSearchPage.dart` (+ `AppliedFilterChip`), `pages/transactionFilters.dart` (folha de filtros e `AppliedFilterChips`; também usados no detalhe da conta).
+- `pages/addTransactionPage.dart` (página completa do celular; o formulário do computador é `widgets/editorial/painelTransacao.dart`, coberto pela `verificar-editorial-web`).
+- `pages/upcomingOverdueTransactionsPage.dart` (Agendadas), `pages/subscriptionsPage.dart` (Assinaturas), `pages/creditDebtTransactionsPage.dart` (Empréstimos).
+- `widgets/editorial/resumoTransacoes.dart`: `ResumoPeriodo`, `TotalDestaque`, `AcaoVazio`, `contagemTransacoes`.
+- Textos pt em `assets/translations/generated/pt.json` e na coluna `pt` de `translations.csv` (as duas mudam juntas).
+
+## Preparar ambiente
+- Windows local: `export PATH=/c/Users/mendo/development/flutter-3.24.5/bin:$PATH`; nuvem/Linux: `export PATH=$HOME/dev/flutter/bin:$PATH`. Depois `cd budget`.
+- Se a máquina local não puder rodar Flutter (pedido do Renan: o PC fica pesado), rode tudo no GitHub Actions do PR e confira os artefatos.
+
+## Roteiro
+1. `flutter analyze` → 0 linhas `error -`; nos arquivos acima, sem aviso novo (os `notifyListeners`, `paid` sem uso e `dead_null_aware` em transactionEntries já existiam).
+2. `PRINTS=1 flutter test test/prints_transacoes_test.dart --update-goldens` → 6 PNGs em `.verificacao/prints/transacoes_{lista,agendadas,vazio}_{claro,escuro}.png`. Abra e confira: cartão de resumo plano (superfície + borda, sem sombra) com Entradas em verde, Saídas com − na cor do texto e Saldo; chips de filtro planos com ponto colorido só na categoria e "Limpar" primeiro; total grande à esquerda com centavos menores; data do agendamento 13/w600 com "N dias de atraso" em vermelho (`warn`) e recorrência em `mu`; vazio = ícone + frase + botão "+ …" em `chip`. Sem EasyLocalization o teste usa formato en (vírgula de milhar), então o "centavos menores" pega os 3 últimos dígitos: é artefato do teste, no app (pt) a vírgula é a decimal.
+3. `flutter test test/editorial_test.dart test/desktop_fluxos_test.dart` (componentes compartilhados e formulário do computador continuam passando).
+4. Web sem pareamento: `MSYS_NO_PATHCONV=1 flutter build web --base-href /app/` (confira a linha "Built build\web": se o build cair, `build/web` fica com a versão anterior e os prints enganam) e `node .claude/skills/verificar-editorial-web/shot.mjs budget/build/web .verificacao/<pasta> <roteiro>.json`. Roteiro útil: `goto` (12 s) → `clicar` "Transações" → print → `clicar` "Filtros" → print → `tecla` Escape → `clicar` "Buscar transações" → print → `goto` → `clicar` "Mais" → `clicarTexto` "Agendadas" / "Assinaturas" / "Empréstimos" → print; repetir com `{"acao":"contexto","escuro":true}`. Os rótulos acessíveis saem em pt (ex.: "Buscar transações", "Nova transação"); use `rotulos` para conferir.
+5. Nova transação (celular): toque no "+" da barra; confira de cima para baixo valor grande centralizado (cinza "R$ 0,00" sem valor), Despesa/Renda (e Transferir com 2+ contas), linha "Categoria / Selecione a categoria" com ›, depois Nome, data, contas, tipo, orçamentos/metas, notas e "Mais opções"; um só botão "Salvar" no rodapé.
+
+## Casos de borda
+- "Salvar" sem categoria abre a escolha de categoria (que encadeia o valor e grava); com categoria e sem valor abre o valor; com os dois grava e fecha. Edição também mostra "Salvar"; transações especiais (agendada, assinatura, empréstimo) mantêm o segundo botão de ação (Pagar, Pular etc.).
+- Valor em outra moeda: aparece o nome da moeda no número grande e o valor convertido em `rotulo` logo abaixo (só com 2+ contas e conta diferente da principal com moeda diferente).
+- Toque longo no valor: copiar/colar; toque longo na categoria (só com categoria escolhida) abre a edição da categoria.
+- No computador largo (`enableDoubleColumn`) a coluna esquerda mantém cabeçalho + nome + notas; no celular o nome sobe para logo depois da categoria e as notas descem para antes de "Mais opções".
+- Resumo do mês: segue a opção "Resumo do mês" (`showTransactionsMonthlySpendingSummary`, ligada por padrão); toque abre o detalhe do período, toque longo abre a opção para desligar. Com o resumo ligado, a lista do mês não repete o "Saldo … · N transações" no fim; com ele desligado, o total volta ao fim da lista (inclui correções de saldo, que o resumo não soma). A busca sempre mostra esse total, em `rotulo`. O sinal − do valor animado acompanha o número durante a contagem (troca de sinal não mostra − errado).
+- Mês vazio: "Nenhuma transação em novembro." + "Nova transação" (`abrirTransacao`). Agendadas vazia: "Nenhuma transação agendada." + "Agendar transação"; aba Atrasado vazia: "Nada atrasado." sem ação; busca sem resultado: "Nenhum resultado." sem ação. Assinaturas: "Nenhuma assinatura." + "Adicionar assinatura". Empréstimos: "Nenhum empréstimo." + "Adicionar empréstimo" (some quando há empréstimos de longo prazo, que já têm "Ver empréstimos de longo prazo").
+- Assinaturas e Agendadas: período Mensal/Anual/Total é controle segmentado (`SlidingSelectorIncomeExpense`) e grava `selectedSubscriptionType`; valor por item "−55,90 / mês" em `mu` (sinal como antes).
+- Empréstimos: rótulo "A receber"/"A pagar" (ou "Total" quando zero), valor absoluto com a cor de crédito/dívida de antes.
+- Folha de filtros: seções "Categorias", "Valor", "Tipo", "Situação", "Contas"; chips sem borda colorida; botões "Limpar" (`chip`) e "Aplicar" (principal).
+- Entrada de lista (`EntradaSuave`) em Agendadas, Assinaturas e Empréstimos só nos 600 ms após abrir a página; com "reduzir movimento" nada anima (`ContagemValor` mostra o valor final).
+
+## Evidência obrigatória
+- Tail do analyze e dos testes, os 6 PNGs do passo 2 e os prints do navegador (claro e escuro) em `.verificacao/<data>-<branch>/`.
+
+## Limites
+- Telas que dependem do banco (lista com dados, formulário completo) não renderizam em teste de widget sem `sqlite3.dll`; confira pelo navegador (web usa o banco local do navegador) ou no celular pareado.
