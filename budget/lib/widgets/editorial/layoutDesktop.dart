@@ -1,6 +1,5 @@
 import 'package:budget/main.dart' show pageNavigationFrameworkKey;
 import 'package:budget/struct/editorial.dart';
-import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
 import 'package:budget/widgets/editorial/detalheTransacao.dart';
 import 'package:budget/widgets/editorial/lateralEditorial.dart';
 import 'package:budget/widgets/navigationFramework.dart';
@@ -15,9 +14,6 @@ const double mbLarguraFormulario = 420;
 bool ehDesktop(BuildContext c) =>
     MediaQuery.sizeOf(c).width >= mbLarguraDesktop;
 
-/// Pareado com o Meu Banco: Início nova (fixa; no computador, o PainelDesktop) e gráficos em
-/// Orçamentos. Não pareado: Início antiga, com seções e gráficos.
-bool inicioNovaAtiva() => meuBancoPareado.value;
 
 // transactionPk da transação com o detalhe aberto na coluna 3.
 final ValueNotifier<String?> mbTransacaoSelecionada = ValueNotifier(null);

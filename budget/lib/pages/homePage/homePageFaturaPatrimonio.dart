@@ -6,7 +6,7 @@ import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
 import 'package:flutter/material.dart';
 
-/// Dados dos cartões "Fatura" e "Patrimônio". Recarregam quando `mbAtualizarRevisar` roda
+/// Dados do cartão "Patrimônio". Recarregam quando `mbAtualizarRevisar` roda
 /// (após cada sincronização e ao mexer na fila), que também alimenta o "Para revisar".
 class _CarregaInicio extends StatefulWidget {
   const _CarregaInicio({required this.construir});
@@ -79,43 +79,6 @@ Widget _linha(String rotulo, String valor, Color suave, {bool forte = false}) =>
             fontWeight: forte ? FontWeight.bold : FontWeight.normal),
       ]),
     );
-
-/// Fatura aberta de cada cartão e vencimento; destaque quando faltam 3 dias ou menos.
-class HomePageFatura extends StatelessWidget {
-  const HomePageFatura({super.key});
-
-  @override
-  Widget build(BuildContext context) => _CarregaInicio(construir: (context, d) {
-        if (d.faturas.isEmpty) return const SizedBox.shrink();
-        final suave = getColor(context, "textLight");
-        const alerta = Color(0xFFD64545);
-        return _cartao(context, [
-          TextFont(text: 'Fatura do cartão', fontSize: 18, fontWeight: FontWeight.bold),
-          for (final f in d.faturas) ...[
-            const SizedBox(height: 10),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  TextFont(text: f.nome, fontSize: 15, fontWeight: FontWeight.bold),
-                  TextFont(
-                      text: f.vence == null
-                          ? 'Vencimento não informado'
-                          : '${f.destaque ? (f.dias! < 0 ? 'Venceu' : f.dias == 0 ? 'Vence hoje' : 'Vence em ${f.dias} ${f.dias == 1 ? 'dia' : 'dias'}') : 'Vence'} · ${diaMes(f.vence!)}',
-                      fontSize: 13,
-                      fontWeight: f.destaque ? FontWeight.bold : FontWeight.normal,
-                      textColor: f.destaque ? alerta : suave),
-                ]),
-              ),
-              TextFont(
-                  text: brl(f.valor),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  textColor: f.destaque ? alerta : null),
-            ]),
-          ],
-        ]);
-      });
-}
 
 /// Patrimônio = Inter (conta) + investimentos − fatura atual. Empréstimos ficam de fora; as carteiras aparecem abaixo.
 class HomePagePatrimonio extends StatelessWidget {

@@ -16,6 +16,8 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/globalSnackbar.dart' show SnackbarMessage;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:budget/widgets/util/checkWidgetLaunch.dart';
+import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
 
 Future<void> mbAtualizarComAviso() async =>
     openSnackbar(SnackbarMessage(title: await meuBancoAtualizar()));
@@ -106,14 +108,17 @@ class _PainelDesktopState extends State<PainelDesktop> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(36, 28, 36, 40),
               children: [
+                // Android em tela larga (tablet): widgets da tela inicial e toques neles.
+                if (real) const AndroidOnly(child: CheckWidgetLaunch()),
+                if (real) const AndroidOnly(child: RenderHomePageWidgets()),
+                const PreviewDemoWarning(),
                 _Topo(
                     modelo: m,
                     atualizando: _atualizando,
                     onAtualizar: _atualizar),
                 const SizedBox(height: 28),
                 if (m.semDados)
-                  Text('Ainda sem dados. Use Atualizar.',
-                      style: EdTexto.corpo(context).copyWith(color: e.mu))
+                  const SemDadosInicio(dica: 'Ainda sem dados. Use Atualizar.')
                 else
                   CartaoSaldoCiclo(
                     modelo: m,

@@ -46,8 +46,17 @@ class _HomePageHeatMapState extends State<HomePageHeatMap> {
     });
   }
 
+  // Segurar abre os ajustes (carteiras e período), como na pizza.
+  Future<void> _ajustes() async {
+    await openBottomSheet(context, HomePageHeatMapSettings());
+    if (mounted) setState(() {});
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      GestureDetector(onLongPress: _ajustes, child: _mapa(context));
+
+  Widget _mapa(BuildContext context) {
     return KeepAliveClientMixin(
       child: StreamBuilder<List<Transaction>>(
         stream: database.getTransactionsInTimeRangeFromCategories(

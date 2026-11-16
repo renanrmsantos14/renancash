@@ -26,6 +26,7 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
 import 'package:flutter/material.dart';
+import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
 
 /// Início do celular: responde "quanto posso gastar neste ciclo".
 /// Layout fixo; blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
@@ -98,11 +99,11 @@ class _InicioEditorialState extends State<InicioEditorial> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
+          const PreviewDemoWarning(),
           _Topo(modelo: m),
           const SizedBox(height: 16),
           if (m.semDados)
-            Text('Ainda sem dados. Puxe a tela para atualizar.',
-                style: EdTexto.corpo(context).copyWith(color: e.mu))
+            const SemDadosInicio(dica: 'Ainda sem dados. Puxe a tela para atualizar.')
           else
             CartaoSaldoCiclo(
               modelo: m,
@@ -187,6 +188,32 @@ Future<void> mbAbrirConta(BuildContext context, ContaInicio c) async {
           ? const MeuBancoPage()
           : TransactionsSearchPage(
               initialFilters: SearchFilters(walletPks: pks)));
+}
+
+/// Sem dados: pareado, ainda não sincronizou (`dica`); não pareado, convite para conectar o banco.
+class SemDadosInicio extends StatelessWidget {
+  const SemDadosInicio({super.key, required this.dica});
+  final String dica;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return ValueListenableBuilder<bool>(
+      valueListenable: meuBancoPareado,
+      builder: (context, pareado, _) => pareado
+          ? Text(dica, style: EdTexto.corpo(context).copyWith(color: e.mu))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Conecte seu banco para ver quanto pode gastar no ciclo.',
+                  style: EdTexto.corpo(context).copyWith(color: e.mu)),
+              TextButton(
+                onPressed: () => pushRoute(context, const MeuBancoPage()),
+                style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero, foregroundColor: e.acc),
+                child: const Text('Conectar banco'),
+              ),
+            ]),
+    );
+  }
 }
 
 class _Topo extends StatelessWidget {

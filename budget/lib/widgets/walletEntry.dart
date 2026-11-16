@@ -298,7 +298,6 @@ class WalletEntryRow extends StatelessWidget {
                 ),
                 useCustomController: true,
               );
-              homePageStateKey.currentState?.refreshState();
             } else {
               pushRoute(
                 context,
