@@ -277,7 +277,7 @@ class BottomNavBarState extends State<BottomNavBar> {
               );
             }
           }),
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         ),
         child: NavigationBar(
           animationDuration: Duration(milliseconds: 1000),

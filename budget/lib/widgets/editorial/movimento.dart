@@ -34,11 +34,18 @@ class EntradaEditorial extends StatelessWidget {
 
 class ContagemValor extends StatefulWidget {
   const ContagemValor(
-      {super.key, required this.valor, required this.formatar, this.estilo});
+      {super.key,
+      required this.valor,
+      required this.formatar,
+      this.estilo,
+      this.centavosMenores = false});
 
   final double valor;
   final String Function(double) formatar;
   final TextStyle? estilo;
+
+  /// Mostra ",00" com 55% do tamanho, como nos apps de banco.
+  final bool centavosMenores;
 
   @override
   State<ContagemValor> createState() => _ContagemValorState();
@@ -67,11 +74,24 @@ class _ContagemValorState extends State<ContagemValor> {
     );
   }
 
-  Widget _ajustado(String texto) => FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(texto, style: widget.estilo, maxLines: 1),
-      );
+  Widget _ajustado(String texto) {
+    final virgula = texto.lastIndexOf(',');
+    final tamanho = widget.estilo?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: !widget.centavosMenores || virgula < 0
+          ? Text(texto, style: widget.estilo, maxLines: 1)
+          : Text.rich(
+              TextSpan(text: texto.substring(0, virgula), children: [
+                TextSpan(
+                    text: texto.substring(virgula),
+                    style: TextStyle(fontSize: tamanho * .55)),
+              ]),
+              style: widget.estilo,
+              maxLines: 1),
+    );
+  }
 }
 
 class MedidorEditorial extends StatelessWidget {

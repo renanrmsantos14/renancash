@@ -115,7 +115,9 @@ void main() {
     expect(find.text('faltam 16 dias'), findsOneWidget);
     // 3.700 / 17 dias (hoje conta).
     expect(find.text('Pode gastar R\$ 217,65/dia'), findsOneWidget);
-    expect(find.text('Contas e cartões'), findsOneWidget);
+    expect(find.text('Contas'), findsOneWidget);
+    expect(find.text('Ciclo 26 out – 25 nov'), findsNothing);
+    expect(find.text('26 out – 25 nov'), findsOneWidget);
     expect(find.text('Últimas'), findsNothing);
     await t.pumpWidget(const SizedBox());
   });
@@ -137,7 +139,7 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('InicioEditorial mostra Contas e Cartões em grupos', (t) async {
+  testWidgets('InicioEditorial mostra Contas e não mostra cartões', (t) async {
     appStateSettings = {
       'materialYou': false,
       'accentSystemColor': false,
@@ -151,7 +153,8 @@ void main() {
     ));
     await t.pump(const Duration(seconds: 2));
     expect(find.text('Contas'), findsOneWidget);
-    expect(find.text('Cartões'), findsOneWidget);
+    expect(find.text('Cartões'), findsNothing);
+    expect(find.textContaining('Cartão Gold'), findsNothing);
     expect(find.text('Olá, Renan'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });

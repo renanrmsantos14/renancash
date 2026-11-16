@@ -54,3 +54,12 @@ As etapas 1 e 2 saem juntas no mesmo build publicado, para que Para revisar e co
 - Pendências: selo com contador correto e sumindo em zero; deslizar rápido curto confirma; um segundo dedo durante o arraste não faz o cartão pular; estado "Tudo em dia".
 - A versão do build no canto continua visível em todos os estados.
 - `ux-audit` modo Fluxo na Início e na aba Pendências.
+
+## Alinhamento elemento a elemento (16/11/2026)
+
+- Topo: ciclo pequeno acima, só as datas ("26 out – 25 nov"), saudação grande abaixo.
+- Cartão de saldo: escuro, rótulo "Para gastar no ciclo", ritmo diário em linha de texto, "Nas contas" pequeno no fim, centavos menores no número grande.
+- Metas e empréstimos: nome, valor e barra fina; dois grupos com subtítulo ("Metas", "Empréstimos"), até 2 linhas cada; com um grupo só, ele vira o título; sem nada, o bloco some.
+- Contas: cartões saem da Início por enquanto; uma linha por banco (poupanças agrupadas); tocar abre as transações das carteiras com o mesmo nome (sem correspondência, abre o Meu Banco).
+- Barra de abas: contador de Pendências em bolinha com número (etapa 2); rótulo só na aba ativa; a aba continua "Orçamentos".
+- Densidade compacta: menos espaço entre blocos e linhas mais baixas.

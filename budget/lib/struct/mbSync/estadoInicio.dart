@@ -8,7 +8,9 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:intl/intl.dart' show NumberFormat;
 
-typedef ContaInicio = ({String sigla, String nome, String tipo, double saldo});
+/// `contas`: nomes das contas do Meu Banco agrupadas na linha (separados por '|'),
+/// usados para achar as carteiras e abrir as transações delas.
+typedef ContaInicio = ({String sigla, String nome, String tipo, double saldo, String contas});
 typedef CartaoInicio = ({
   String nome,
   String final4,
@@ -182,21 +184,24 @@ ModeloInicio montarModeloInicio({
         sigla: mbSigla('${c['bank'] ?? c['name']}'),
         nome: '${c['bank'] ?? c['name']}',
         tipo: 'Conta corrente',
-        saldo: _num(c['balance'])
+        saldo: _num(c['balance']),
+        contas: '${c['name']}'
       ),
     if (poupancas.length == 1)
       (
         sigla: mbSigla('${poupancas.first['bank'] ?? poupancas.first['name']}'),
         nome: '${poupancas.first['bank'] ?? poupancas.first['name']}',
         tipo: 'Poupança',
-        saldo: _num(poupancas.first['balance'])
+        saldo: _num(poupancas.first['balance']),
+        contas: '${poupancas.first['name']}'
       )
     else if (poupancas.length > 1)
       (
         sigla: 'PP',
         nome: 'Poupanças',
         tipo: '${poupancas.length} contas',
-        saldo: saldoDe(poupancas)
+        saldo: saldoDe(poupancas),
+        contas: poupancas.map((c) => '${c['name']}').join('|')
       ),
   ];
 

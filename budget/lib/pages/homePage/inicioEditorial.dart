@@ -6,6 +6,8 @@ import 'package:budget/pages/budgetPage.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
+import 'package:budget/pages/transactionFilters.dart' show SearchFilters;
+import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
@@ -96,6 +98,26 @@ class _InicioEditorialState extends State<InicioEditorial> {
             : BudgetPage(budgetPk: geral.budgetPk));
   }
 
+  /// Abre as transações das carteiras com o nome do banco ou das contas da linha.
+  /// Sem carteira correspondente, cai no Meu Banco.
+  Future<void> _abrirConta(ContaInicio c) async {
+    final nomes = {c.nome, ...c.contas.split('|')}
+        .map((n) => n.trim().toLowerCase())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    final pks = [
+      for (final w in await database.select(database.wallets).get())
+        if (nomes.contains(w.name.trim().toLowerCase())) w.walletPk
+    ];
+    if (!mounted) return;
+    pushRoute(
+        context,
+        pks.isEmpty
+            ? const MeuBancoPage()
+            : TransactionsSearchPage(
+                initialFilters: SearchFilters(walletPks: pks)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
@@ -114,7 +136,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
           _Topo(modelo: m),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           if (m.semDados)
             Text('Ainda sem dados. Puxe a tela para atualizar.',
                 style: EdTexto.corpo(context).copyWith(color: e.mu))
@@ -126,12 +148,13 @@ class _InicioEditorialState extends State<InicioEditorial> {
                   _real ? () => _abrirOrcamento(editar: true) : null,
             ),
           if (_real) const _MetasEmprestimos(),
-          if (m.contas.isNotEmpty || m.cartoes.isNotEmpty)
-            _ContasCartoes(
+          if (m.contas.isNotEmpty)
+            _Contas(
                 modelo: m,
-                onAbrir: _real
+                onGerenciar: _real
                     ? () => pushRoute(context, const MeuBancoPage())
-                    : null),
+                    : null,
+                onAbrirConta: _real ? _abrirConta : null),
         ],
       );
       corpo = _real ? RefreshIndicator(onRefresh: _puxar, child: lista) : lista;
@@ -172,7 +195,8 @@ class _Topo extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(modelo.ciclo, style: EdTexto.rotulo(context)),
+          Text(modelo.ciclo.replaceFirst(RegExp(r'^Ciclo (?=\d)'), ''),
+              style: EdTexto.rotulo(context)),
           const SizedBox(height: 6),
           Text(modelo.saudacao, style: EdTexto.h1(context)),
         ],
@@ -191,7 +215,7 @@ class _CartaoSaldo extends StatelessWidget {
   Widget build(BuildContext context) {
     final limite = modelo.limite;
     final cartao = CartaoEscuro(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: limite != null && limite > 0
           ? _Restante(modelo: modelo, limite: limite)
           : _SemLimite(modelo: modelo, onDefinirLimite: onDefinirLimite),
@@ -231,9 +255,10 @@ class _Restante extends StatelessWidget {
         ContagemValor(
             valor: restante.abs(),
             formatar: brl,
+            centavosMenores: true,
             estilo: EdTexto.numeroGrande(context)
                 .copyWith(color: estourou ? e.warn : null)),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         MedidorEditorial(fracao: m.consumido / limite, alerta: estourou),
         const SizedBox(height: 10),
         Row(
@@ -249,7 +274,7 @@ class _Restante extends StatelessWidget {
           ],
         ),
         if (!estourou) ...[
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Text('Pode gastar ${brl(restante / (dias + 1))}/dia',
               style: EdTexto.corpo(context)
                   .copyWith(fontWeight: FontWeight.w500)),
@@ -287,8 +312,9 @@ class _SemLimite extends StatelessWidget {
         ContagemValor(
             valor: modelo.disponivel,
             formatar: brl,
+            centavosMenores: true,
             estilo: EdTexto.numeroGrande(context)),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         Text('Gasto no ciclo ${brl(modelo.consumido)}',
             style: EdTexto.rotulo(context)),
         if (onDefinirLimite != null)
@@ -305,8 +331,8 @@ class _SemLimite extends StatelessWidget {
   }
 }
 
-/// Até 3 linhas: metas (não arquivadas) e depois os empréstimos ao pai em aberto.
-/// Some quando não há nada.
+/// Metas (não arquivadas) e empréstimos ao pai em aberto, em grupos de até 2 linhas.
+/// Com um grupo só, ele dá o título do bloco. Some quando não há nada.
 class _MetasEmprestimos extends StatelessWidget {
   const _MetasEmprestimos();
 
@@ -318,8 +344,15 @@ class _MetasEmprestimos extends StatelessWidget {
       builder: (context, snap) => ValueListenableBuilder<MbEmprestimos>(
         valueListenable: meuBancoEmprestimos,
         builder: (context, emprestimos, _) {
-          final linhas = <Widget>[
-            for (final o in snap.data ?? const <Objective>[])
+          final metas = snap.data ?? const <Objective>[];
+          final abertos = emprestimos.abertos;
+          if (metas.isEmpty && abertos.isEmpty) return const SizedBox.shrink();
+          final verMetas = metas.length > 2
+              ? () => pushRoute(
+                  context, const ObjectivesListPage(backButton: true))
+              : null;
+          final linhasMetas = [
+            for (final o in metas.take(2))
               WatchTotalAndAmountOfObjective(
                 objective: o,
                 builder: (alvo, total, fracao) => _LinhaProgresso(
@@ -330,7 +363,9 @@ class _MetasEmprestimos extends StatelessWidget {
                       context, ObjectivePage(objectivePk: o.objectivePk)),
                 ),
               ),
-            for (final e in emprestimos.abertos)
+          ];
+          final linhasEmprestimos = [
+            for (final e in abertos.take(2))
               _LinhaProgresso(
                 titulo: e.data == null
                     ? 'Empréstimo'
@@ -339,16 +374,83 @@ class _MetasEmprestimos extends StatelessWidget {
                 fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
               ),
           ];
-          if (linhas.isEmpty) return const SizedBox.shrink();
+          final maisEmprestimos =
+              abertos.length > 2 ? 'mais ${abertos.length - 2}' : null;
+          if (metas.isEmpty || abertos.isEmpty) {
+            final soMetas = abertos.isEmpty;
+            return _Secao(
+              titulo: soMetas ? 'Metas' : 'Empréstimos',
+              acao: soMetas ? 'Ver todas' : maisEmprestimos,
+              onAcao: soMetas ? verMetas : null,
+              filhos: soMetas ? linhasMetas : linhasEmprestimos,
+            );
+          }
           return _Secao(
             titulo: 'Metas e empréstimos',
-            acao: linhas.length > 3 ? 'Ver todas' : null,
-            onAcao: () => pushRoute(
-                context, const ObjectivesListPage(backButton: true)),
-            filhos: linhas.take(3).toList(),
+            divisores: false,
+            filhos: [
+              _Grupo(
+                  titulo: 'Metas',
+                  acao: 'Ver todas',
+                  onAcao: verMetas,
+                  linhas: linhasMetas),
+              const SizedBox(height: 8),
+              _Grupo(
+                  titulo: 'Empréstimos',
+                  nota: maisEmprestimos,
+                  linhas: linhasEmprestimos),
+            ],
           );
         },
       ),
+    );
+  }
+}
+
+/// Subtítulo pequeno com ação (ou nota) à direita e as linhas do grupo com divisória.
+class _Grupo extends StatelessWidget {
+  const _Grupo(
+      {required this.titulo,
+      required this.linhas,
+      this.acao,
+      this.onAcao,
+      this.nota});
+  final String titulo;
+  final String? acao, nota;
+  final VoidCallback? onAcao;
+  final List<Widget> linhas;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final direita = acao != null && onAcao != null
+        ? GestureDetector(
+            onTap: onAcao,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(acao!,
+                  style: EdTexto.rotulo(context).copyWith(color: e.acc)),
+            ),
+          )
+        : nota == null
+            ? null
+            : Text(nota!, style: EdTexto.rotulo(context));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            Expanded(child: Text(titulo, style: EdTexto.rotulo(context))),
+            if (direita != null) direita,
+          ]),
+        ),
+        for (var i = 0; i < linhas.length; i++) ...[
+          if (i > 0) Divider(height: 1, thickness: 1, color: e.line),
+          linhas[i],
+        ],
+      ],
     );
   }
 }
@@ -368,7 +470,7 @@ class _LinhaProgresso extends StatelessWidget {
     return ToqueEscala(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 9),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -410,7 +512,7 @@ class _Secao extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 28),
+      padding: const EdgeInsets.only(top: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -437,48 +539,25 @@ class _Secao extends StatelessWidget {
   }
 }
 
-/// Contas (nome e saldo) e Cartões (fatura e uso do limite) num bloco só.
-class _ContasCartoes extends StatelessWidget {
-  const _ContasCartoes({required this.modelo, this.onAbrir});
+/// Contas por banco, com saldo. Tocar abre as transações daquela conta.
+class _Contas extends StatelessWidget {
+  const _Contas({required this.modelo, this.onGerenciar, this.onAbrirConta});
   final ModeloInicio modelo;
-  final VoidCallback? onAbrir;
+  final VoidCallback? onGerenciar;
+  final void Function(ContaInicio)? onAbrirConta;
 
   @override
-  Widget build(BuildContext context) {
-    final linha = Divider(height: 1, thickness: 1, color: cores(context).line);
-    Widget subtitulo(String t) => Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 2),
-          child: Text(t, style: EdTexto.rotulo(context)),
-        );
-    // Divisória só entre itens do mesmo grupo, nunca colada no subtítulo.
-    return _Secao(
-      titulo: 'Contas e cartões',
-      acao: 'Gerenciar',
-      onAcao: onAbrir,
-      divisores: false,
-      filhos: [
-        if (modelo.contas.isNotEmpty) subtitulo('Contas'),
-        for (var i = 0; i < modelo.contas.length; i++) ...[
-          if (i > 0) linha,
-          _LinhaConta(conta: modelo.contas[i], onTap: onAbrir),
+  Widget build(BuildContext context) => _Secao(
+        titulo: 'Contas',
+        acao: 'Gerenciar',
+        onAcao: onGerenciar,
+        filhos: [
+          for (final c in modelo.contas)
+            _LinhaConta(
+                conta: c,
+                onTap: onAbrirConta == null ? null : () => onAbrirConta!(c)),
         ],
-        if (modelo.cartoes.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          subtitulo('Cartões'),
-        ],
-        for (var i = 0; i < modelo.cartoes.length; i++) ...[
-          if (i > 0) linha,
-          ToqueEscala(
-            onTap: onAbrir,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: _Cartao(cartao: modelo.cartoes[i]),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+      );
 }
 
 class _LinhaConta extends StatelessWidget {
@@ -492,7 +571,7 @@ class _LinhaConta extends StatelessWidget {
     return ToqueEscala(
       onTap: onTap,
       child: SizedBox(
-        height: 56,
+        height: 48,
         child: Row(
           children: [
             Container(
@@ -530,79 +609,6 @@ class _LinhaConta extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Cartao extends StatelessWidget {
-  const _Cartao({required this.cartao});
-  final CartaoInicio cartao;
-
-  @override
-  Widget build(BuildContext context) {
-    final e = cores(context);
-    final c = cartao;
-    final pct = c.pct;
-    final alto = pct != null && pct >= 80;
-    final fecha = c.diasFecha == null
-        ? null
-        : c.diasFecha == 0
-            ? 'Fecha hoje'
-            : 'Fecha em ${c.diasFecha} ${c.diasFecha == 1 ? 'dia' : 'dias'}';
-    final linhaFecha = [
-      if (fecha != null) fecha,
-      if (c.vence != null) 'vence ${c.vence}',
-    ].join(' · ');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${c.nome}${c.final4.isEmpty ? '' : ' ·${c.final4}'}',
-                      style: EdTexto.corpo(context)
-                          .copyWith(fontWeight: FontWeight.w500)),
-                  if (linhaFecha.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(linhaFecha, style: EdTexto.rotulo(context)),
-                  ],
-                ],
-              ),
-            ),
-            if (pct != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                    color: alto ? e.warnbg : e.chip,
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text('${pct.round()}%',
-                    style: TextStyle(
-                        fontFamily: 'GeistMono',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: alto ? e.warntx : e.tx)),
-              ),
-          ],
-        ),
-        if (c.limite != null) ...[
-          const SizedBox(height: 12),
-          MedidorEditorial(
-              fracao: c.fatura / c.limite!, alerta: (pct ?? 0) >= 100),
-        ],
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Fatura ${brl(c.fatura)}', style: EdTexto.rotulo(context)),
-            if (c.limite != null)
-              Text('Limite ${brl(c.limite!)}', style: EdTexto.rotulo(context)),
-          ],
-        ),
-      ],
     );
   }
 }
