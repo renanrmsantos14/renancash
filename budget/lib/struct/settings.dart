@@ -198,8 +198,7 @@ Future<bool> updateSettings(
     //Refresh any pages listed
     for (int page in pagesNeedingRefresh) {
       print("Pages Rebuilt and Refreshed: " + pagesNeedingRefresh.toString());
-      if (page == 0) {
-      } else if (page == 1) {
+      if (page == 1) {
         transactionsListPageStateKey.currentState?.refreshState();
       } else if (page == 2) {
         budgetsListPageStateKey.currentState?.refreshState();

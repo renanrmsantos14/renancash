@@ -26,6 +26,7 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
 import 'package:flutter/material.dart';
+import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
 
 /// Início do celular: responde "quanto posso gastar neste ciclo".
 /// Layout fixo; blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
@@ -98,6 +99,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
+          const PreviewDemoWarning(),
           _Topo(modelo: m),
           const SizedBox(height: 16),
           if (m.semDados)
