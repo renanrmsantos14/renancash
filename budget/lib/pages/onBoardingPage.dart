@@ -77,8 +77,12 @@ class OnBoardingPageBodyState extends State<OnBoardingPageBody> {
       await updateSettings("hasOnboarded", true,
           pagesNeedingRefresh: [], updateGlobalState: true);
     }
-    final c = navigatorKey.currentContext;
-    if (abrir != null && c != null) pushRoute(c, abrir);
+    if (abrir == null) return;
+    // Depois do rebuild que troca o primeiro uso pelo app; antes disso a rota cairia sob a nova home.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = navigatorKey.currentContext;
+      if (c != null) pushRoute(c, abrir);
+    });
   }
 
   Future<void> entrarComGoogle() async {
