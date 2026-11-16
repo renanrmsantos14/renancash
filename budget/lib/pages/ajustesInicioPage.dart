@@ -52,6 +52,10 @@ class AjustesInicioPage extends StatelessWidget {
         title: 'Início',
         dragDownToDismiss: true,
         listWidgets: [
+          _chave('inicioAtalhos', AjustesInicio.atalhos,
+              titulo: 'Mostrar atalhos sem banco',
+              descricao:
+                  'Nova transação, Contas, Orçamentos e Metas enquanto o banco não estiver conectado'),
           const SettingsHeader(title: 'Cartão de saldo'),
           _chave('inicioRitmoDiario', AjustesInicio.ritmoDiario,
               titulo: 'Mostrar ritmo diário',

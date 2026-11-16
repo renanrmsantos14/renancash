@@ -18,6 +18,7 @@ abstract final class AjustesInicio {
   // Início e cartão de saldo
   static bool get ritmoDiario => appStateSettings['inicioRitmoDiario'] != false;
   static bool get saldoContas => appStateSettings['inicioSaldoContas'] != false;
+  static bool get atalhos => appStateSettings['inicioAtalhos'] != false;
   static bool get poupancasJuntas =>
       appStateSettings['inicioPoupancasJuntas'] != false;
 

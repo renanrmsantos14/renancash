@@ -190,6 +190,21 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('sem banco: 4 atalhos; pareado: some', (t) async {
+    appStateSettings = {'materialYou': false, 'accentSystemColor': false, 'batterySaver': false,
+      'increaseTextContrast': false, 'forceFullDarkBackground': false};
+    await t.pumpWidget(MaterialApp(
+        theme: temaEditorial(Brightness.light),
+        home: const Scaffold(body: AtalhosInicio())));
+    for (final r in ['Nova transação', 'Contas', 'Orçamentos', 'Metas']) {
+      expect(find.text(r), findsOneWidget);
+    }
+    meuBancoPareado.value = true;
+    addTearDown(() => meuBancoPareado.value = false);
+    await t.pump();
+    expect(find.text('Nova transação'), findsNothing);
+  });
+
   testWidgets('sem dados mostra estado vazio em vez de R\$ 0,00', (t) async {
     meuBancoPareado.value = true;
     addTearDown(() => meuBancoPareado.value = false);

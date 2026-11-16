@@ -3,6 +3,9 @@ import 'dart:math' show max;
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addBudgetPage.dart';
+import 'package:budget/pages/addTransactionPage.dart';
+import 'package:budget/pages/budgetsListPage.dart';
+import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/budgetPage.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/pages/objectivePage.dart';
@@ -20,15 +23,18 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
-import 'package:budget/widgets/navigationFramework.dart' show runAllCloudFunctions;
+import 'package:budget/widgets/navigationFramework.dart'
+    show runAllCloudFunctions;
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
-import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
+import 'package:budget/widgets/pullDownToRefreshSync.dart'
+    show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/struct/pendenciasVencidas.dart' show mbVigiarVencidas;
 import 'package:budget/struct/ajustesInicio.dart';
-import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
+import 'package:budget/database/generatePreviewData.dart'
+    show PreviewDemoWarning;
 
 /// Início do celular: responde "quanto posso gastar neste ciclo".
 /// Layout fixo; blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
@@ -115,14 +121,19 @@ class _InicioEditorialState extends State<InicioEditorial> {
           _Topo(modelo: m),
           const SizedBox(height: 16),
           if (m.semDados)
-            const SemDadosInicio(dica: 'Ainda sem dados. Puxe a tela para atualizar.')
+            const SemDadosInicio(
+                dica: 'Ainda sem dados. Puxe a tela para atualizar.')
           else
             CartaoSaldoCiclo(
               modelo: m,
-              onTap: _real ? () => mbAbrirOrcamentoCiclo(context, editar: false) : null,
-              onDefinirLimite:
-                  _real ? () => mbAbrirOrcamentoCiclo(context, editar: true) : null,
+              onTap: _real
+                  ? () => mbAbrirOrcamentoCiclo(context, editar: false)
+                  : null,
+              onDefinirLimite: _real
+                  ? () => mbAbrirOrcamentoCiclo(context, editar: true)
+                  : null,
             ),
+          if (_real && AjustesInicio.atalhos) const AtalhosInicio(),
           if (_real) const MetasEmprestimosInicio(),
           if (m.contas.isNotEmpty)
             ContasInicio(
@@ -165,7 +176,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
 
 // O Geral pode ainda não existir (aparelho não pareado e sem sync): aí não abre nada.
 Future<void> mbAbrirOrcamentoCiclo(BuildContext context,
-  {required bool editar}) async {
+    {required bool editar}) async {
   final Budget geral;
   try {
     geral = await database.getBudgetInstance(mbOrcamentoGeralPk);
@@ -228,6 +239,98 @@ class SemDadosInicio extends StatelessWidget {
   }
 }
 
+/// Sem banco conectado: atalhos para o uso manual (Configurações › Início › Mostrar atalhos sem banco).
+class AtalhosInicio extends StatelessWidget {
+  const AtalhosInicio({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: meuBancoPareado,
+        builder: (context, pareado, _) {
+          if (pareado) return const SizedBox.shrink();
+          final itens = <(IconData, String, Widget Function())>[
+            (
+              Icons.add,
+              'Nova transação',
+              () => AddTransactionPage(
+                  routesToPopAfterDelete: RoutesToPopAfterDelete.None)
+            ),
+            (
+              Icons.account_balance_wallet_outlined,
+              'Contas',
+              () => EditWalletsPage()
+            ),
+            (
+              Icons.donut_large_outlined,
+              'Orçamentos',
+              () => const BudgetsListPage(enableBackButton: true)
+            ),
+            (
+              Icons.flag_outlined,
+              'Metas',
+              () => const ObjectivesListPage(backButton: true)
+            ),
+          ];
+          return Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 2.6,
+              children: [
+                for (final (icone, rotulo, pagina) in itens)
+                  _Atalho(
+                      icone: icone,
+                      rotulo: rotulo,
+                      onTap: () => pushRoute(context, pagina())),
+              ],
+            ),
+          );
+        },
+      );
+}
+
+class _Atalho extends StatelessWidget {
+  const _Atalho(
+      {required this.icone, required this.rotulo, required this.onTap});
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Semantics(
+      button: true,
+      label: rotulo,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: ToqueEscala(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+              color: e.chip, borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            Icon(icone, size: 20, color: e.tx),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(rotulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontWeight: FontWeight.w500)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class _Topo extends StatelessWidget {
   const _Topo({required this.modelo});
   final ModeloInicio modelo;
@@ -270,14 +373,16 @@ class CartaoSaldoCiclo extends StatelessWidget {
         : CartaoEscuro(
             padding: const EdgeInsets.all(28),
             child: IntrinsicHeight(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(child: saldo),
-                Container(
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(horizontal: 32),
-                    color: cores(context).line),
-                Expanded(child: lateral!),
-              ]),
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: saldo),
+                    Container(
+                        width: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        color: cores(context).line),
+                    Expanded(child: lateral!),
+                  ]),
             ),
           );
     if (onTap == null) return cartao;
@@ -335,8 +440,8 @@ class _Restante extends StatelessWidget {
         if (!estourou && AjustesInicio.ritmoDiario) ...[
           const SizedBox(height: 10),
           Text('Pode gastar ${brl(restante / (dias + 1))}/dia',
-              style: EdTexto.corpo(context)
-                  .copyWith(fontWeight: FontWeight.w500)),
+              style:
+                  EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
         ],
         if (AjustesInicio.saldoContas) ...[
           const SizedBox(height: 4),
@@ -438,8 +543,8 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
                         titulo: o.name,
                         valor: '${brl(total)} de ${brl(alvo)}',
                         fracao: fracao,
-                        onTap: () => pushRoute(context,
-                            ObjectivePage(objectivePk: o.objectivePk)),
+                        onTap: () => pushRoute(
+                            context, ObjectivePage(objectivePk: o.objectivePk)),
                       ),
                     ),
                 ],
