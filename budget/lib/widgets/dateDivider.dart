@@ -36,7 +36,7 @@ class DateDivider extends StatelessWidget {
             afterDate,
         extraInfo: info,
         color: color,
-        fontSize: 14,
+        fontSize: 13,
         maxLines: maxLines,
       ),
     );

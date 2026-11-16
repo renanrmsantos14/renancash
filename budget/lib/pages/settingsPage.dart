@@ -1,18 +1,17 @@
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/colors.dart';
 import 'package:budget/pages/aparenciaPage.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
 import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/ajustesInicioPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
-import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
 import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/objectivesListPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -24,7 +23,6 @@ import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/exportDB.dart';
 import 'package:budget/widgets/importCSV.dart';
 import 'package:budget/widgets/exportCSV.dart';
-import 'package:budget/pages/autoTransactionsPageEmail.dart';
 import 'package:budget/pages/activityPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
@@ -40,7 +38,6 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/radioItems.dart';
-import 'package:budget/widgets/ratingPopup.dart';
 import 'package:budget/widgets/restartApp.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/settingsContainers.dart';
@@ -115,13 +112,7 @@ class MoreActionsPageState extends State<MoreActionsPage> {
             ],
           ),
         ],
-        listWidgets: [
-          Padding(
-            padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-            child: PremiumBanner(),
-          ),
-          MorePages()
-        ],
+        listWidgets: [MorePages()],
       );
     });
   }
@@ -134,227 +125,68 @@ class MorePages extends StatelessWidget {
   Widget build(BuildContext context) {
     bool hasSideNavigation = getIsFullScreen(context);
 
-    return Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 4),
-      child: Column(
-        children: [
-          if (hasSideNavigation == false)
-            Row(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: SettingsContainerOpenPage(
-                    openPage: SettingsPageFramework(
-                      key: settingsPageFrameworkStateKey,
-                    ),
-                    title: navBarIconsData["settings"]!.labelLong.tr(),
-                    icon: navBarIconsData["settings"]!.iconData,
-                    description: appStateSettings["showExtraInfoText"] == false
-                        ? null
-                        : "settings-and-customization-description".tr(),
-                    isOutlined: true,
-                    // description: "Theme, Language, CSV Import",
-                    isWideOutlined: true,
-                  ),
-                ),
-              ],
-            ),
-          if (hasSideNavigation == false)
-            Row(
-              children: [
-                Expanded(
-                  child: SettingsContainerOpenPage(
-                    openPage: WalletDetailsPage(wallet: null),
-                    title: navBarIconsData["allSpending"]!.labelLong.tr(),
-                    icon: navBarIconsData["allSpending"]!.iconData,
-                    description: appStateSettings["showExtraInfoText"] == false
-                        ? null
-                        : "all-spending-description".tr(),
-                    isOutlined: true,
-                    isWideOutlined: true,
-                  ),
-                ),
-              ],
-            ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Expanded(
-              //   child: Padding(
-              //     padding: EdgeInsetsDirectional.symmetric(vertical: 5, horizontal: 4),
-              //     child: SettingsContainer(
-              //       onTap: () {
-              //         openUrl("https://github.com/jameskokoska/Cashew");
-              //       },
-              //       title: "open-source".tr(),
-              //       icon: MoreIcons.github,
-              //       isOutlined: true,
-              //     ),
-              //   ),
-              // ),
-              Expanded(
-                child: SettingsContainerOpenPage(
-                  openPage: AboutPage(),
-                  title: "about-app".tr(namedArgs: {"app": globalAppName}),
-                  icon: navBarIconsData["about"]!.iconData,
-                  isOutlined: true,
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.symmetric(
-                      vertical: 5, horizontal: 4),
-                  child: SettingsContainer(
-                    onTap: () {
-                      openBottomSheet(context, RatingPopup(), fullSnap: true);
-                    },
-                    title: "feedback".tr(),
-                    icon: appStateSettings["outlinedIcons"]
-                        ? Icons.rate_review_outlined
-                        : Icons.rate_review_rounded,
-                    isOutlined: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              appStateSettings["showBillSplitterShortcut"] == true &&
-                      hasSideNavigation == false
-                  ? Expanded(
-                      child: SettingsContainerOpenPage(
-                        openPage: BillSplitter(),
-                        title: "bill-splitter".tr(),
-                        icon: appStateSettings["outlinedIcons"]
-                            ? Icons.summarize_outlined
-                            : Icons.summarize_rounded,
-                        isOutlined: true,
-                      ),
-                    )
-                  : notificationsGlobalEnabled
-                      ? Expanded(
-                          child: SettingsContainerOpenPage(
-                            openPage: NotificationsPage(),
-                            title: navBarIconsData["notifications"]!.label.tr(),
-                            icon: navBarIconsData["notifications"]!.iconData,
-                            isOutlined: true,
-                          ),
-                        )
-                      : SizedBox.shrink(),
-              if (hasSideNavigation == false)
-                Expanded(
-                    child: GoogleAccountLoginButton(
-                  key: settingsGoogleAccountLoginButtonKey,
-                )),
-            ],
-          ),
-          if (hasSideNavigation == false)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: SettingsContainerOpenPage(
-                    openPage: SubscriptionsPage(),
-                    title: navBarIconsData["subscriptions"]!.label.tr(),
-                    icon: navBarIconsData["subscriptions"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-                Expanded(
-                  child: SettingsContainerOpenPage(
-                    openPage:
-                        UpcomingOverdueTransactions(overdueTransactions: null),
-                    title: navBarIconsData["scheduled"]!.label.tr(),
-                    icon: navBarIconsData["scheduled"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-              ],
-            ),
-          if (hasSideNavigation == false)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: SettingsContainerOpenPage(
-                    openPage: ObjectivesListPage(
-                      backButton: true,
-                    ),
-                    title: navBarIconsData["goals"]!.label.tr(),
-                    icon: navBarIconsData["goals"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-                Expanded(
-                  child: SettingsContainerOpenPage(
-                    openPage: CreditDebtTransactions(isCredit: null),
-                    title: navBarIconsData["loans"]!.label.tr(),
-                    icon: navBarIconsData["loans"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-              ],
-            ),
-          if (hasSideNavigation == false)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  flex: 1,
-                  child: SettingsContainerOpenPage(
-                    isOutlinedColumn: true,
-                    openPage: EditWalletsPage(),
-                    title: navBarIconsData["accountDetails"]!.label.tr(),
-                    icon: navBarIconsData["accountDetails"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: SettingsContainerOpenPage(
-                    isOutlinedColumn: true,
-                    // If budget page not pinned to home, open budget list page
-                    openPage: appStateSettings["customNavBarShortcut0"] !=
-                                "budgets" &&
-                            appStateSettings["customNavBarShortcut1"] !=
-                                "budgets" &&
-                            appStateSettings["customNavBarShortcut2"] !=
-                                "budgets"
-                        ? BudgetsListPage(enableBackButton: true)
-                        : EditBudgetPage(),
-                    title: navBarIconsData["budgetDetails"]!.label.tr(),
-                    icon: navBarIconsData["budgetDetails"]!.iconData,
-                    iconScale: navBarIconsData["budgetDetails"]!.iconScale,
-                    isOutlined: true,
-                  ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: SettingsContainerOpenPage(
-                    isOutlinedColumn: true,
-                    openPage: EditCategoriesPage(),
-                    title: navBarIconsData["categoriesDetails"]!.label.tr(),
-                    icon: navBarIconsData["categoriesDetails"]!.iconData,
-                    isOutlined: true,
-                  ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: SettingsContainerOpenPage(
-                    isOutlinedColumn: true,
-                    openPage: EditAssociatedTitlesPage(),
-                    title: navBarIconsData["titlesDetails"]!.label.tr(),
-                    icon: navBarIconsData["titlesDetails"]!.iconData,
-                    isOutlined: true,
-                  ),
-                )
-              ],
-            ),
-          if (hasSideNavigation) SettingsPageContent(),
+    Widget pagina(String chave, Widget destino) => SettingsContainerOpenPage(
+          openPage: destino,
+          title: navBarIconsData[chave]!.label.tr(),
+          icon: navBarIconsData[chave]!.iconData,
+          iconScale: navBarIconsData[chave]!.iconScale,
+        );
+    bool budgetsNaBarra = [
+      appStateSettings["customNavBarShortcut0"],
+      appStateSettings["customNavBarShortcut1"],
+      appStateSettings["customNavBarShortcut2"],
+    ].contains("budgets");
+
+    // Lista única: o que é dinheiro primeiro, organização depois e o app por
+    // último. No computador a lateral já tem as páginas; aqui ficam os ajustes.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasSideNavigation == false) ...[
+          SettingsHeader(title: "Dinheiro"),
+          pagina("allSpending", WalletDetailsPage(wallet: null)),
+          pagina("accountDetails", EditWalletsPage()),
+          // Com Orçamentos fora da barra, abre a lista; senão, a edição.
+          pagina(
+              "budgetDetails",
+              budgetsNaBarra
+                  ? EditBudgetPage()
+                  : BudgetsListPage(enableBackButton: true)),
+          pagina("goals", ObjectivesListPage(backButton: true)),
+          pagina("loans", CreditDebtTransactions(isCredit: null)),
+          pagina("subscriptions", SubscriptionsPage()),
+          pagina("scheduled",
+              UpcomingOverdueTransactions(overdueTransactions: null)),
+          SettingsHeader(title: "Organização"),
+          pagina("categoriesDetails", EditCategoriesPage()),
+          pagina("titlesDetails", EditAssociatedTitlesPage()),
         ],
-      ),
+        SettingsHeader(title: "App"),
+        if (hasSideNavigation == false)
+          SettingsContainerOpenPage(
+            openPage: SettingsPageFramework(
+              key: settingsPageFrameworkStateKey,
+            ),
+            title: navBarIconsData["settings"]!.labelLong.tr(),
+            icon: navBarIconsData["settings"]!.iconData,
+            description: appStateSettings["showExtraInfoText"] == false
+                ? null
+                : "settings-and-customization-description".tr(),
+          ),
+        if (notificationsGlobalEnabled)
+          pagina("notifications", NotificationsPage()),
+        if (hasSideNavigation == false)
+          GoogleAccountLoginButton(
+            key: settingsGoogleAccountLoginButtonKey,
+            isOutlinedButton: false,
+          ),
+        SettingsContainerOpenPage(
+          openPage: AboutPage(),
+          title: "about-app".tr(namedArgs: {"app": globalAppName}),
+          icon: navBarIconsData["about"]!.iconData,
+        ),
+        if (hasSideNavigation) SettingsPageContent(),
+      ],
     );
   }
 }
@@ -466,7 +298,7 @@ class SettingsPageContent extends StatelessWidget {
               ? Icons.language_outlined
               : Icons.language_rounded,
           afterWidget: Tappable(
-            color: Theme.of(context).colorScheme.secondaryContainer,
+            color: cores(context).chip,
             borderRadius: 10,
             child: Padding(
               padding: const EdgeInsetsDirectional.symmetric(
@@ -501,41 +333,6 @@ class SettingsPageContent extends StatelessWidget {
               ? Icons.sync_alt_outlined
               : Icons.sync_alt_rounded,
         ),
-        // SettingsContainerOpenPage(
-        //   openPage: AutoTransactionsPage(),
-        //   title: "Auto Transactions",
-        //   icon: appStateSettings["outlinedIcons"] ? Icons.auto_fix_high_outlined : Icons.auto_fix_high_rounded,
-        // ),
-
-        appStateSettings["emailScanning"]
-            ? SettingsContainerOpenPage(
-                openPage: AutoTransactionsPageEmail(),
-                title: "auto-email-transactions".tr(),
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.mark_email_unread_outlined
-                    : Icons.mark_email_unread_rounded,
-              )
-            : SizedBox.shrink(),
-
-        appStateSettings["notificationScanningDebug"] &&
-                getPlatform(ignoreEmulation: true) == PlatformOS.isAndroid
-            ? SettingsContainerOpenPage(
-                title: "Notification Transactions",
-                openPage: AutoTransactionsPageNotifications(),
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.edit_notifications_outlined
-                    : Icons.edit_notifications_rounded,
-              )
-            : SizedBox.shrink(),
-
-        SettingsContainerOpenPage(
-          openPage: BillSplitter(),
-          title: "bill-splitter".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.summarize_outlined
-              : Icons.summarize_rounded,
-        ),
-
         SettingsContainerOpenPage(
           openPage: ActivityPage(),
           title: "transaction-activity-log".tr(),
@@ -917,7 +714,7 @@ class FontPickerSetting extends StatelessWidget {
           ? Icons.font_download_outlined
           : Icons.font_download_rounded,
       afterWidget: Tappable(
-        color: Theme.of(context).colorScheme.secondaryContainer,
+        color: cores(context).chip,
         borderRadius: 10,
         child: Padding(
           padding: const EdgeInsetsDirectional.symmetric(
@@ -999,7 +796,7 @@ class NumberFormattingSetting extends StatelessWidget {
           : Icons.one_x_mobiledata_rounded,
       afterWidget: IgnorePointer(
         child: Tappable(
-          color: Theme.of(context).colorScheme.secondaryContainer,
+          color: cores(context).chip,
           borderRadius: 10,
           child: Padding(
             padding: const EdgeInsetsDirectional.symmetric(

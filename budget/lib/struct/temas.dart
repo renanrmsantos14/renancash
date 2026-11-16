@@ -256,8 +256,13 @@ ThemeData temaFlutter(TemaPronto t) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       labelStyle: TextStyle(fontFamily: 'Geist', fontSize: 13, color: e.tx),
     ),
+    // Trilho no acento quando ligado, bolinha clara; desligado em cinza.
     switchTheme: SwitchThemeData(
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      thumbColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.selected) ? sobreAcc : e.mu),
+      trackColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.selected) ? e.acc : e.chip),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(
       color: e.acc,

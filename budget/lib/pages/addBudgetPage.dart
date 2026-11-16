@@ -4,19 +4,15 @@ import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/addWalletPage.dart';
 import 'package:budget/pages/editBudgetLimitsPage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
-import 'package:budget/pages/premiumPage.dart';
 import 'package:budget/pages/settingsPage.dart';
-import 'package:budget/pages/sharedBudgetSettings.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/shareBudget.dart';
-import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/incomeExpenseTabSelector.dart';
 import 'package:budget/widgets/navigationFramework.dart';
-import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
@@ -362,8 +358,7 @@ class _AddBudgetPageState extends State<AddBudgetPage> {
     super.initState();
     Future.delayed(Duration.zero, () async {
       if (widget.budget == null) {
-        bool result = await premiumPopupBudgets(context);
-        if (result == true && widget.isAddedOnlyBudget != true) {
+        if (widget.isAddedOnlyBudget != true) {
           dynamic result = await openBottomSheet(
             context,
             fullSnap: false,
@@ -1265,11 +1260,6 @@ class _AddBudgetPageState extends State<AddBudgetPage> {
           ),
         ],
         listWidgets: [
-          widget.budget != null && widget.budget!.sharedKey != null
-              ? SharedBudgetSettings(
-                  budget: widget.budget!,
-                )
-              : SizedBox.shrink(),
           SizedBox(height: 13),
           Container(height: 70),
         ],

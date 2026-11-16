@@ -16,7 +16,6 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/database/generatePreviewData.dart';
-import 'package:budget/widgets/ratingPopup.dart';
 import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -251,19 +250,6 @@ class DebugPage extends StatelessWidget {
               ? Icons.vibration_outlined
               : Icons.vibration_rounded,
         ),
-        if (getPlatform(ignoreEmulation: true) == PlatformOS.isAndroid)
-          SettingsContainerSwitch(
-            onSwitched: (value) async {
-              await updateSettings("notificationScanningDebug", value,
-                  updateGlobalState: false);
-            },
-            title: "Notification Transactions",
-            description: "Still in testing, enables the settings option",
-            initialValue: appStateSettings["notificationScanningDebug"] == true,
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.edit_notifications_outlined
-                : Icons.edit_notifications_rounded,
-          ),
         SettingsContainerSwitch(
           onSwitched: (value) async {
             updateSettings("colorTintCategoryIcon", value,
@@ -302,50 +288,6 @@ class DebugPage extends StatelessWidget {
           icon: appStateSettings["outlinedIcons"]
               ? Icons.format_color_text_outlined
               : Icons.format_color_text_rounded,
-        ),
-        DangerousDebugFlag(
-          child: SettingsContainerSwitch(
-            onSwitched: (value) async {
-              updateSettings("emailScanning", value,
-                  updateGlobalState: false, pagesNeedingRefresh: [3]);
-            },
-            title: "Enable Email Scanning",
-            description: "Not verified by Google. Still in testing.",
-            initialValue: appStateSettings["emailScanning"] == true,
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.mark_email_unread_outlined
-                : Icons.mark_email_unread_rounded,
-          ),
-        ),
-        DangerousDebugFlag(
-          child: SettingsContainerSwitch(
-            onSwitched: (value) async {
-              updateSettings("emailScanningPullToRefresh", value,
-                  pagesNeedingRefresh: [], updateGlobalState: false);
-            },
-            title: "Email Scanning Pull to Refresh",
-            description: "May increase API usage",
-            initialValue:
-                appStateSettings["emailScanningPullToRefresh"] == true,
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.mark_email_unread_outlined
-                : Icons.mark_email_unread_rounded,
-          ),
-        ),
-        DangerousDebugFlag(
-          child: SettingsContainerSwitch(
-            onSwitched: (value) async {
-              updateSettings("sharedBudgets", value,
-                  updateGlobalState: true, pagesNeedingRefresh: [0, 1, 2, 3]);
-            },
-            title: "Enable Shared Budgets",
-            description:
-                "In testing, share budgets and transactions with other users.",
-            initialValue: appStateSettings["sharedBudgets"] == true,
-            icon: appStateSettings["outlinedIcons"]
-                ? Icons.share_outlined
-                : Icons.share_rounded,
-          ),
         ),
         SettingsContainerSwitch(
           enableBorderRadius: true,
@@ -417,30 +359,6 @@ class DebugPage extends StatelessWidget {
           icon: appStateSettings["outlinedIcons"]
               ? Icons.keyboard_outlined
               : Icons.keyboard_rounded,
-        ),
-        FutureBuilder<bool>(
-          future: inAppReview.isAvailable(),
-          builder: (context, snapshot) {
-            return SettingsContainer(
-              icon: Icons.store,
-              title: "Test store review integration",
-              description: "Available: " + snapshot.data.toString(),
-              onTap: () async {
-                if (await inAppReview.isAvailable())
-                  inAppReview.requestReview();
-              },
-            );
-          },
-        ),
-        SettingsContainerSwitch(
-          title: "Replace notification setting button with Bill Splitter",
-          description: "In the More page",
-          onSwitched: (value) {
-            updateSettings("showBillSplitterShortcut", value,
-                updateGlobalState: false, pagesNeedingRefresh: [3]);
-          },
-          initialValue: appStateSettings["showBillSplitterShortcut"] == true,
-          icon: Icons.summarize_rounded,
         ),
         SettingsContainerSwitch(
           title: "Method Added",

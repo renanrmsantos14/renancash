@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:budget/struct/defaultPreferences.dart' show AppAnimations;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
@@ -94,6 +95,41 @@ void main() {
     expect(find.text('R\$ 0'), findsOneWidget);
     await t.pump(const Duration(milliseconds: 900));
     expect(find.text('R\$ 100'), findsOneWidget);
+  });
+
+  group('EntradaSuave', () {
+    Finder fade() => find.descendant(
+        of: find.byType(EntradaSuave), matching: find.byType(FadeTransition));
+    setUp(() => appStateSettings["appAnimations"] = AppAnimations.all.index);
+
+    testWidgets('entra com fade e termina opaco', (t) async {
+      await t.pumpWidget(_app(const EntradaSuave(child: Text('a'))));
+      expect(t.widget<FadeTransition>(fade()).opacity.value, 0);
+      await t.pump(const Duration(milliseconds: 250));
+      expect(t.widget<FadeTransition>(fade()).opacity.value, 1);
+    });
+
+    testWidgets('cascata só nos 8 primeiros', (t) async {
+      await t.pumpWidget(_app(const EntradaSuave(indice: 8, child: Text('a'))));
+      expect(fade(), findsNothing);
+    });
+
+    testWidgets('fora da janela de entrada aparece direto', (t) async {
+      await t.pumpWidget(
+          _app(const EntradaSuave(animar: false, child: Text('a'))));
+      expect(fade(), findsNothing);
+    });
+
+    testWidgets('nada com reduzir movimento ou animações desligadas',
+        (t) async {
+      await t.pumpWidget(
+          _app(const EntradaSuave(child: Text('a')), reduzir: true));
+      expect(fade(), findsNothing);
+      appStateSettings["appAnimations"] = AppAnimations.disabled.index;
+      await t.pumpWidget(
+          _app(const EntradaSuave(key: Key('b'), child: Text('b'))));
+      expect(fade(), findsNothing);
+    });
   });
 
   testWidgets('MedidorEditorial limita a fração em 1', (t) async {

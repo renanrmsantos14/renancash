@@ -378,7 +378,7 @@ class TransactionEntry extends StatelessWidget {
             ]);
       }
 
-      double fontSize = getIsFullScreen(context) == false ? 15.5 : 16.5;
+      double fontSize = getIsFullScreen(context) == false ? 15 : 16;
       Widget transactionLabel = TransactionLabel(
         fontSize: fontSize,
         transaction: transaction,
@@ -424,6 +424,16 @@ class TransactionEntry extends StatelessWidget {
           ),
         ],
       );
+
+      // Linha secundária: categoria (quando o nome é a descrição) e a conta,
+      // esta só com mais de uma conta e sem a etiqueta de conta ligada.
+      AllWallets allWallets = Provider.of<AllWallets>(context);
+      String secondaryInfo = [
+        if (transaction.name != "") category?.name,
+        if (allWallets.list.length > 1 &&
+            appStateSettings["showAccountLabelTagInTransactionEntry"] != true)
+          allWallets.indexedByPk[transaction.walletFk]?.name,
+      ].whereType<String>().join(" · ");
 
       Widget amount = TransactionEntryAmount(
         transaction: transaction,
@@ -549,6 +559,17 @@ class TransactionEntry extends StatelessWidget {
                           padding: const EdgeInsetsDirectional.only(start: 3),
                           child: transactionLabel,
                         ),
+                        if (secondaryInfo != "")
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(
+                                start: 3, top: 1),
+                            child: TextFont(
+                              text: secondaryInfo,
+                              fontSize: 12.5,
+                              maxLines: 1,
+                              textColor: getColor(context, "textLight"),
+                            ),
+                          ),
                         tags,
                       ],
                     ),
@@ -705,13 +726,13 @@ class TransactionEntry extends StatelessWidget {
                                 top: !enableSelectionCheckmark &&
                                         selected &&
                                         isTransactionBeforeSelected == false
-                                    ? 6
-                                    : 4,
+                                    ? 10
+                                    : 8,
                                 bottom: !enableSelectionCheckmark &&
                                         selected &&
                                         isTransactionAfterSelected == false
-                                    ? 6
-                                    : 4,
+                                    ? 10
+                                    : 8,
                               ),
                               decoration: BoxDecoration(
                                 color: selected

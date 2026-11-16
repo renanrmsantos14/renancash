@@ -71,6 +71,8 @@ class TextFont extends StatelessWidget {
           ? "DMSans"
           : appStateSettings["font"],
       fontFamilyFallback: ['Inter'],
+      // Números tabulares: valores alinham em coluna nas listas.
+      fontFeatures: const [FontFeature.tabularFigures()],
       color: finalTextColor,
       decoration: TextDecoration.underline,
       decorationStyle: TextDecorationStyle.double,

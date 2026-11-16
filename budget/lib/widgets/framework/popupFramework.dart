@@ -56,8 +56,9 @@ class PopupFramework extends StatelessWidget {
                                     horizontal: 18),
                                 child: TextFont(
                                   text: title ?? "",
-                                  fontSize: 23,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
                                   maxLines: 5,
                                   textAlign: TextAlign.center,
                                 ),
@@ -73,16 +74,13 @@ class PopupFramework extends StatelessWidget {
                                       fontSize: 14,
                                       maxLines: 5,
                                       textAlign: TextAlign.center,
+                                      textColor: getColor(context, "textLight"),
                                     ),
                               ),
                             if (title != null || subtitle != null)
                               Container(
-                                height: 1.5,
-                                color: appStateSettings["materialYou"] == true
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .secondaryContainer
-                                    : getColor(context, "canvasContainer"),
+                                height: 1,
+                                color: getColor(context, "dividerColor"),
                                 margin: EdgeInsetsDirectional.only(
                                     top: 10, bottom: 5),
                               )
@@ -114,8 +112,9 @@ class PopupFramework extends StatelessWidget {
                                 if (title != null)
                                   TextFont(
                                     text: title ?? "",
-                                    fontSize: title!.length > 16 ? 23 : 29,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.4,
                                     maxLines: 5,
                                   ),
                                 if (subtitle != null ||
@@ -126,8 +125,10 @@ class PopupFramework extends StatelessWidget {
                                     child: customSubtitleWidget ??
                                         TextFont(
                                           text: subtitle ?? "",
-                                          fontSize: 15,
+                                          fontSize: 14,
                                           maxLines: 5,
+                                          textColor:
+                                              getColor(context, "textLight"),
                                         ),
                                   ),
                               ],

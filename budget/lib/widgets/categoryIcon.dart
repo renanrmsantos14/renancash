@@ -1,6 +1,7 @@
 import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
@@ -105,14 +106,11 @@ class CategoryIcon extends StatelessWidget {
                                     Theme.of(context).colorScheme.primary,
                                 amount: 0.5,
                               )
-                            : dynamicPastel(
-                                context,
-                                HexColor(category.colour,
-                                    defaultColor:
-                                        Theme.of(context).colorScheme.primary),
-                                amountLight: 0.55,
-                                amountDark: 0.35)
-                        : getColor(context, "canvasContainer"),
+                            // Cor da categoria só como tinta leve no fundo.
+                            : category.colour == null
+                                ? cores(context).chip
+                                : HexColor(category.colour).withOpacity(0.16)
+                        : cores(context).chip,
                 onTap: onTap,
                 onLongPress: canEditByLongPress == false && onLongPress == null
                     ? null

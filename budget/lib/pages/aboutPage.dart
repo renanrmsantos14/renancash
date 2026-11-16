@@ -1,23 +1,20 @@
 import 'dart:math';
+import 'package:budget/database/tables.dart' show schemaVersionGlobal;
 import 'package:budget/functions.dart';
 import 'package:budget/main.dart';
 import 'package:budget/pages/accountsPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/debugPage.dart';
-import 'package:budget/pages/detailedChangelogPage.dart';
 import 'package:budget/pages/onBoardingPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/languageMap.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/moreIcons.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
-import 'package:budget/widgets/ratingPopup.dart';
-import 'package:budget/widgets/showChangelog.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -712,24 +709,15 @@ class SpreadExpandFlex extends StatelessWidget {
   }
 }
 
-void showChangelogForce(BuildContext context) {
-  showChangelog(
-    context,
-    forceShow: true,
-    majorChangesOnly: true,
-    extraWidget: Padding(
-      padding: const EdgeInsetsDirectional.only(
-        bottom: 10,
-      ),
-      child: Button(
-        label: "view-detailed-changelog".tr(),
-        onTap: () {
-          popRoute(context);
-          pushRoute(context, DetailedChangelogPage());
-        },
-      ),
-    ),
-  );
+String getVersionString() {
+  String version = packageInfoGlobal?.version ?? "";
+  String buildNumber = packageInfoGlobal?.buildNumber ?? "";
+  return "v" +
+      version +
+      "+" +
+      buildNumber +
+      ", db-v" +
+      schemaVersionGlobal.toString();
 }
 
 void openOnBoarding(BuildContext context) {
@@ -868,27 +856,6 @@ class AboutLinks extends StatelessWidget {
                   ? Icons.live_help_outlined
                   : Icons.live_help_rounded,
               text: "guide-and-faq".tr(),
-            ),
-            const HorizontalBreak(padding: EdgeInsetsDirectional.zero),
-            _buildTappable(
-              context: context,
-              isExternalLink: false,
-              onTap: () =>
-                  openBottomSheet(context, RatingPopup(), fullSnap: true),
-              icon: appStateSettings["outlinedIcons"]
-                  ? Icons.rate_review_outlined
-                  : Icons.rate_review_rounded,
-              text: "feedback".tr(),
-            ),
-            const HorizontalBreak(padding: EdgeInsetsDirectional.zero),
-            _buildTappable(
-              context: context,
-              isExternalLink: false,
-              onTap: () => showChangelogForce(context),
-              icon: appStateSettings["outlinedIcons"]
-                  ? Icons.list_alt_outlined
-                  : Icons.list_alt_rounded,
-              text: "changelog".tr(),
             ),
             const HorizontalBreak(padding: EdgeInsetsDirectional.zero),
             _buildTappable(

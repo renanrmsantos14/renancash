@@ -35,7 +35,6 @@ import 'package:googleapis/abusiveexperiencereport/v1.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:googleapis/drive/v3.dart' as drive;
-import 'package:googleapis/gmail/v1.dart' as gMail;
 import 'package:google_sign_in/google_sign_in.dart' as signIn;
 import 'package:http/http.dart' as http;
 import 'package:shimmer/shimmer.dart';
@@ -76,7 +75,6 @@ signIn.GoogleSignInAccount? googleUser;
 Future<bool> signInGoogle(
     {BuildContext? context,
     bool? waitForCompletion,
-    bool? gMailPermissions,
     bool? drivePermissionsAttachments,
     bool? silentSignIn,
     Function()? next}) async {
@@ -84,16 +82,9 @@ Future<bool> signInGoogle(
   // Meu Banco na web não usa Google (a CSP também bloqueia accounts.google.com).
   if (kIsWeb) return false;
   if (await checkLockedFeatureIfInDemoMode(context) == false) return false;
-  if (appStateSettings["emailScanning"] == false) gMailPermissions = false;
 
   try {
-    if (gMailPermissions == true &&
-        googleUser != null &&
-        !(await testIfHasGmailAccess())) {
-      await signOutGoogle();
-      googleSignIn = null;
-      settingsPageStateKey.currentState?.refreshState();
-    } else if (googleUser == null) {
+    if (googleUser == null) {
       googleSignIn = null;
       settingsPageStateKey.currentState?.refreshState();
     }
@@ -123,13 +114,6 @@ Future<bool> signInGoogle(
         ...(drivePermissionsAttachments == true
             ? [drive.DriveApi.driveFileScope]
             : []),
-        ...(gMailPermissions == true
-            ? [
-                gMail.GmailApi.gmailReadonlyScope,
-                gMail.GmailApi
-                    .gmailModifyScope //We do this so the emails can be marked read
-              ]
-            : [])
       ];
       googleSignIn = getPlatform() == PlatformOS.isIOS
           ? signIn.GoogleSignIn(
@@ -187,7 +171,6 @@ Future<bool> signInGoogle(
         onTap: () => signInGoogle(
           context: context,
           drivePermissionsAttachments: drivePermissionsAttachments,
-          gMailPermissions: gMailPermissions,
           next: next,
           silentSignIn: false,
           waitForCompletion: waitForCompletion,
@@ -210,22 +193,6 @@ void refreshUIAfterLoginChange() {
   sidebarStateKey.currentState?.refreshState();
   accountsPageStateKey.currentState?.refreshState();
   settingsGoogleAccountLoginButtonKey.currentState?.refreshState();
-}
-
-Future<bool> testIfHasGmailAccess() async {
-  print("TESTING GMAIL");
-  try {
-    final authHeaders = await googleUser!.authHeaders;
-    final authenticateClient = GoogleAuthClient(authHeaders);
-    gMail.GmailApi gmailApi = gMail.GmailApi(authenticateClient);
-    gMail.ListMessagesResponse results = await gmailApi.users.messages
-        .list(googleUser!.id.toString(), maxResults: 1);
-  } catch (e) {
-    print(e.toString());
-    print("NO GMAIL");
-    return false;
-  }
-  return true;
 }
 
 Future<bool> signOutGoogle() async {
@@ -324,7 +291,6 @@ Future<void> createBackupInBackground(context) async {
       if (googleUser == null) {
         hasSignedIn = await signInGoogle(
             context: context,
-            gMailPermissions: false,
             waitForCompletion: false,
             silentSignIn: true);
       } else {

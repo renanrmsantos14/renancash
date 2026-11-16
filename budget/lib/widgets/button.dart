@@ -86,7 +86,7 @@ class _ButtonState extends State<Button> with TickerProviderStateMixin {
       text: widget.label,
       fontSize: widget.fontSize,
       textColor: widget.textColor ?? frente,
-      fontWeight: principal ? FontWeight.w600 : FontWeight.normal,
+      fontWeight: principal ? FontWeight.w600 : FontWeight.w500,
       maxLines: 5,
       textAlign: widget.icon != null ? TextAlign.start : TextAlign.center,
     );
@@ -99,7 +99,7 @@ class _ButtonState extends State<Button> with TickerProviderStateMixin {
       child: AnimatedScale(
         duration: Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        scale: widget.changeScale ? (isTapped ? 0.95 : 1) : 1,
+        scale: widget.changeScale ? (isTapped ? 0.97 : 1) : 1,
         alignment: widget.expandToFillBottomExtraSafeArea
             ? Alignment.bottomCenter
             : Alignment.center,
@@ -123,7 +123,7 @@ class _ButtonState extends State<Button> with TickerProviderStateMixin {
               widget.onDisabled!();
           },
           onLongPress: widget.onLongPress,
-          borderRadius: widget.borderRadius ?? 14,
+          borderRadius: widget.borderRadius ?? 12,
           child: Padding(
             padding: EdgeInsetsDirectional.only(
               bottom: widget.expandToFillBottomExtraSafeArea
