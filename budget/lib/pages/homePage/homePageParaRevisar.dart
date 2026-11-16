@@ -31,8 +31,7 @@ const int _itensNoCartao = 3;
 Future<String> _pkDaCategoria(String nome) async {
   final todas = await database.select(database.categories).get();
   for (final c in todas) {
-    if (!c.income && c.name.toLowerCase() == nome.toLowerCase())
-      return c.categoryPk;
+    if (!c.income && c.name.toLowerCase() == nome.toLowerCase()) return c.categoryPk;
   }
   return mbPkCategoria(nome, false);
 }
@@ -61,8 +60,7 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
         final cor = Theme.of(context).colorScheme;
         return KeepAliveClientMixin(
           child: Container(
-            margin: const EdgeInsetsDirectional.only(
-                start: 13, end: 13, bottom: 13),
+            margin: const EdgeInsetsDirectional.only(start: 13, end: 13, bottom: 13),
             padding: const EdgeInsetsDirectional.all(15),
             decoration: BoxDecoration(
               color: getColor(context, "lightDarkAccentHeavyLight"),
@@ -137,8 +135,7 @@ class ItemParaRevisar extends StatefulWidget {
 class _ItemParaRevisarState extends State<ItemParaRevisar> {
   bool _enviando = false, _escolhendo = false;
 
-  Future<void> _responder(String resposta,
-      {String? categoriaPk, String? reembolsoDe}) async {
+  Future<void> _responder(String resposta, {String? categoriaPk, String? reembolsoDe}) async {
     if (_enviando) return;
     if (mounted) setState(() => _enviando = true);
     try {
@@ -192,14 +189,12 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
       context,
       PopupFramework(
         title: 'Qual gasto foi reembolsado?',
-        subtitle:
-            '${brl(widget.item.valor)}${data == null ? '' : ' · ${diaMes(data)}'}',
+        subtitle: '${brl(widget.item.valor)}${data == null ? '' : ' · ${diaMes(data)}'}',
         child: SugestoesReembolso(sugestoes: sugestoes),
       ),
     );
     if (escolha is MbGastoCandidato) {
-      await _responder('reembolso',
-          reembolsoDe: escolha.pk.substring(mbPrefixo.length));
+      await _responder('reembolso', reembolsoDe: escolha.pk.substring(mbPrefixo.length));
     } else if (escolha == semGastoReembolso) {
       await _responder('reembolso');
     }
@@ -314,33 +309,22 @@ class _SugestoesReembolsoState extends State<SugestoesReembolso> {
           borderRadius: BorderRadius.circular(12),
           onTap: () => popRoute(context, s.gasto),
           child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(
-                vertical: 10, horizontal: 4),
+            padding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
             child: Row(children: [
               Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextFont(
-                          text: s.gasto.nome,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          maxLines: 1),
-                      TextFont(
-                          text: [
-                            diaMes(s.gasto.data),
-                            if (s.gasto.categoria.isNotEmpty) s.gasto.categoria,
-                            if (s.afinidade == MbAfinidadeReembolso.igual)
-                              'mesmo valor',
-                          ].join(' · '),
-                          fontSize: 13,
-                          textColor: getColor(context, "textLight")),
-                    ]),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  TextFont(text: s.gasto.nome, fontSize: 15, fontWeight: FontWeight.bold, maxLines: 1),
+                  TextFont(
+                      text: [
+                        diaMes(s.gasto.data),
+                        if (s.gasto.categoria.isNotEmpty) s.gasto.categoria,
+                        if (s.afinidade == MbAfinidadeReembolso.igual) 'mesmo valor',
+                      ].join(' · '),
+                      fontSize: 13,
+                      textColor: getColor(context, "textLight")),
+                ]),
               ),
-              TextFont(
-                  text: brl(s.gasto.valor),
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold),
+              TextFont(text: brl(s.gasto.valor), fontSize: 15, fontWeight: FontWeight.bold),
             ]),
           ),
         ),

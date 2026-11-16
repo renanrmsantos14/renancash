@@ -1,5 +1,7 @@
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart' show mbReconectarAviso;
-import 'package:budget/pages/homePage/homePageParaRevisar.dart' show ItemParaRevisar;
+import 'package:budget/pages/homePage/homePageConexaoCaida.dart'
+    show mbReconectarAviso;
+import 'package:budget/pages/homePage/homePageParaRevisar.dart'
+    show ItemParaRevisar;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
@@ -49,40 +51,40 @@ class _PendenciasPageState extends State<PendenciasPage> {
       color: e.bg,
       child: SafeArea(
         bottom: false,
-        child: ValueListenableBuilder<List<Map<String, dynamic>>>(
-          valueListenable: meuBancoAvisos,
-          builder: (context, avisos, _) => ValueListenableBuilder<List<MbItemRevisao>>(
-            valueListenable: meuBancoRevisar,
-            builder: (context, itens, _) {
-              final fila = _ordenar(itens);
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-                children: [
-                  Text('Pendências', style: EdTexto.h1(context)),
-                  const SizedBox(height: 16),
-                  for (final a in avisos) _FaixaDesconectado(aviso: a),
-                  if (fila.isEmpty && avisos.isEmpty)
-                    const _TudoEmDia()
-                  else if (fila.isEmpty)
-                    Text('Nada para revisar.',
-                        style: EdTexto.corpo(context).copyWith(color: e.mu))
-                  else ...[
-                    Row(children: [
-                      Expanded(
-                          child: Text('Para revisar', style: EdTexto.rotulo(context))),
-                      Text('1 de ${fila.length}', style: EdTexto.rotulo(context)),
-                    ]),
-                    const SizedBox(height: 10),
-                    _CartaoTriagem(
-                      key: ValueKey(fila.first.id),
-                      item: fila.first,
-                      aoPular: fila.length > 1 ? () => _pular(fila.first.id) : null,
-                    ),
-                  ],
+        child: ListenableBuilder(
+          listenable: Listenable.merge([meuBancoAvisos, meuBancoRevisar]),
+          builder: (context, _) {
+            final avisos = meuBancoAvisos.value;
+            final fila = _ordenar(meuBancoRevisar.value);
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+              children: [
+                Text('Pendências', style: EdTexto.h1(context)),
+                const SizedBox(height: 16),
+                for (final a in avisos) _FaixaDesconectado(aviso: a),
+                if (fila.isEmpty && avisos.isEmpty)
+                  const _TudoEmDia()
+                else if (fila.isEmpty)
+                  Text('Nada para revisar.',
+                      style: EdTexto.corpo(context).copyWith(color: e.mu))
+                else ...[
+                  Row(children: [
+                    Expanded(
+                        child: Text('Para revisar',
+                            style: EdTexto.rotulo(context))),
+                    Text('1 de ${fila.length}', style: EdTexto.rotulo(context)),
+                  ]),
+                  const SizedBox(height: 10),
+                  _CartaoTriagem(
+                    key: ValueKey(fila.first.id),
+                    item: fila.first,
+                    aoPular:
+                        fila.length > 1 ? () => _pular(fila.first.id) : null,
+                  ),
                 ],
-              );
-            },
-          ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -105,7 +107,8 @@ class _FaixaDesconectado extends StatelessWidget {
         Icon(Icons.link_off_rounded, size: 20, color: e.warntx),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('${aviso['banco'] ?? 'Banco'} desconectado',
                 style: EdTexto.corpo(context)
                     .copyWith(fontWeight: FontWeight.w600, color: e.warntx)),
@@ -136,8 +139,8 @@ class _TudoEmDia extends StatelessWidget {
         Icon(Icons.check_circle_outline_rounded, size: 36, color: e.mu),
         const SizedBox(height: 12),
         Text('Tudo em dia',
-            style: EdTexto.corpo(context)
-                .copyWith(fontSize: 18, fontWeight: FontWeight.w600, color: e.tx)),
+            style: EdTexto.corpo(context).copyWith(
+                fontSize: 18, fontWeight: FontWeight.w600, color: e.tx)),
         const SizedBox(height: 4),
         Text('Nada para revisar e nenhum banco desconectado.',
             textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
@@ -161,7 +164,8 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
     with SingleTickerProviderStateMixin {
   // Velocidade média do gesto que já conta como "pular", como no Sonner (px/ms).
   static const double _velocidadeMinima = 0.11;
-  late final AnimationController _dx = AnimationController.unbounded(vsync: this);
+  late final AnimationController _dx =
+      AnimationController.unbounded(vsync: this);
   int? _ponteiro;
   double _origem = 0;
   Duration _inicio = Duration.zero;

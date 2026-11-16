@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addBudgetPage.dart';
@@ -235,11 +236,10 @@ class _Restante extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final m = modelo;
-    final restante = limite - m.consumido;
+    final restante = limite - modelo.consumido;
     final estourou = restante < 0;
     // diasRestantes não conta hoje; no ritmo diário hoje entra (último dia = 1).
-    final dias = m.diasRestantes < 0 ? 0 : m.diasRestantes;
+    final dias = max(0, modelo.diasRestantes);
     final quando = dias == 0
         ? 'último dia'
         : dias == 1
@@ -258,12 +258,12 @@ class _Restante extends StatelessWidget {
             estilo: EdTexto.numeroGrande(context)
                 .copyWith(color: estourou ? e.warn : null)),
         const SizedBox(height: 14),
-        MedidorEditorial(fracao: m.consumido / limite, alerta: estourou),
+        MedidorEditorial(fracao: modelo.consumido / limite, alerta: estourou),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
-              child: Text('Gasto ${brl(m.consumido)} de ${brl(limite)}',
+              child: Text('Gasto ${brl(modelo.consumido)} de ${brl(limite)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: EdTexto.rotulo(context)),
@@ -279,7 +279,7 @@ class _Restante extends StatelessWidget {
                   .copyWith(fontWeight: FontWeight.w500)),
         ],
         const SizedBox(height: 4),
-        Text('Nas contas ${brl(m.disponivel)}',
+        Text('Nas contas ${brl(modelo.disponivel)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: EdTexto.rotulo(context)),
@@ -425,7 +425,7 @@ class _Grupo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final direita = acao != null && onAcao != null
+    final direita = acao != null
         ? GestureDetector(
             onTap: onAcao,
             behavior: HitTestBehavior.opaque,
