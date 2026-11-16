@@ -1,5 +1,5 @@
 import 'package:budget/widgets/editorial/layoutDesktop.dart'
-    show ehDesktop, inicioNovaAtiva, mbPaginaAtual, ObservadorPaginas;
+    show ehDesktop, mbPaginaAtual, ObservadorPaginas;
 import 'package:budget/widgets/editorial/versaoCanto.dart'
     show FaixaVersao, mbAlturaFaixaVersao;
 import 'dart:async';
@@ -23,7 +23,6 @@ import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
-import 'package:budget/pages/homePage/homePage.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/homePage/painelDesktop.dart' show PainelDesktop;
 import 'package:budget/pages/pendenciasPage.dart';
@@ -287,7 +286,6 @@ class PageNavigationFramework extends StatefulWidget {
 }
 
 //can also do GlobalKey<dynamic> for private state classes, but bad practice and no autocomplete
-GlobalKey<HomePageState> homePageStateKey = GlobalKey();
 GlobalKey<TransactionsListPageState> transactionsListPageStateKey = GlobalKey();
 GlobalKey<BudgetsListPageState> budgetsListPageStateKey = GlobalKey();
 GlobalKey<MoreActionsPageState> settingsPageStateKey = GlobalKey();
@@ -368,15 +366,11 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    // Pareado: Início nova (celular) ou painel (computador); não pareado: seções antigas
-    // (as duas novas só leem dados do Meu Banco).
-    ValueListenableBuilder<bool>(
-        valueListenable: meuBancoPareado,
-        builder: (context, _, __) => !inicioNovaAtiva()
-            ? HomePage(key: homePageStateKey)
-            : ehDesktop(context)
-                ? const PainelDesktop()
-                : const InicioEditorial()), // 0
+    // Início fixa: painel no computador, Início nova no celular.
+    Builder(
+        builder: (context) => ehDesktop(context)
+            ? const PainelDesktop()
+            : const InicioEditorial()), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
     Builder(
         builder: (context) => ehDesktop(context)

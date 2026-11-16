@@ -10,7 +10,6 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
-import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/widgets/periodCyclePicker.dart';
@@ -47,7 +46,6 @@ class HomePageNetWorth extends StatelessWidget {
                       child: TransactionsAmountBox(
                         onLongPress: () async {
                           await openNetWorthSettings(context);
-                          homePageStateKey.currentState?.refreshState();
                         },
                         label: "net-worth".tr(),
                         getTextColor: appStateSettings["netTotalsColorful"] !=

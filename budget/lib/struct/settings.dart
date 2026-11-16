@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/main.dart';
-import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -139,8 +138,6 @@ Future<bool> initializeSettings() async {
   Map<String, dynamic> defaultPreferences = await getDefaultPreferences();
 
   mbMigrarOrdemInicio(appStateSettings);
-  fixHomePageOrder(defaultPreferences, "homePageOrder");
-  fixHomePageOrder(defaultPreferences, "homePageOrderFullScreen");
 
   // save settings
   await sharedPreferences.setString(
@@ -202,7 +199,6 @@ Future<bool> updateSettings(
     for (int page in pagesNeedingRefresh) {
       print("Pages Rebuilt and Refreshed: " + pagesNeedingRefresh.toString());
       if (page == 0) {
-        homePageStateKey.currentState?.refreshState();
       } else if (page == 1) {
         transactionsListPageStateKey.currentState?.refreshState();
       } else if (page == 2) {

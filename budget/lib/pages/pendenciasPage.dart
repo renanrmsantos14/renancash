@@ -1,5 +1,3 @@
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart'
-    show mbReconectarAviso;
 import 'package:budget/pages/homePage/homePageParaRevisar.dart'
     show ItemParaRevisar;
 import 'package:budget/struct/editorial.dart';
@@ -8,6 +6,22 @@ import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
+import 'package:budget/struct/mbSync/pluggy.dart' show mbAbrirConnect;
+import 'package:url_launcher/url_launcher.dart';
+
+/// Reconectar: abre o Pluggy Connect do item ou, sem item, o link de reconexão (só https).
+Future<void> mbReconectarAviso(
+    BuildContext context, Map<String, dynamic> aviso) async {
+  final itemId = aviso['item_id'];
+  if (itemId is String && itemId.isNotEmpty) {
+    await mbAbrirConnect(context, itemId: itemId);
+    return;
+  }
+  final url = Uri.tryParse('${aviso['reconnect_url'] ?? ''}');
+  if (url != null && url.scheme == 'https') {
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+}
 
 /// Aba Pendências: bancos desconectados numa faixa fixa e a fila Para revisar um item por vez.
 /// "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da fila só nesta sessão.

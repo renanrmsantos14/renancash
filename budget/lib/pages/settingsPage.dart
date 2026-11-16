@@ -8,8 +8,6 @@ import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
 import 'package:budget/pages/creditDebtTransactionsPage.dart';
-import 'package:budget/pages/editHomePage.dart';
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/objectivesListPage.dart';
@@ -448,16 +446,6 @@ class SettingsPageContent extends StatelessWidget {
         // EnterName(),
         SettingsHeader(title: "preferences".tr()),
 
-        // Celular pareado: a Início é fixa (sem editor de seções).
-        if (!inicioNovaAtiva())
-        SettingsContainerOpenPage(
-          openPage: EditHomePage(),
-          title: "edit-home-page".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.home_outlined
-              : Icons.home_rounded,
-        ),
-
         notificationsGlobalEnabled && getIsFullScreen(context) == false
             ? SettingsContainerOpenPage(
                 openPage: NotificationsPage(),
@@ -632,7 +620,6 @@ class WidgetSettings extends StatelessWidget {
           onTap: () async {
             await openNetWorthSettings(context);
             // We need to resfresh the widget rendering since it exists on the homepage!
-            homePageStateKey.currentState?.refreshState();
           },
           icon: appStateSettings["outlinedIcons"]
               ? Icons.area_chart_outlined

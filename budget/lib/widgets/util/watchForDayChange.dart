@@ -27,7 +27,6 @@ class _WatchForDayChangeState extends State<WatchForDayChange> {
           _currentDate = DateTime.now();
         });
         appStateKey.currentState?.refreshAppState();
-        homePageStateKey.currentState?.refreshState();
         transactionsListPageStateKey.currentState?.refreshState();
         budgetsListPageStateKey.currentState?.refreshState();
         settingsPageStateKey.currentState?.refreshState();

@@ -2,7 +2,12 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addCategoryPage.dart';
-import 'package:budget/pages/editHomePage.dart';
+import 'package:budget/pages/addTransactionPage.dart' show HorizontalBreakAbove;
+import 'package:budget/pages/homePage/homePageNetWorth.dart' show WalletPickerPeriodCycle;
+import 'package:budget/widgets/framework/popupFramework.dart';
+import 'package:budget/widgets/listItem.dart';
+import 'package:budget/widgets/openBottomSheet.dart';
+import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
@@ -36,7 +41,6 @@ class _HomePagePieChartState extends State<HomePagePieChart>
     with SingleTickerProviderStateMixin {
   void openPieChartSettings() async {
     await openPieChartHomePageBottomSheetSettings(context);
-    homePageStateKey.currentState?.refreshState();
     // No celular pareado a pizza fica em Orçamentos (a Início antiga não está montada).
     budgetsListPageStateKey.currentState?.refreshState();
   }
@@ -239,7 +243,6 @@ class _PieChartHomeAndCategorySummaryState
 
   void openPieChartSettings() async {
     await openPieChartHomePageBottomSheetSettings(context);
-    homePageStateKey.currentState?.refreshState();
     // No celular pareado a pizza fica em Orçamentos (a Início antiga não está montada).
     budgetsListPageStateKey.currentState?.refreshState();
   }
@@ -604,6 +607,165 @@ class TopCategoriesSpentLegend extends StatelessWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+// Ajustes da pizza (vieram do Editar Início, removido): carteiras, período e só receitas/gastos.
+Future openPieChartHomePageBottomSheetSettings(BuildContext context) async {
+  await openBottomSheet(
+    context,
+    PopupFramework(
+      title: "pie-chart".tr(),
+      subtitle: "applies-to-homepage".tr(),
+      child: Column(
+        children: [
+          WalletPickerPeriodCycle(
+            allWalletsSettingKey: "pieChartAllWallets",
+            cycleSettingsExtension: "PieChart",
+            homePageWidgetDisplay: HomePageWidgetDisplay.PieChart,
+          ),
+          HorizontalBreakAbove(
+            padding: EdgeInsetsDirectional.symmetric(vertical: 15),
+            child: IncomeAndExpenseOnlyPicker(
+              initialValue:
+                  appStateSettings["pieChartIncomeAndExpenseOnly"] == true,
+              onChanged: (value) {
+                updateSettings("pieChartIncomeAndExpenseOnly", value,
+                    updateGlobalState: false);
+              },
+            ),
+          ),
+          SizedBox(height: 10),
+        ],
+      ),
+      // Column(
+      //   children: [
+      //     RadioItems(
+      //       items: <String>[
+      //         "outgoing",
+      //         "incoming",
+      //       ],
+      //       displayFilter: (type) {
+      //         return type.toString().tr();
+      //       },
+      //       initial: appStateSettings["pieChartTotal"],
+      //       onChanged: (type) async {
+      //         updateSettings("pieChartTotal", type, updateGlobalState: false);
+      //         popRoute(context, );
+      //       },
+      //     ),
+      //     Padding(
+      //       padding: const EdgeInsetsDirectional.only(top: 5),
+      //       child: HorizontalBreakAbove(
+      //         enabled: true,
+      //         child: PeriodCyclePicker(
+      //           cycleSettingsExtension: "PieChart",
+      //         ),
+      //       ),
+      //     ),
+      //   ],
+      // ),
+    ),
+  );
+}
+
+
+class IncomeAndExpenseOnlyPicker extends StatefulWidget {
+  const IncomeAndExpenseOnlyPicker(
+      {required this.initialValue, required this.onChanged, super.key});
+  final bool initialValue;
+  final Function(bool) onChanged;
+  @override
+  State<IncomeAndExpenseOnlyPicker> createState() =>
+      _IncomeAndExpenseOnlyPickerState();
+}
+
+class _IncomeAndExpenseOnlyPickerState
+    extends State<IncomeAndExpenseOnlyPicker> {
+  late bool pieChartIncomeAndExpenseOnly = widget.initialValue;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedOpacity(
+                duration: Duration(milliseconds: 500),
+                opacity: pieChartIncomeAndExpenseOnly ? 1 : 0.5,
+                child: OutlinedButtonStacked(
+                  filled: pieChartIncomeAndExpenseOnly,
+                  alignStart: true,
+                  alignBeside: true,
+                  afterWidget: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListItem(
+                        "only-expense-income-description-1".tr(),
+                      ),
+                      ListItem(
+                        "only-expense-income-description-2".tr(),
+                      ),
+                    ],
+                  ),
+                  text: "only-expense-income".tr(),
+                  padding: EdgeInsetsDirectional.only(
+                      start: 20, end: 15, top: 15, bottom: 15),
+                  iconData: null,
+                  onTap: () {
+                    widget.onChanged(!pieChartIncomeAndExpenseOnly);
+                    setState(() {
+                      pieChartIncomeAndExpenseOnly =
+                          !pieChartIncomeAndExpenseOnly;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: AnimatedOpacity(
+                duration: Duration(milliseconds: 500),
+                opacity: !pieChartIncomeAndExpenseOnly ? 1 : 0.5,
+                child: OutlinedButtonStacked(
+                  filled: !pieChartIncomeAndExpenseOnly,
+                  alignStart: true,
+                  alignBeside: true,
+                  afterWidget: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListItem(
+                        "all-outgoing-incoming-description-1".tr(),
+                      ),
+                      ListItem(
+                        "all-outgoing-incoming-description-2".tr(),
+                      ),
+                    ],
+                  ),
+                  text: "all-outgoing-incoming".tr(),
+                  padding: EdgeInsetsDirectional.only(
+                      start: 20, end: 15, top: 15, bottom: 15),
+                  iconData: null,
+                  onTap: () {
+                    widget.onChanged(!pieChartIncomeAndExpenseOnly);
+                    setState(() {
+                      pieChartIncomeAndExpenseOnly =
+                          !pieChartIncomeAndExpenseOnly;
+                    });
+                  },
+                ),
+              ),
+            )
+          ],
+        )
       ],
     );
   }

@@ -4,7 +4,6 @@ import 'package:budget/pages/activityPage.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/editCategoriesPage.dart';
-import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
@@ -2282,9 +2281,6 @@ Map<String, List<MajorChanges>> getMajorChanges() {
           "major-change-4-1".tr(),
           "major-change-4-2".tr(),
         ],
-        onTap: (context) {
-          pushRoute(context, EditHomePage());
-        },
       ),
       MajorChanges(
         "major-change-5".tr(),
@@ -2337,9 +2333,6 @@ Map<String, List<MajorChanges>> getMajorChanges() {
         info: [
           "major-change-10-1".tr(),
         ],
-        onTap: (context) {
-          pushRoute(context, EditHomePage());
-        },
       ),
     ],
     "< 4.6.6": [
@@ -2364,9 +2357,6 @@ Map<String, List<MajorChanges>> getMajorChanges() {
         info: [
           "major-change-12-1".tr(),
         ],
-        onTap: (context) {
-          pushRoute(context, EditHomePage());
-        },
       ),
       MajorChanges(
         "major-change-6".tr(),

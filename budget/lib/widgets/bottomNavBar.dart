@@ -2,8 +2,6 @@ import 'dart:math';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/editBudgetPage.dart';
-import 'package:budget/pages/editHomePage.dart';
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
@@ -87,8 +85,6 @@ class BottomNavBarState extends State<BottomNavBar> {
 
     if (navigationStackedIndex == widget.currentNavigationStackedIndex &&
         allowReApply == false) {
-      if (navigationStackedIndex == 0)
-        homePageStateKey.currentState?.scrollToTop();
       if (navigationStackedIndex == 1)
         transactionsListPageStateKey.currentState?.scrollToTop();
       if (navigationStackedIndex == 2)
@@ -454,10 +450,6 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
         NavBarShortcutSelection(
           shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "home",
-          // Celular: a Início é fixa (sem editor de seções).
-          onSettings: !inicioNovaAtiva()
-              ? () => pushRoute(context, EditHomePage())
-              : null,
         ),
         NavBarShortcutSelection(
           shortcutAppSettingKey: shortcutAppSettingKey,

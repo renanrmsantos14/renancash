@@ -12,7 +12,7 @@ description: "Verifica o tema Editorial (modos claro/escuro e 4 acentos), a tela
 - No Git Bash, `--base-href /app/` vira caminho do Windows: use `MSYS_NO_PATHCONV=1 flutter build web --base-href /app/`.
 
 ## Roteiro
-1. `flutter test test/temas_test.dart test/temas_app_test.dart test/aparencia_page_test.dart test/editorial_test.dart test/desktop_test.dart test/mb_inicio_test.dart test/versao_test.dart test/pendencias_test.dart test/analise_orcamentos_test.dart` → todos passam (temas_test cobre contraste ≥ 4,5:1 de cada modo × acento).
+1. `flutter test test/temas_test.dart test/temas_app_test.dart test/aparencia_page_test.dart test/editorial_test.dart test/desktop_test.dart test/mb_inicio_test.dart test/versao_test.dart test/pendencias_test.dart` → todos passam (temas_test cobre contraste ≥ 4,5:1 de cada modo × acento).
 2. `flutter analyze` → 0 erros (o restante é aviso herdado do Cashew).
 3. `flutter build web --base-href /app/` → "Built build/web".
 4. `rg -c "gstatic|firebase" build/web/index.html` → 0 ocorrências (sem Firebase em tempo de execução).
@@ -33,9 +33,9 @@ description: "Verifica o tema Editorial (modos claro/escuro e 4 acentos), a tela
 - Tema antigo salvo (um dos 18 removidos, ex.: `nord`) cai em Sistema sem crash; acento inválido cai em Verde.
 - Peso 600 da Geist/GeistMono precisa de arquivo próprio no pubspec (sem `style: italic` perdido); sem ele o texto sai em 500.
 - Aba Pendências (só no modo Meu Banco, índice 18; barra pareada: Início · Transações · Pendências · Orçamentos · Mais; a Início nova só aparece no celular pareado, rótulo só na aba ativa): selo = itens Para revisar + bancos desconectados e some em zero; um item por vez; "Pular" e deslizar à esquerda (distância > 30% ou velocidade > 0,11 px/ms) mandam o item para o fim da fila só na sessão; item único não tem Pular; segundo dedo durante o arraste é ignorado; sem nada mostra "Tudo em dia". `test/mb_revisao_test.dart` precisa do `sqlite3.dll` no Windows (sem ele, os testes Drift falham por ambiente).
-- Análise em Orçamentos (`analiseOrcamentos.dart`): só pareado (`inicioNovaAtiva()`, a mesma regra que escolhe a Início; no computador com largura máxima de 760 px), só na aba (a página empilhada pelo Mais mostra só a lista); patrimônio, linha, pizza e mapa de calor reaproveitam os widgets da Início antiga e ignoram as opções do "Editar Início" (layout fixo). Sem banco local não renderizam em teste: conferir no celular pareado.
+- Análise em Orçamentos (`analiseOrcamentos.dart`): sempre (no computador com largura máxima de 760 px), só na aba (a página empilhada pelo Mais mostra só a lista); patrimônio, linha, pizza e mapa de calor reaproveitam os widgets da Início antiga e ignoram as opções do "Editar Início" (layout fixo). Sem banco local não renderizam em teste: conferir no celular pareado.
 - Computador pareado: Início = PainelDesktop (cartão do celular + barras de gasto por dia; colunas Metas e empréstimos | Contas | Últimas). A coluna de metas some sem metas/empréstimos; a de contas, sem contas. Lateral e Ctrl K mostram Pendências (com bolinha) só no modo pareado e reagem ao parear/desparear. Print: `desktop_{claro,escuro}.png`.
-- Início vazia e carregando; app não pareado mantém o fluxo original do RenanCash; página empilhada no desktop mantém a versão visível.
+- Início vazia e carregando; app não pareado vê a Início nova com "Conectar banco" (a Início antiga, as seções e o Editar Início foram removidos); página empilhada no desktop mantém a versão visível.
 
 ## Evidência obrigatória
 - Tail dos testes e do build web; prints em `.verificacao/<data>-<branch>/`.

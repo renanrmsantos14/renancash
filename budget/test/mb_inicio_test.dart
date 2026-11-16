@@ -1,6 +1,7 @@
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
 import 'package:budget/struct/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -149,7 +150,17 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('sem banco conectado: convite para conectar em vez da Início vazia', (t) async {
+    await abrir(t, montarModeloInicio(
+        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora));
+    expect(find.text('Conectar banco'), findsOneWidget);
+    expect(find.textContaining('Ainda sem dados'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('sem dados mostra estado vazio em vez de R\$ 0,00', (t) async {
+    meuBancoPareado.value = true;
+    addTearDown(() => meuBancoPareado.value = false);
     await abrir(t, montarModeloInicio(
         ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora));
     expect(find.text('Ainda sem dados. Puxe a tela para atualizar.'), findsOneWidget);

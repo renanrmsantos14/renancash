@@ -25,7 +25,6 @@ import 'package:budget/widgets/editRowEntry.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/iconButtonScaled.dart';
 import 'package:budget/widgets/incomeExpenseTabSelector.dart';
-import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openContainerNavigation.dart';
@@ -201,7 +200,6 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
     setState(() {
       selectedDateTimeRange = null;
     });
-    homePageStateKey.currentState?.refreshState();
   }
 
   void selectAllSpendingFilters() async {
@@ -227,7 +225,6 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
         setState(() {});
       });
       setState(() {});
-      homePageStateKey.currentState?.refreshState();
     }
   }
 
