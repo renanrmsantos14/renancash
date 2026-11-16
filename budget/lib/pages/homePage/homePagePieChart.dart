@@ -37,6 +37,8 @@ class _HomePagePieChartState extends State<HomePagePieChart>
   void openPieChartSettings() async {
     await openPieChartHomePageBottomSheetSettings(context);
     homePageStateKey.currentState?.refreshState();
+    // No celular pareado a pizza fica em Orçamentos (a Início antiga não está montada).
+    budgetsListPageStateKey.currentState?.refreshState();
   }
 
   @override
@@ -238,6 +240,8 @@ class _PieChartHomeAndCategorySummaryState
   void openPieChartSettings() async {
     await openPieChartHomePageBottomSheetSettings(context);
     homePageStateKey.currentState?.refreshState();
+    // No celular pareado a pizza fica em Orçamentos (a Início antiga não está montada).
+    budgetsListPageStateKey.currentState?.refreshState();
   }
 
   void toggleAllSubcategories() {
