@@ -10,6 +10,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
@@ -106,6 +107,23 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
       _procurandoAtualizacao = false;
       _msgAtualizacao = msg.isEmpty ? null : msg;
     });
+  }
+
+  // Ação destrutiva: só desconecta depois de confirmar.
+  Future<void> _desconectar() async {
+    final confirmou = await openPopup<bool>(
+      context,
+      title: "Desconectar este aparelho?",
+      description:
+          "O token e o ponto de sincronização saem deste aparelho. As transações já importadas continuam no app.",
+      onSubmitLabel: "Desconectar",
+      onCancelLabel: "Cancelar",
+      onSubmit: () => popRoute(context, true),
+      onCancel: () => popRoute(context, false),
+    );
+    if (confirmou != true) return;
+    await meuBancoDesconectar();
+    await _carregar();
   }
 
   Widget _secao(String titulo, List<Widget> filhos) => Padding(
@@ -276,10 +294,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   style: TextButton.styleFrom(foregroundColor: e.warntx),
-                  onPressed: () async {
-                    await meuBancoDesconectar();
-                    await _carregar();
-                  },
+                  onPressed: _desconectar,
                   child: const Text("Desconectar este aparelho"),
                 ),
               ),
