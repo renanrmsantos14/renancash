@@ -26,6 +26,7 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
 import 'package:flutter/material.dart';
+import 'package:budget/struct/pendenciasVencidas.dart' show mbVigiarVencidas;
 import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
 
@@ -55,14 +56,24 @@ class _InicioEditorialState extends State<InicioEditorial> {
       meuBancoVerificarPareado();
       mbAtualizarRevisar(); // preenche os empréstimos em aberto
       meuBancoUltimaSync.addListener(_recarga.pedir);
+      mbAjustesMudaram.addListener(_aoMudarAjustes);
+      if (AjustesInicio.vencidas) mbVigiarVencidas();
       // O 1º evento do stream já faz a carga inicial (sem corrida com uma gravação entre duas leituras).
       _assinatura = mbMudouUltimas().listen((_) => _recarga.pedir());
     }
   }
 
+  // Configurações › Início: redesenha (ritmo, saldo, metas) e recarrega (poupanças juntas ou não).
+  void _aoMudarAjustes() {
+    if (!mounted) return;
+    setState(() {});
+    _recarga.pedir();
+  }
+
   @override
   void dispose() {
     meuBancoUltimaSync.removeListener(_recarga.pedir);
+    mbAjustesMudaram.removeListener(_aoMudarAjustes);
     _assinatura?.cancel();
     _recarga.fechar();
     super.dispose();

@@ -11,7 +11,11 @@ class AnaliseOrcamentos extends StatelessWidget {
   const AnaliseOrcamentos({super.key});
 
   @override
-  Widget build(BuildContext context) => Align(
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+      valueListenable: mbAjustesMudaram,
+      builder: (context, _, __) => _secao(context));
+
+  Widget _secao(BuildContext context) => Align(
       alignment: AlignmentDirectional.topStart,
       child: ConstrainedBox(
           // Computador: os gráficos foram feitos para a largura do celular.
@@ -24,7 +28,8 @@ class AnaliseOrcamentos extends StatelessWidget {
                 child: Text('Análise', style: EdTexto.h2(context)),
               ),
               // Configurações › Análise: cada gráfico pode ser desligado.
-              if (AjustesInicio.grafico('patrimonio')) const HomePagePatrimonio(),
+              if (AjustesInicio.grafico('patrimonio'))
+                const HomePagePatrimonio(),
               // 1 = tudo, 2 = só gastos, 3 = só receitas.
               if (AjustesInicio.grafico('linha'))
                 HomePageLineGraph(

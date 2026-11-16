@@ -3,6 +3,7 @@ import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/struct/ajustesInicio.dart' show mbAjustesMudaram;
 import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,17 +155,19 @@ void main() {
 
     testWidgets('selo desligado: sem bolinha mesmo com pendências', (t) async {
       await _abrir(t, itens: [_pix('a', 'X')]);
-      appStateSettings['pendenciasSelo'] = false;
       await t.pumpWidget(MaterialApp(
           theme: temaEditorial(Brightness.light),
           home: const Scaffold(
               body: Center(child: SeloPendencias(child: Icon(Icons.inbox))))));
+      expect(find.text('1'), findsOneWidget);
+      // Mudou nas configurações: o selo some sem reabrir a tela.
+      appStateSettings['pendenciasSelo'] = false;
+      mbAjustesMudaram.value++;
+      await t.pump();
       expect(find.text('1'), findsNothing);
       appStateSettings['pendenciasSelo'] = true;
-      await t.pumpWidget(MaterialApp(
-          theme: temaEditorial(Brightness.light),
-          home: const Scaffold(
-              body: Center(child: SeloPendencias(child: Icon(Icons.inbox))))));
+      mbAjustesMudaram.value++;
+      await t.pump();
       expect(find.text('1'), findsOneWidget);
     });
   });

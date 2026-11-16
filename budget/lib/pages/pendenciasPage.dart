@@ -33,7 +33,7 @@ Future<void> mbReconectarAviso(
 }
 
 /// Item da fila: Para revisar ou conta vencida (Configurações › Pendências).
-typedef _Pendencia = ({String id, String rotulo, Widget conteudo});
+typedef _Pendencia = ({String id, String rotulo, Widget Function() conteudo});
 
 /// Aba Pendências: bancos desconectados numa faixa fixa e a fila (Para revisar e, se ligado, contas
 /// vencidas) um item por vez. "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da
@@ -61,14 +61,20 @@ class _PendenciasPageState extends State<PendenciasPage> {
 
   List<_Pendencia> _itens() => [
         for (final i in meuBancoRevisar.value)
-          (id: i.id, rotulo: 'Para revisar', conteudo: ItemParaRevisar(item: i)),
+          (
+            id: i.id,
+            rotulo: 'Para revisar',
+            conteudo: () => ItemParaRevisar(item: i)
+          ),
         if (AjustesInicio.vencidas)
+          // Só contas a pagar: receitas pendentes não são "conta vencida".
           for (final t in meuBancoVencidas.value)
-            (
-              id: 'venc:${t.transactionPk}',
-              rotulo: 'Conta vencida',
-              conteudo: _ItemVencido(transacao: t)
-            ),
+            if (!t.income)
+              (
+                id: 'venc:${t.transactionPk}',
+                rotulo: 'Conta vencida',
+                conteudo: () => _ItemVencido(transacao: t)
+              ),
       ];
 
   /// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
@@ -94,8 +100,12 @@ class _PendenciasPageState extends State<PendenciasPage> {
       child: SafeArea(
         bottom: false,
         child: ListenableBuilder(
-          listenable: Listenable.merge(
-              [meuBancoAvisos, meuBancoRevisar, meuBancoVencidas]),
+          listenable: Listenable.merge([
+            meuBancoAvisos,
+            meuBancoRevisar,
+            meuBancoVencidas,
+            mbAjustesMudaram
+          ]),
           builder: (context, _) {
             final avisos =
                 AjustesInicio.bancos ? meuBancoAvisos.value : const [];
@@ -121,7 +131,7 @@ class _PendenciasPageState extends State<PendenciasPage> {
                   const SizedBox(height: 10),
                   _CartaoTriagem(
                     key: ValueKey(fila.first.id),
-                    conteudo: fila.first.conteudo,
+                    conteudo: fila.first.conteudo(),
                     aoPular:
                         fila.length > 1 ? () => _pular(fila.first.id) : null,
                   ),
@@ -143,7 +153,9 @@ class _ItemVencido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = transacao;
-    final dias = DateTime.now().difference(t.dateCreated).inDays;
+    final dias = DateUtils.dateOnly(DateTime.now())
+        .difference(DateUtils.dateOnly(t.dateCreated))
+        .inDays;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(t.name.trim().isEmpty ? 'Conta a pagar' : t.name,
           style: EdTexto.corpo(context).copyWith(
@@ -157,8 +169,7 @@ class _ItemVencido extends StatelessWidget {
       const SizedBox(height: 14),
       Wrap(spacing: 8, runSpacing: 8, children: [
         BotaoEscolha(
-            rotulo: 'Marcar como paga',
-            onTap: () => openPayPopup(context, t)),
+            rotulo: 'Marcar como paga', onTap: () => openPayPopup(context, t)),
         BotaoEscolha(
             rotulo: 'Abrir',
             onTap: () => pushRoute(

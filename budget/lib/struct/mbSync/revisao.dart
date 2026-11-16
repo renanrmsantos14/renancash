@@ -191,7 +191,9 @@ final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const [
 int mbTotalPendencias() =>
     meuBancoRevisar.value.length +
     (AjustesInicio.bancos ? meuBancoAvisos.value.length : 0) +
-    (AjustesInicio.vencidas ? meuBancoVencidas.value.length : 0);
+    (AjustesInicio.vencidas
+        ? meuBancoVencidas.value.where((t) => !t.income).length
+        : 0);
 
 Future<void> mbAtualizarRevisar() async {
   try {

@@ -2,7 +2,8 @@ import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/pendenciasVencidas.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
-import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar, mbTotalPendencias;
+import 'package:budget/struct/mbSync/revisao.dart'
+    show meuBancoRevisar, mbTotalPendencias;
 import 'package:flutter/material.dart';
 
 /// Ícone com a bolinha do total de pendências (`mbTotalPendencias`).
@@ -13,14 +14,16 @@ class SeloPendencias extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!AjustesInicio.selo) return child;
     final e = cores(context);
-    if (AjustesInicio.vencidas) mbVigiarVencidas();
     return ListenableBuilder(
-      listenable:
-          Listenable.merge([meuBancoRevisar, meuBancoAvisos, meuBancoVencidas]),
+      listenable: Listenable.merge([
+        meuBancoRevisar,
+        meuBancoAvisos,
+        meuBancoVencidas,
+        mbAjustesMudaram
+      ]),
       builder: (context, _) {
-        final total = mbTotalPendencias();
+        final total = AjustesInicio.selo ? mbTotalPendencias() : 0;
         return Stack(clipBehavior: Clip.none, children: [
           child,
           if (total > 0)

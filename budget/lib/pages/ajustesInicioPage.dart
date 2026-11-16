@@ -3,7 +3,6 @@ import 'package:budget/pages/homePage/homePageHeatmap.dart'
 import 'package:budget/pages/homePage/homePagePieChart.dart'
     show openPieChartHomePageBottomSheetSettings;
 import 'package:budget/struct/ajustesInicio.dart';
-import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/settingsContainers.dart';
@@ -34,7 +33,7 @@ List<Widget> ajustesInicioEntradas() => const [
     ];
 
 Future<void> _gravar(String chave, Object valor) =>
-    updateSettings(chave, valor, updateGlobalState: true);
+    mbGravarAjuste(chave, valor);
 
 Widget _chave(String chave, bool atual,
         {required String titulo, String? descricao}) =>
@@ -63,7 +62,8 @@ class AjustesInicioPage extends StatelessWidget {
           const SettingsHeader(title: 'Metas e contas'),
           SettingsContainerDropdown(
             title: 'Linhas de metas e de empréstimos',
-            description: 'Quantas aparecem em cada grupo; o resto fica em "Ver todas"',
+            description:
+                'Quantas aparecem em cada grupo; o resto fica em "Ver todas"',
             initial: '${AjustesInicio.linhasMetas}',
             items: const ['1', '2', '3', '4'],
             onChanged: (v) => _gravar('inicioLinhasMetas', int.parse(v)),
@@ -89,7 +89,8 @@ class AjustesPendenciasPage extends StatelessWidget {
               descricao: 'Faixa com "Reconectar" no topo da aba'),
           _chave('pendenciasVencidas', AjustesInicio.vencidas,
               titulo: 'Contas a pagar vencidas',
-              descricao: 'Entram na fila com "Marcar como paga", depois de Para revisar'),
+              descricao:
+                  'Entram na fila com "Marcar como paga", depois de Para revisar'),
           const SettingsHeader(title: 'Comportamento'),
           _chave('pendenciasSelo', AjustesInicio.selo,
               titulo: 'Mostrar o contador',
