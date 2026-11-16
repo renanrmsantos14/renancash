@@ -16,7 +16,7 @@ class AnaliseOrcamentos extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
         valueListenable: meuBancoPareado,
         builder: (context, _, __) {
-          if (!inicioNovaAtiva(context)) return const SizedBox.shrink();
+          if (!inicioNovaAtiva()) return const SizedBox.shrink();
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

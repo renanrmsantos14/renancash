@@ -81,44 +81,6 @@ class _InicioEditorialState extends State<InicioEditorial> {
         .then((msg) => openSnackbar(SnackbarMessage(title: msg))));
   }
 
-  // O Geral pode ainda não existir (aparelho não pareado e sem sync): aí não abre nada.
-  Future<void> _abrirOrcamento({required bool editar}) async {
-    final Budget geral;
-    try {
-      geral = await database.getBudgetInstance(mbOrcamentoGeralPk);
-    } catch (_) {
-      return;
-    }
-    if (!mounted) return;
-    pushRoute(
-        context,
-        editar
-            ? AddBudgetPage(
-                budget: geral,
-                routesToPopAfterDelete: RoutesToPopAfterDelete.None)
-            : BudgetPage(budgetPk: geral.budgetPk));
-  }
-
-  /// Abre as transações das carteiras com o nome do banco ou das contas da linha.
-  /// Sem carteira correspondente, cai no Meu Banco.
-  Future<void> _abrirConta(ContaInicio c) async {
-    final nomes = {c.nome, ...c.contas.split('|')}
-        .map((n) => n.trim().toLowerCase())
-        .where((n) => n.isNotEmpty)
-        .toSet();
-    final pks = [
-      for (final w in await database.select(database.wallets).get())
-        if (nomes.contains(w.name.trim().toLowerCase())) w.walletPk
-    ];
-    if (!mounted) return;
-    pushRoute(
-        context,
-        pks.isEmpty
-            ? const MeuBancoPage()
-            : TransactionsSearchPage(
-                initialFilters: SearchFilters(walletPks: pks)));
-  }
-
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
@@ -142,20 +104,20 @@ class _InicioEditorialState extends State<InicioEditorial> {
             Text('Ainda sem dados. Puxe a tela para atualizar.',
                 style: EdTexto.corpo(context).copyWith(color: e.mu))
           else
-            _CartaoSaldo(
+            CartaoSaldoCiclo(
               modelo: m,
-              onTap: _real ? () => _abrirOrcamento(editar: false) : null,
+              onTap: _real ? () => mbAbrirOrcamentoCiclo(context, editar: false) : null,
               onDefinirLimite:
-                  _real ? () => _abrirOrcamento(editar: true) : null,
+                  _real ? () => mbAbrirOrcamentoCiclo(context, editar: true) : null,
             ),
-          if (_real) const _MetasEmprestimos(),
+          if (_real) const MetasEmprestimosInicio(),
           if (m.contas.isNotEmpty)
-            _Contas(
+            ContasInicio(
                 modelo: m,
                 onGerenciar: _real
                     ? () => pushRoute(context, const MeuBancoPage())
                     : null,
-                onAbrirConta: _real ? _abrirConta : null),
+                onAbrirConta: _real ? (c) => mbAbrirConta(context, c) : null),
         ],
       );
       corpo = _real ? RefreshIndicator(onRefresh: _puxar, child: lista) : lista;
@@ -188,6 +150,45 @@ class _InicioEditorialState extends State<InicioEditorial> {
   }
 }
 
+// O Geral pode ainda não existir (aparelho não pareado e sem sync): aí não abre nada.
+Future<void> mbAbrirOrcamentoCiclo(BuildContext context,
+  {required bool editar}) async {
+  final Budget geral;
+  try {
+    geral = await database.getBudgetInstance(mbOrcamentoGeralPk);
+  } catch (_) {
+    return;
+  }
+  if (!context.mounted) return;
+  pushRoute(
+      context,
+      editar
+          ? AddBudgetPage(
+              budget: geral,
+              routesToPopAfterDelete: RoutesToPopAfterDelete.None)
+          : BudgetPage(budgetPk: geral.budgetPk));
+}
+
+/// Abre as transações das carteiras com o nome do banco ou das contas da linha.
+/// Sem carteira correspondente, cai no Meu Banco.
+Future<void> mbAbrirConta(BuildContext context, ContaInicio c) async {
+  final nomes = {c.nome, ...c.contas.split('|')}
+      .map((n) => n.trim().toLowerCase())
+      .where((n) => n.isNotEmpty)
+      .toSet();
+  final pks = [
+    for (final w in await database.select(database.wallets).get())
+      if (nomes.contains(w.name.trim().toLowerCase())) w.walletPk
+  ];
+  if (!context.mounted) return;
+  pushRoute(
+      context,
+      pks.isEmpty
+          ? const MeuBancoPage()
+          : TransactionsSearchPage(
+              initialFilters: SearchFilters(walletPks: pks)));
+}
+
 class _Topo extends StatelessWidget {
   const _Topo({required this.modelo});
   final ModeloInicio modelo;
@@ -205,21 +206,41 @@ class _Topo extends StatelessWidget {
 
 /// Cartão escuro de saldo: o único bloco pesado da tela.
 /// Com limite: quanto resta do ciclo. Sem limite: o saldo das contas.
-class _CartaoSaldo extends StatelessWidget {
-  const _CartaoSaldo(
-      {required this.modelo, this.onTap, this.onDefinirLimite});
+class CartaoSaldoCiclo extends StatelessWidget {
+  const CartaoSaldoCiclo(
+      {super.key,
+      required this.modelo,
+      this.onTap,
+      this.onDefinirLimite,
+      this.lateral});
   final ModeloInicio modelo;
   final VoidCallback? onTap, onDefinirLimite;
+
+  /// Computador: conteúdo à direita do saldo, separado por uma linha vertical.
+  final Widget? lateral;
 
   @override
   Widget build(BuildContext context) {
     final limite = modelo.limite;
-    final cartao = CartaoEscuro(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-      child: limite != null && limite > 0
-          ? _Restante(modelo: modelo, limite: limite)
-          : _SemLimite(modelo: modelo, onDefinirLimite: onDefinirLimite),
-    );
+    final saldo = limite != null && limite > 0
+        ? _Restante(modelo: modelo, limite: limite)
+        : _SemLimite(modelo: modelo, onDefinirLimite: onDefinirLimite);
+    final cartao = lateral == null
+        ? CartaoEscuro(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16), child: saldo)
+        : CartaoEscuro(
+            padding: const EdgeInsets.all(28),
+            child: IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(child: saldo),
+                Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 32),
+                    color: cores(context).line),
+                Expanded(child: lateral!),
+              ]),
+            ),
+          );
     if (onTap == null) return cartao;
     return Semantics(
         button: true,
@@ -332,14 +353,14 @@ class _SemLimite extends StatelessWidget {
 
 /// Metas (não arquivadas) e empréstimos ao pai em aberto, em grupos de até 2 linhas.
 /// Com um grupo só, ele dá o título do bloco e o subtítulo some. Sem nada, o bloco some.
-class _MetasEmprestimos extends StatefulWidget {
-  const _MetasEmprestimos();
+class MetasEmprestimosInicio extends StatefulWidget {
+  const MetasEmprestimosInicio({super.key});
 
   @override
-  State<_MetasEmprestimos> createState() => _MetasEmprestimosState();
+  State<MetasEmprestimosInicio> createState() => _MetasEmprestimosInicioState();
 }
 
-class _MetasEmprestimosState extends State<_MetasEmprestimos> {
+class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
   // Criado uma vez: recriar no build reassinaria a consulta a cada recarga da Início.
   late final Stream<List<Objective>> _metas = database.watchAllObjectives(
       objectiveType: ObjectiveType.goal, hideArchived: true);
@@ -546,8 +567,9 @@ class _Secao extends StatelessWidget {
 }
 
 /// Contas por banco, com saldo. Tocar abre as transações daquela conta.
-class _Contas extends StatelessWidget {
-  const _Contas({required this.modelo, this.onGerenciar, this.onAbrirConta});
+class ContasInicio extends StatelessWidget {
+  const ContasInicio(
+      {super.key, required this.modelo, this.onGerenciar, this.onAbrirConta});
   final ModeloInicio modelo;
   final VoidCallback? onGerenciar;
   final void Function(ContaInicio)? onAbrirConta;

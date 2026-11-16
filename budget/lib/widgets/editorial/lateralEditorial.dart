@@ -12,6 +12,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/versaoCanto.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
+import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:flutter/material.dart';
 import 'package:timer_builder/timer_builder.dart';
 
@@ -20,6 +21,7 @@ typedef ItemLateral = ({String chave, String rotulo});
 const List<ItemLateral> mbItensLateral = [
   (chave: 'home', rotulo: 'Início'),
   (chave: 'transactions', rotulo: 'Transações'),
+  (chave: 'pendencias', rotulo: 'Pendências'),
   (chave: 'budgets', rotulo: 'Orçamentos'),
   (chave: 'goals', rotulo: 'Metas'),
   (chave: 'loans', rotulo: 'Dívidas'),
@@ -125,15 +127,18 @@ class _LateralEditorialState extends State<LateralEditorial> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
                     for (final item in mbItensLateral)
-                      _ItemNavegacao(
-                        icone: navBarIconsData[item.chave]!.iconData,
-                        rotulo: item.rotulo,
-                        ativo: navBarIconsData[item.chave]!
-                                .navigationIndexedStackIndex ==
-                            atual,
-                        onTap: () => mbIrParaPagina(navBarIconsData[item.chave]!
-                            .navigationIndexedStackIndex),
-                      ),
+                      if (item.chave != 'pendencias' || meuBancoPareado.value)
+                        _ItemNavegacao(
+                          selo: item.chave == 'pendencias',
+                          icone: navBarIconsData[item.chave]!.iconData,
+                          rotulo: item.rotulo,
+                          ativo: navBarIconsData[item.chave]!
+                                  .navigationIndexedStackIndex ==
+                              atual,
+                          onTap: () => mbIrParaPagina(
+                              navBarIconsData[item.chave]!
+                                  .navigationIndexedStackIndex),
+                        ),
                     if (_contas.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
@@ -182,8 +187,10 @@ class _ItemNavegacao extends StatelessWidget {
       {this.icone,
       required this.rotulo,
       required this.ativo,
-      required this.onTap});
+      required this.onTap,
+      this.selo = false});
   final IconData? icone;
+  final bool selo; // Pendências: bolinha com o total
   final String rotulo;
   final bool ativo;
   final VoidCallback onTap;
@@ -215,7 +222,11 @@ class _ItemNavegacao extends StatelessWidget {
           child: Row(
             children: [
               if (icone != null) ...[
-                Icon(icone, size: 18, color: ativo ? e.acc : e.mu),
+                if (selo)
+                  SeloPendencias(
+                      child: Icon(icone, size: 18, color: ativo ? e.acc : e.mu))
+                else
+                  Icon(icone, size: 18, color: ativo ? e.acc : e.mu),
                 const SizedBox(width: 10),
               ],
               Expanded(

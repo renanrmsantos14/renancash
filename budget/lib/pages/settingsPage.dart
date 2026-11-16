@@ -449,7 +449,7 @@ class SettingsPageContent extends StatelessWidget {
         SettingsHeader(title: "preferences".tr()),
 
         // Celular pareado: a Início é fixa (sem editor de seções).
-        if (!inicioNovaAtiva(context))
+        if (!inicioNovaAtiva())
         SettingsContainerOpenPage(
           openPage: EditHomePage(),
           title: "edit-home-page".tr(),

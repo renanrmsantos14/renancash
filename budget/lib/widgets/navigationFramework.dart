@@ -25,6 +25,7 @@ import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/homePage/homePage.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
+import 'package:budget/pages/homePage/painelDesktop.dart' show PainelDesktop;
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/pages/notificationsPage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
@@ -367,13 +368,15 @@ Future<bool> runAllCloudFunctions(BuildContext context,
 
 class PageNavigationFrameworkState extends State<PageNavigationFramework> {
   final List<Widget> pages = [
-    // Celular pareado: Início nova (fixa); computador e app não pareado: seções antigas
-    // (a Início nova só lê dados do Meu Banco).
+    // Pareado: Início nova (celular) ou painel (computador); não pareado: seções antigas
+    // (as duas novas só leem dados do Meu Banco).
     ValueListenableBuilder<bool>(
         valueListenable: meuBancoPareado,
-        builder: (context, _, __) => inicioNovaAtiva(context)
-            ? const InicioEditorial()
-            : HomePage(key: homePageStateKey)), // 0
+        builder: (context, _, __) => !inicioNovaAtiva()
+            ? HomePage(key: homePageStateKey)
+            : ehDesktop(context)
+                ? const PainelDesktop()
+                : const InicioEditorial()), // 0
     // Computador: tabela com detalhe ao lado; celular: lista do RenanCash.
     Builder(
         builder: (context) => ehDesktop(context)

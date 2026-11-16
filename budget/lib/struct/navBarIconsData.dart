@@ -59,6 +59,12 @@ Map<String, NavBarIconData> getNavBarIconsData() {
       labelLong: "spending-and-savings-goals",
       navigationIndexedStackIndex: 14,
     ),
+    // Aba do modo Meu Banco (não é atalho configurável).
+    "pendencias": NavBarIconData(
+      iconData: Icons.inbox_outlined,
+      label: "Pendências",
+      navigationIndexedStackIndex: 18,
+    ),
     "subscriptions": NavBarIconData(
       iconData: appStateSettings["outlinedIcons"]
           ? Icons.event_repeat_outlined

@@ -256,8 +256,6 @@ void main() {
         conteudo: PainelDesktop.comDados(modelo, transacoes: [
           linha('a', 'MERCADO A'),
           linha('b', 'PADARIA B')
-        ], orcamentos: const [
-          (nome: 'Mercado', gasto: 812.0, limite: 1400.0)
         ]),
       ),
     ));
