@@ -1,11 +1,14 @@
-import 'package:budget/colors.dart';
+import 'package:budget/functions.dart' show pushRoute;
+import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl;
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/meuBancoSync.dart' show meuBancoUltimaSync;
+import 'package:budget/widgets/editorial/contas.dart' show comSinal;
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/lineGraph.dart';
-import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
 
 const _meses = [
@@ -63,65 +66,166 @@ class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
     });
   }
 
-  Widget _cartao(BuildContext context, Widget child) => Container(
-        margin: const EdgeInsetsDirectional.only(start: 13, end: 13, bottom: 13),
-        padding: const EdgeInsetsDirectional.all(15),
-        decoration: BoxDecoration(
-          color: getColor(context, "lightDarkAccentHeavyLight"),
-          borderRadius: BorderRadius.circular(15),
+  @override
+  Widget build(BuildContext context) {
+    return PageFramework(
+      dragDownToDismiss: true,
+      title: 'Investimentos',
+      horizontalPaddingConstrained: true,
+      slivers: [
+        SliverToBoxAdapter(
+          // Nada até a primeira leitura local (é rápida); evita piscar o vazio.
+          child: !carregou
+              ? const SizedBox.shrink()
+              : InvestimentosConteudo(
+                  aplicacoes: aplicacoes,
+                  serie: serie,
+                  nomesDasMetas: nomesDasMetas,
+                  hoje: DateTime.now(),
+                  onAbrirMeuBanco: () =>
+                      pushRoute(context, const MeuBancoPage()),
+                ),
         ),
-        child: child,
-      );
+        const SliverToBoxAdapter(child: SizedBox(height: 50)),
+      ],
+    );
+  }
+}
 
-  Widget _variacao(BuildContext context, double? v, {double fontSize = 14}) {
+/// Conteúdo da tela só com dados (sem banco local), para teste e print.
+class InvestimentosConteudo extends StatelessWidget {
+  const InvestimentosConteudo({
+    super.key,
+    required this.aplicacoes,
+    required this.serie,
+    required this.nomesDasMetas,
+    required this.hoje,
+    this.onAbrirMeuBanco,
+  });
+
+  final List<MbAplicacao> aplicacoes;
+  final List<MbRetratoMes> serie;
+  final Map<String, String> nomesDasMetas;
+  final DateTime hoje;
+  final VoidCallback? onAbrirMeuBanco;
+
+  @override
+  Widget build(BuildContext context) {
+    if (aplicacoes.isEmpty && serie.isEmpty) return _vazio(context);
+    final blocos = [_saldoAtual(context), _grafico(context), _lista(context)];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < blocos.length; i++)
+          EntradaSuave(indice: i, child: blocos[i]),
+      ],
+    );
+  }
+
+  Widget _vazio(BuildContext context) {
+    final e = cores(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(30, 48, 30, 0),
+      child: Column(children: [
+        Icon(Icons.show_chart_rounded, size: 32, color: e.mu),
+        const SizedBox(height: 12),
+        Text('Nenhum investimento sincronizado ainda.',
+            textAlign: TextAlign.center,
+            style: EdTexto.corpo(context).copyWith(color: e.mu)),
+        if (onAbrirMeuBanco != null)
+          TextButton(
+            onPressed: onAbrirMeuBanco,
+            style: TextButton.styleFrom(foregroundColor: e.acc),
+            child: const Text('Abrir o Meu Banco'),
+          ),
+      ]),
+    );
+  }
+
+  Widget _cartao(BuildContext context, Widget child) {
+    final e = cores(context);
+    return Container(
+      margin: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 12),
+      padding: const EdgeInsetsDirectional.all(16),
+      decoration: BoxDecoration(
+        color: e.surf,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: e.line),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _variacao(BuildContext context, double? v, {double fontSize = 13}) {
     if (v == null) return const SizedBox.shrink();
-    final sinal = v > 0 ? '+' : v < 0 ? '-' : '';
-    return TextFont(
-        text: '$sinal${brl(v.abs())}',
-        fontSize: fontSize,
-        fontWeight: FontWeight.bold,
-        textColor: v > 0
-            ? getColor(context, "incomeAmount")
-            : v < 0
-                ? getColor(context, "expenseAmount")
-                : getColor(context, "textLight"));
+    final e = cores(context);
+    return Text(comSinal(v, brl, mais: true),
+        style: EdTexto.corpo(context).copyWith(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w500,
+            color: v > 0 ? e.pos : (v < 0 ? e.tx : e.mu)));
   }
 
   Widget _saldoAtual(BuildContext context) {
-    final suave = getColor(context, "textLight");
     final total = aplicacoes.fold(0.0, (s, a) => s + a.saldo);
     final variacoes = mbSerieComVariacao(serie);
     final ultima = variacoes.isEmpty ? null : variacoes.last;
-    return _cartao(
-      context,
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextFont(text: 'Saldo atual', fontSize: 14, textColor: suave),
-        TextFont(text: brl(total), fontSize: 32, fontWeight: FontWeight.bold),
-        if (ultima?.variacao != null && ultima!.mes.mes == _mesAtual(DateTime.now()))
-          Row(children: [
-            _variacao(context, ultima.variacao),
-            TextFont(text: ' sobre ${_nomeDoMes(variacoes[variacoes.length - 2].mes.mes)}', fontSize: 13, textColor: suave),
-          ]),
-        if (aplicacoes.isNotEmpty) const SizedBox(height: 10),
-        for (final a in aplicacoes)
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 8, 20, 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text('Saldo atual', style: EdTexto.rotulo(context)),
+        const SizedBox(height: 8),
+        ContagemValor(
+            valor: total,
+            formatar: brl,
+            centavosMenores: true,
+            estilo: EdTexto.numeroGrande(context)),
+        if (ultima?.variacao != null && ultima!.mes.mes == _mesAtual(hoje))
           Padding(
-            padding: const EdgeInsetsDirectional.only(top: 4),
+            padding: const EdgeInsets.only(top: 6),
             child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  TextFont(text: a.nome, fontSize: 15, maxLines: 2),
-                  TextFont(
-                      text: [
-                        if (a.banco != null) a.banco!,
-                        if (a.metaPk != null && nomesDasMetas[a.metaPk] != null) 'Meta ${nomesDasMetas[a.metaPk]}',
-                      ].join(' · '),
-                      fontSize: 12.5,
-                      textColor: suave),
-                ]),
+              _variacao(context, ultima.variacao),
+              Flexible(
+                child: Text(
+                    ' sobre ${_nomeDoMes(variacoes[variacoes.length - 2].mes.mes)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.rotulo(context)),
               ),
-              TextFont(text: brl(a.saldo), fontSize: 15, fontWeight: FontWeight.bold),
             ]),
           ),
+        if (aplicacoes.isNotEmpty) const SizedBox(height: 12),
+        for (final a in aplicacoes) _linhaAplicacao(context, a),
+      ]),
+    );
+  }
+
+  Widget _linhaAplicacao(BuildContext context, MbAplicacao a) {
+    final detalhe = [
+      if (a.banco != null) a.banco!,
+      if (a.metaPk != null && nomesDasMetas[a.metaPk] != null)
+        'Meta ${nomesDasMetas[a.metaPk]}',
+    ].join(' · ');
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(a.nome,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontWeight: FontWeight.w500)),
+                if (detalhe.isNotEmpty)
+                  Text(detalhe, style: EdTexto.rotulo(context)),
+              ]),
+        ),
+        const SizedBox(width: 8),
+        Text(brl(a.saldo),
+            style:
+                EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
       ]),
     );
   }
@@ -130,14 +234,11 @@ class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
     if (serie.length < 2) {
       return _cartao(
           context,
-          TextFont(
-              text: 'O gráfico aparece quando houver pelo menos dois meses de histórico. '
-                  'O primeiro retrato foi guardado no mês de ${_nomeDoMes(serie.isEmpty ? _mesAtual(DateTime.now()) : serie.first.mes)}.',
-              fontSize: 14,
-              maxLines: 6,
-              textColor: getColor(context, "textLight")));
+          Text(
+              'O gráfico aparece com pelo menos dois meses de histórico. '
+              'O primeiro retrato é de ${_nomeDoMes(serie.isEmpty ? _mesAtual(hoje) : serie.first.mes)}.',
+              style: EdTexto.corpo(context).copyWith(color: cores(context).mu)));
     }
-    final hoje = DateTime.now();
     // Cada ponto no último dia do mês; o mês corrente, em hoje (é o saldo até agora).
     final datas = [
       for (final m in serie)
@@ -155,94 +256,72 @@ class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
     return _cartao(
       context,
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextFont(text: 'Total por mês', fontSize: 16, fontWeight: FontWeight.bold),
+        Text('Total por mês', style: EdTexto.h2(context)),
         LineChartWrapper(
           points: [pontos],
           isCurved: true,
           endDate: datas.last,
-          color: Theme.of(context).colorScheme.primary,
+          color: cores(context).acc,
         ),
       ]),
     );
   }
 
   Widget _lista(BuildContext context) {
-    final suave = getColor(context, "textLight");
-    final hoje = _mesAtual(DateTime.now());
+    final e = cores(context);
+    final atual = _mesAtual(hoje);
     final meses = mbSerieComVariacao(serie).reversed.toList();
     if (meses.isEmpty) return const SizedBox.shrink();
     return _cartao(
       context,
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        TextFont(text: 'Mês a mês', fontSize: 16, fontWeight: FontWeight.bold),
-        const SizedBox(height: 6),
-        for (final e in meses)
+        Text('Mês a mês', style: EdTexto.h2(context)),
+        const SizedBox(height: 4),
+        for (final m in meses)
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
-              key: ValueKey('mes-${e.mes.mes}'),
+              key: ValueKey('mes-${m.mes.mes}'),
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsetsDirectional.only(bottom: 8),
-              initiallyExpanded: e.mes.mes == hoje,
+              iconColor: e.mu,
+              collapsedIconColor: e.mu,
+              initiallyExpanded: m.mes.mes == atual,
               title: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    TextFont(text: _nomeDoMes(e.mes.mes), fontSize: 15, fontWeight: FontWeight.bold),
-                    if (e.mes.mes == hoje) TextFont(text: 'até agora', fontSize: 12.5, textColor: suave),
+                    Text(_nomeDoMes(m.mes.mes),
+                        style: EdTexto.corpo(context)
+                            .copyWith(fontWeight: FontWeight.w500)),
+                    if (m.mes.mes == atual)
+                      Text('até agora', style: EdTexto.rotulo(context)),
                   ]),
                 ),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  TextFont(text: brl(e.mes.total), fontSize: 15, fontWeight: FontWeight.bold),
-                  _variacao(context, e.variacao, fontSize: 12.5),
+                  Text(brl(m.mes.total),
+                      style: EdTexto.corpo(context)
+                          .copyWith(fontWeight: FontWeight.w500)),
+                  _variacao(context, m.variacao, fontSize: 12.5),
                 ]),
               ]),
               children: [
-                for (final i in e.mes.itens)
+                for (final i in m.mes.itens)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(bottom: 4),
                     child: Row(children: [
                       Expanded(
-                          child: TextFont(
-                              text: [i.nome, if (i.banco != null) i.banco!].join(' · '),
-                              fontSize: 13.5,
+                          child: Text(
+                              [i.nome, if (i.banco != null) i.banco!].join(' · '),
                               maxLines: 2,
-                              textColor: suave)),
-                      TextFont(text: brl(i.saldo), fontSize: 13.5, textColor: suave),
+                              overflow: TextOverflow.ellipsis,
+                              style: EdTexto.rotulo(context))),
+                      Text(brl(i.saldo), style: EdTexto.rotulo(context)),
                     ]),
                   ),
               ],
             ),
           ),
       ]),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PageFramework(
-      dragDownToDismiss: true,
-      title: 'Investimentos',
-      horizontalPaddingConstrained: true,
-      slivers: [
-        SliverToBoxAdapter(
-          child: !carregou
-              ? const SizedBox.shrink()
-              : aplicacoes.isEmpty && serie.isEmpty
-                  ? _cartao(
-                      context,
-                      TextFont(
-                          text: 'Nenhum investimento sincronizado ainda. Sincronize com o Meu Banco para ver o saldo e a evolução.',
-                          fontSize: 14,
-                          maxLines: 4,
-                          textColor: getColor(context, "textLight")))
-                  : Column(children: [
-                      _saldoAtual(context),
-                      _grafico(context),
-                      _lista(context),
-                    ]),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: 50)),
-      ],
     );
   }
 }
