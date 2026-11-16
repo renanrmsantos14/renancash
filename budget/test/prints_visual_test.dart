@@ -17,6 +17,7 @@ import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
+import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareadoConferido;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -115,6 +116,8 @@ void main() {
         'increaseTextContrast': false, 'forceFullDarkBackground': false, 'font': 'Geist',
         'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
       };
+      meuBancoPareadoConferido.value = true;
+      addTearDown(() => meuBancoPareadoConferido.value = false);
       t.view.physicalSize = const Size(390 * 2, 400 * 2);
       t.view.devicePixelRatio = 2;
       addTearDown(t.view.reset);

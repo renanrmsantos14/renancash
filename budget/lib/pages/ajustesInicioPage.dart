@@ -15,7 +15,7 @@ List<Widget> ajustesInicioEntradas() => const [
       SettingsContainerOpenPage(
         openPage: AjustesInicioPage(),
         title: 'Início',
-        description: 'Cartão de saldo, metas e contas',
+        description: 'Atalhos, cartão de saldo, metas e contas',
         icon: Icons.home_outlined,
       ),
       SettingsContainerOpenPage(
@@ -52,6 +52,7 @@ class AjustesInicioPage extends StatelessWidget {
         title: 'Início',
         dragDownToDismiss: true,
         listWidgets: [
+          const SettingsHeader(title: 'Sem banco conectado'),
           _chave('inicioAtalhos', AjustesInicio.atalhos,
               titulo: 'Mostrar atalhos sem banco',
               descricao:

@@ -14,6 +14,7 @@ Future<void> mbGravarAjuste(String chave, Object valor) async {
 
 /// Configurações da Início, de Pendências e da Análise (Configurações › Início e pendências).
 /// Sem a chave salva, vale o comportamento original: só "contas vencidas" começa desligada.
+/// Exceção: os atalhos sem banco (novos) começam ligados, por decisão do produto.
 abstract final class AjustesInicio {
   // Início e cartão de saldo
   static bool get ritmoDiario => appStateSettings['inicioRitmoDiario'] != false;

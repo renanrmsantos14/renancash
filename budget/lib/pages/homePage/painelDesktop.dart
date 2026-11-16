@@ -142,6 +142,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
                         : null,
                     lateral: _GastoPorDia(modelo: m),
                   ),
+                if (real) const AtalhosInicio(),
                 const SizedBox(height: 8),
                 // Mesmos blocos do celular, lado a lado, mais as últimas transações.
                 Row(

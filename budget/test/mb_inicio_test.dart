@@ -1,7 +1,9 @@
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
-import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
+import 'package:budget/struct/ajustesInicio.dart' show mbAjustesMudaram;
+import 'package:budget/struct/meuBancoSync.dart'
+    show meuBancoPareado, meuBancoPareadoConferido;
 import 'package:budget/struct/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,9 +198,19 @@ void main() {
     await t.pumpWidget(MaterialApp(
         theme: temaEditorial(Brightness.light),
         home: const Scaffold(body: AtalhosInicio())));
+    // Antes de conferir o token, nada (evita piscar num celular pareado).
+    expect(find.text('Nova transação'), findsNothing);
+    meuBancoPareadoConferido.value = true;
+    addTearDown(() => meuBancoPareadoConferido.value = false);
+    await t.pump();
     for (final r in ['Nova transação', 'Contas', 'Orçamentos', 'Metas']) {
       expect(find.text(r), findsOneWidget);
     }
+    appStateSettings['inicioAtalhos'] = false;
+    mbAjustesMudaram.value++;
+    await t.pump();
+    expect(find.text('Nova transação'), findsNothing);
+    appStateSettings['inicioAtalhos'] = true;
     meuBancoPareado.value = true;
     addTearDown(() => meuBancoPareado.value = false);
     await t.pump();
