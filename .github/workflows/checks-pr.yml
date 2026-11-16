@@ -1,0 +1,56 @@
+name: Checks do PR
+
+# Valida PRs na nuvem (o PC local não roda Flutter): analyze sem erros, testes
+# e prints visuais (PRINTS=1) publicados como artefato para conferência.
+on:
+  pull_request:
+    paths:
+      - 'budget/**'
+      - '.github/workflows/checks-pr.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: checks-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: budget
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Avisos herdados do Cashew não reprovam; erros sim.
+      - name: Analyze (só erros reprovam)
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Testes
+        run: flutter test
+
+      - name: Prints visuais
+        if: always()
+        run: |
+          mkdir -p ../.verificacao/prints
+          PRINTS=1 flutter test $(ls test/prints_*_test.dart) --update-goldens
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: prints
+          path: .verificacao/prints/
+          if-no-files-found: warn

@@ -2,7 +2,7 @@ import 'package:budget/struct/mbSync/pareamento.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/textInput.dart';
-import 'package:budget/widgets/textWidgets.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:flutter/material.dart';
@@ -69,28 +69,30 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(
               horizontal: 20, vertical: 5),
-          child: TextFont(
-            text:
-                "Abra o painel do Meu Banco, crie um token de aparelho e aponte a câmera para o QR",
-            fontSize: 14,
-            maxLines: 5,
-          ),
+          child: Text(
+              "Abra o painel do Meu Banco, crie um token de aparelho e aponte a câmera para o QR.",
+              style: EdTexto.corpo(context).copyWith(color: cores(context).mu)),
         ),
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(
               horizontal: 20, vertical: 10),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             child: SizedBox(
               height: 320,
               child: MobileScanner(
                 onDetect: _aoDetectar,
-                errorBuilder: (context, erro, _) => Center(
-                  child: TextFont(
-                    text:
-                        "Não foi possível abrir a câmera. Verifique a permissão ou use \"Colar link\".",
-                    fontSize: 14,
-                    maxLines: 4,
+                errorBuilder: (context, erro, _) => ColoredBox(
+                  color: cores(context).surf,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                          "Não foi possível abrir a câmera. Confira a permissão ou cole o link abaixo.",
+                          textAlign: TextAlign.center,
+                          style: EdTexto.corpo(context)
+                              .copyWith(color: cores(context).mu)),
+                    ),
                   ),
                 ),
               ),
