@@ -249,16 +249,27 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     );
   }
 
-  Widget _botao(String rotulo, VoidCallback onTap) {
+  Widget _botao(String rotulo, VoidCallback onTap) =>
+      BotaoEscolha(rotulo: rotulo, onTap: _enviando ? null : onTap);
+}
+
+/// Resposta em chip da triagem (Para revisar e contas vencidas).
+class BotaoEscolha extends StatelessWidget {
+  const BotaoEscolha({super.key, required this.rotulo, this.onTap});
+  final String rotulo;
+  final VoidCallback? onTap; // null: enviando, sem toque
+
+  @override
+  Widget build(BuildContext context) {
     final e = cores(context);
     return Semantics(
         button: true,
         label: rotulo,
         excludeSemantics: true,
         // excludeSemantics tira a ação do GestureDetector interno: o toque do leitor de tela vem daqui.
-        onTap: _enviando ? null : onTap,
+        onTap: onTap,
         child: ToqueEscala(
-          onTap: _enviando ? null : onTap,
+          onTap: onTap,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(

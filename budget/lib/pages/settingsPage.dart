@@ -4,6 +4,7 @@ import 'package:budget/pages/aparenciaPage.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
 import 'package:budget/pages/aboutPage.dart';
+import 'package:budget/pages/ajustesInicioPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/billSplitter.dart';
 import 'package:budget/pages/budgetsListPage.dart';
@@ -444,6 +445,7 @@ class SettingsPageContent extends StatelessWidget {
         ),
 
         // EnterName(),
+        ...ajustesInicioEntradas(),
         SettingsHeader(title: "preferences".tr()),
 
         notificationsGlobalEnabled && getIsFullScreen(context) == false

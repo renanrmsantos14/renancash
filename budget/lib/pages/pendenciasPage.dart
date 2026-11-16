@@ -1,5 +1,14 @@
+import 'package:budget/database/tables.dart' show Transaction;
+import 'package:budget/functions.dart' show pushRoute;
+import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/homePage/homePageParaRevisar.dart'
-    show ItemParaRevisar;
+    show BotaoEscolha, ItemParaRevisar;
+import 'package:budget/struct/ajustesInicio.dart';
+import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
+import 'package:budget/struct/pendenciasVencidas.dart';
+import 'package:budget/struct/upcomingTransactionsFunctions.dart'
+    show openPayPopup;
+import 'package:budget/widgets/openPopup.dart' show RoutesToPopAfterDelete;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
@@ -23,8 +32,12 @@ Future<void> mbReconectarAviso(
   }
 }
 
-/// Aba Pendências: bancos desconectados numa faixa fixa e a fila Para revisar um item por vez.
-/// "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da fila só nesta sessão.
+/// Item da fila: Para revisar ou conta vencida (Configurações › Pendências).
+typedef _Pendencia = ({String id, String rotulo, Widget Function() conteudo});
+
+/// Aba Pendências: bancos desconectados numa faixa fixa e a fila (Para revisar e, se ligado, contas
+/// vencidas) um item por vez. "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da
+/// fila só nesta sessão.
 class PendenciasPage extends StatefulWidget {
   // `atualizar` existe para os testes preencherem as filas sem o banco.
   const PendenciasPage({super.key, this.atualizar = true});
@@ -40,11 +53,32 @@ class _PendenciasPageState extends State<PendenciasPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.atualizar) mbAtualizarRevisar();
+    if (widget.atualizar) {
+      mbAtualizarRevisar();
+      if (AjustesInicio.vencidas) mbVigiarVencidas();
+    }
   }
 
+  List<_Pendencia> _itens() => [
+        for (final i in meuBancoRevisar.value)
+          (
+            id: i.id,
+            rotulo: 'Para revisar',
+            conteudo: () => ItemParaRevisar(item: i)
+          ),
+        if (AjustesInicio.vencidas)
+          // Só contas a pagar: receitas pendentes não são "conta vencida".
+          for (final t in meuBancoVencidas.value)
+            if (!t.income)
+              (
+                id: 'venc:${t.transactionPk}',
+                rotulo: 'Conta vencida',
+                conteudo: () => _ItemVencido(transacao: t)
+              ),
+      ];
+
   /// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
-  List<MbItemRevisao> _ordenar(List<MbItemRevisao> itens) {
+  List<_Pendencia> _ordenar(List<_Pendencia> itens) {
     final porId = {for (final i in itens) i.id: i};
     return [
       for (final i in itens)
@@ -66,10 +100,16 @@ class _PendenciasPageState extends State<PendenciasPage> {
       child: SafeArea(
         bottom: false,
         child: ListenableBuilder(
-          listenable: Listenable.merge([meuBancoAvisos, meuBancoRevisar]),
+          listenable: Listenable.merge([
+            meuBancoAvisos,
+            meuBancoRevisar,
+            meuBancoVencidas,
+            mbAjustesMudaram
+          ]),
           builder: (context, _) {
-            final avisos = meuBancoAvisos.value;
-            final fila = _ordenar(meuBancoRevisar.value);
+            final avisos =
+                AjustesInicio.bancos ? meuBancoAvisos.value : const [];
+            final fila = _ordenar(_itens());
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
               children: [
@@ -79,19 +119,19 @@ class _PendenciasPageState extends State<PendenciasPage> {
                 if (fila.isEmpty && avisos.isEmpty)
                   const _TudoEmDia()
                 else if (fila.isEmpty)
-                  Text('Nada para revisar.',
+                  Text('Nada na fila.',
                       style: EdTexto.corpo(context).copyWith(color: e.mu))
                 else ...[
                   Row(children: [
                     Expanded(
-                        child: Text('Para revisar',
+                        child: Text(fila.first.rotulo,
                             style: EdTexto.rotulo(context))),
                     Text('1 de ${fila.length}', style: EdTexto.rotulo(context)),
                   ]),
                   const SizedBox(height: 10),
                   _CartaoTriagem(
                     key: ValueKey(fila.first.id),
-                    item: fila.first,
+                    conteudo: fila.first.conteudo(),
                     aoPular:
                         fila.length > 1 ? () => _pular(fila.first.id) : null,
                   ),
@@ -102,6 +142,43 @@ class _PendenciasPageState extends State<PendenciasPage> {
         ),
       ),
     );
+  }
+}
+
+/// Conta a pagar vencida: valor e vencimento, com "Marcar como paga" e "Abrir".
+class _ItemVencido extends StatelessWidget {
+  const _ItemVencido({required this.transacao});
+  final Transaction transacao;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = transacao;
+    final dias = DateUtils.dateOnly(DateTime.now())
+        .difference(DateUtils.dateOnly(t.dateCreated))
+        .inDays;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(t.name.trim().isEmpty ? 'Conta a pagar' : t.name,
+          style: EdTexto.corpo(context).copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: cores(context).tx)),
+      const SizedBox(height: 2),
+      Text(
+          '${brl(t.amount.abs())} · venceu ${dias <= 0 ? 'hoje' : dias == 1 ? 'ontem' : 'em ${diaMes(t.dateCreated)}'}',
+          style: EdTexto.rotulo(context)),
+      const SizedBox(height: 14),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        BotaoEscolha(
+            rotulo: 'Marcar como paga', onTap: () => openPayPopup(context, t)),
+        BotaoEscolha(
+            rotulo: 'Abrir',
+            onTap: () => pushRoute(
+                context,
+                AddTransactionPage(
+                    transaction: t,
+                    routesToPopAfterDelete: RoutesToPopAfterDelete.One))),
+      ]),
+    ]);
   }
 }
 
@@ -156,7 +233,7 @@ class _TudoEmDia extends StatelessWidget {
             style: EdTexto.corpo(context).copyWith(
                 fontSize: 18, fontWeight: FontWeight.w600, color: e.tx)),
         const SizedBox(height: 4),
-        Text('Nada para revisar e nenhum banco desconectado.',
+        Text('Nada para resolver por aqui.',
             textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
       ]),
     );
@@ -166,8 +243,8 @@ class _TudoEmDia extends StatelessWidget {
 /// Cartão de um item. Deslizar para a esquerda pula (por distância ou por velocidade);
 /// para a direita só resiste, porque não há resposta padrão. O arraste segue só o primeiro dedo.
 class _CartaoTriagem extends StatefulWidget {
-  const _CartaoTriagem({super.key, required this.item, this.aoPular});
-  final MbItemRevisao item;
+  const _CartaoTriagem({super.key, required this.conteudo, this.aoPular});
+  final Widget conteudo;
   final VoidCallback? aoPular; // null: item único, não há para onde pular
 
   @override
@@ -192,7 +269,11 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
   }
 
   void _descer(PointerDownEvent ev) {
-    if (_ponteiro != null || widget.aoPular == null) return;
+    if (_ponteiro != null ||
+        widget.aoPular == null ||
+        !AjustesInicio.deslizar) {
+      return;
+    }
     _ponteiro = ev.pointer;
     _origem = ev.position.dx - _dx.value;
     _origemY = ev.position.dy;
@@ -287,7 +368,7 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ItemParaRevisar(item: widget.item),
+              widget.conteudo,
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerRight,

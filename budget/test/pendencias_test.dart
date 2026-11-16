@@ -3,6 +3,8 @@ import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/struct/ajustesInicio.dart' show mbAjustesMudaram;
+import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,13 +14,16 @@ MbItemRevisao _pix(String id, String quem) => MbItemRevisao(id, 'pix_recebido',
 const _itemA = 'Pix recebido';
 
 Future<void> _abrir(WidgetTester t,
-    {List<MbItemRevisao> itens = const [], List<Map<String, dynamic>> avisos = const []}) async {
+    {List<MbItemRevisao> itens = const [],
+    List<Map<String, dynamic>> avisos = const [],
+    Map<String, dynamic> ajustes = const {}}) async {
   appStateSettings = {
     'materialYou': false,
     'accentSystemColor': false,
     'batterySaver': false,
     'increaseTextContrast': false,
     'forceFullDarkBackground': false,
+    ...ajustes,
   };
   meuBancoRevisar.value = itens;
   meuBancoAvisos.value = avisos;
@@ -55,11 +60,11 @@ void main() {
     expect(find.text('Tudo em dia'), findsNothing);
   });
 
-  testWidgets('só banco desconectado: faixa e "Nada para revisar"', (t) async {
+  testWidgets('só banco desconectado: faixa e "Nada na fila"', (t) async {
     await _abrir(t, avisos: [
       {'banco': 'Inter'}
     ]);
-    expect(find.text('Nada para revisar.'), findsOneWidget);
+    expect(find.text('Nada na fila.'), findsOneWidget);
   });
 
   testWidgets('um item por vez; Pular manda para o fim da fila', (t) async {
@@ -116,5 +121,54 @@ void main() {
     await g1.up(timeStamp: const Duration(milliseconds: 1500));
     await t.pumpAndSettle();
     expect(_noCartao(t, 'a'), true);
+  });
+
+  group('Configurações › Pendências', () {
+    testWidgets('bancos desconectados desligado: sem faixa e fora do total', (t) async {
+      await _abrir(t,
+          itens: [_pix('a', 'X')],
+          avisos: [
+            {'banco': 'Inter'}
+          ],
+          ajustes: {'pendenciasBancos': false});
+      expect(find.text('Inter desconectado'), findsNothing);
+      expect(mbTotalPendencias(), 1);
+    });
+
+    testWidgets('deslizar desligado: o gesto não pula, o botão sim', (t) async {
+      await _abrir(t,
+          itens: [_pix('a', 'X'), _pix('b', 'Y')],
+          ajustes: {'pendenciasDeslizar': false});
+      final g = await t.startGesture(
+          t.getTopLeft(find.byKey(const ValueKey('a'))) + const Offset(40, 24));
+      for (var i = 0; i < 4; i++) {
+        await g.moveBy(const Offset(-15, 0),
+            timeStamp: Duration(milliseconds: 10 * (i + 1)));
+      }
+      await g.up(timeStamp: const Duration(milliseconds: 50));
+      await t.pumpAndSettle();
+      expect(_noCartao(t, 'a'), true);
+      await t.tap(find.text('Pular'));
+      await t.pumpAndSettle();
+      expect(_noCartao(t, 'b'), true);
+    });
+
+    testWidgets('selo desligado: sem bolinha mesmo com pendências', (t) async {
+      await _abrir(t, itens: [_pix('a', 'X')]);
+      await t.pumpWidget(MaterialApp(
+          theme: temaEditorial(Brightness.light),
+          home: const Scaffold(
+              body: Center(child: SeloPendencias(child: Icon(Icons.inbox))))));
+      expect(find.text('1'), findsOneWidget);
+      // Mudou nas configurações: o selo some sem reabrir a tela.
+      appStateSettings['pendenciasSelo'] = false;
+      mbAjustesMudaram.value++;
+      await t.pump();
+      expect(find.text('1'), findsNothing);
+      appStateSettings['pendenciasSelo'] = true;
+      mbAjustesMudaram.value++;
+      await t.pump();
+      expect(find.text('1'), findsOneWidget);
+    });
   });
 }

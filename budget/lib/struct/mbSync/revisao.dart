@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/pendenciasVencidas.dart' show meuBancoVencidas;
 import 'package:budget/struct/mbSync/avisos.dart' show mbAtualizarAvisos, meuBancoAvisos;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
@@ -184,8 +186,14 @@ List<MbItemRevisao> mbFilaVisivel(List<MbItemRevisao> itens, MbRevisoes revisoes
 /// Fila que a Início mostra, lida do que está no aparelho.
 final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const []);
 
-/// Itens Para revisar + bancos desconectados (selo da aba Pendências).
-int mbTotalPendencias() => meuBancoRevisar.value.length + meuBancoAvisos.value.length;
+/// Total da aba Pendências (selo): itens Para revisar e, conforme as configurações,
+/// bancos desconectados e contas vencidas.
+int mbTotalPendencias() =>
+    meuBancoRevisar.value.length +
+    (AjustesInicio.bancos ? meuBancoAvisos.value.length : 0) +
+    (AjustesInicio.vencidas
+        ? meuBancoVencidas.value.where((t) => !t.income).length
+        : 0);
 
 Future<void> mbAtualizarRevisar() async {
   try {

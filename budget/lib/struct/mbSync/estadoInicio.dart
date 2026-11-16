@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
@@ -167,6 +168,8 @@ ModeloInicio montarModeloInicio({
   required List<UltimaBruta> ultimas,
   required String nome,
   required DateTime agora,
+  // Configurações › Início: poupanças numa linha só (padrão) ou uma linha por conta.
+  bool agruparPoupancas = true,
 }) {
   final ini = DateTime.tryParse('${ciclo['inicio']}');
   final fim = DateTime.tryParse('${ciclo['fim']}');
@@ -191,14 +194,15 @@ ModeloInicio montarModeloInicio({
         saldo: _num(c['balance']),
         contas: '${c['name']}'
       ),
-    if (poupancas.length == 1)
-      (
-        sigla: mbSigla('${poupancas.first['bank'] ?? poupancas.first['name']}'),
-        nome: '${poupancas.first['bank'] ?? poupancas.first['name']}',
-        tipo: 'Poupança',
-        saldo: _num(poupancas.first['balance']),
-        contas: '${poupancas.first['name']}'
-      )
+    if (poupancas.length == 1 || !agruparPoupancas)
+      for (final p in poupancas)
+        (
+          sigla: mbSigla('${p['bank'] ?? p['name']}'),
+          nome: poupancas.length == 1 ? '${p['bank'] ?? p['name']}' : '${p['name']}',
+          tipo: poupancas.length == 1 ? 'Poupança' : 'Poupança · ${p['bank'] ?? ''}',
+          saldo: _num(p['balance']),
+          contas: '${p['name']}'
+        )
     else if (poupancas.length > 1)
       (
         sigla: 'PP',
@@ -337,6 +341,7 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
   };
   final txs = await mbUltimasTransacoes();
   final modelo = montarModeloInicio(
+    agruparPoupancas: AjustesInicio.poupancasJuntas,
     ciclo: ((mapa['ciclo'] as Map?) ?? const {}).cast<String, dynamic>(),
     contas: [
       for (final c in (mapa['contas'] as List? ?? const []))
