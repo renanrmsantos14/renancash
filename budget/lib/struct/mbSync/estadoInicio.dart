@@ -44,6 +44,10 @@ class ModeloInicio {
   final List<ContaInicio> contas;
   final List<CartaoInicio> cartoes;
   final List<UltimaInicio> ultimas;
+  /// "26 out – 25 nov" (sem o prefixo "Ciclo"); "Ciclo atual" quando não há datas.
+  String get periodo => ciclo.startsWith('Ciclo ') && ciclo != 'Ciclo atual'
+      ? ciclo.substring(6)
+      : ciclo;
   bool get semDados => contas.isEmpty && cartoes.isEmpty && porDia.isEmpty;
 
   // Igualdade por conteúdo: permite ignorar recargas que não mudaram nada (sem setState).

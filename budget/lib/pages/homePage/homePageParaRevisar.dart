@@ -31,7 +31,8 @@ const int _itensNoCartao = 3;
 Future<String> _pkDaCategoria(String nome) async {
   final todas = await database.select(database.categories).get();
   for (final c in todas) {
-    if (!c.income && c.name.toLowerCase() == nome.toLowerCase()) return c.categoryPk;
+    if (!c.income && c.name.toLowerCase() == nome.toLowerCase())
+      return c.categoryPk;
   }
   return mbPkCategoria(nome, false);
 }
@@ -60,7 +61,8 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
         final cor = Theme.of(context).colorScheme;
         return KeepAliveClientMixin(
           child: Container(
-            margin: const EdgeInsetsDirectional.only(start: 13, end: 13, bottom: 13),
+            margin: const EdgeInsetsDirectional.only(
+                start: 13, end: 13, bottom: 13),
             padding: const EdgeInsetsDirectional.all(15),
             decoration: BoxDecoration(
               color: getColor(context, "lightDarkAccentHeavyLight"),
@@ -135,7 +137,8 @@ class ItemParaRevisar extends StatefulWidget {
 class _ItemParaRevisarState extends State<ItemParaRevisar> {
   bool _enviando = false, _escolhendo = false;
 
-  Future<void> _responder(String resposta, {String? categoriaPk, String? reembolsoDe}) async {
+  Future<void> _responder(String resposta,
+      {String? categoriaPk, String? reembolsoDe}) async {
     if (_enviando) return;
     if (mounted) setState(() => _enviando = true);
     try {
@@ -189,12 +192,14 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
       context,
       PopupFramework(
         title: 'Qual gasto foi reembolsado?',
-        subtitle: '${brl(widget.item.valor)}${data == null ? '' : ' · ${diaMes(data)}'}',
+        subtitle:
+            '${brl(widget.item.valor)}${data == null ? '' : ' · ${diaMes(data)}'}',
         child: SugestoesReembolso(sugestoes: sugestoes),
       ),
     );
     if (escolha is MbGastoCandidato) {
-      await _responder('reembolso', reembolsoDe: escolha.pk.substring(mbPrefixo.length));
+      await _responder('reembolso',
+          reembolsoDe: escolha.pk.substring(mbPrefixo.length));
     } else if (escolha == semGastoReembolso) {
       await _responder('reembolso');
     }
@@ -215,7 +220,8 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     final titulo = i.ehSalario
         ? 'Salário não detectado'
         : switch (i.tipo) {
-            'pix_enviado' => 'Pix enviado${i.destinatario == null ? '' : ' a ${i.destinatario}'}',
+            'pix_enviado' =>
+              'Pix enviado${i.destinatario == null ? '' : ' a ${i.destinatario}'}',
             'envio_santander' => 'Enviado ao Santander',
             _ => 'Pix recebido',
           };
@@ -227,7 +233,9 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(titulo,
             style: EdTexto.corpo(context).copyWith(
-                fontSize: 18, fontWeight: FontWeight.w600, color: cores(context).tx)),
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: cores(context).tx)),
         const SizedBox(height: 2),
         Text(detalhe, style: EdTexto.rotulo(context)),
         const SizedBox(height: 14),
@@ -238,7 +246,8 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
             _botao(_rotulos[r]!,
                 r == 'reembolso' ? _escolherReembolso : () => _responder(r)),
           for (final c in i.candidatos)
-            _botao('${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',
+            _botao(
+                '${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',
                 () => _marcarSalario(c.txId)),
         ]),
       ]),
@@ -247,16 +256,21 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
 
   Widget _botao(String rotulo, VoidCallback onTap) {
     final e = cores(context);
-    return ToqueEscala(
-      onTap: _enviando ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-            color: e.chip, borderRadius: BorderRadius.circular(10)),
-        child: Text(rotulo,
-            style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
-      ),
-    );
+    return Semantics(
+        button: true,
+        label: rotulo,
+        excludeSemantics: true,
+        child: ToqueEscala(
+          onTap: _enviando ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+                color: e.chip, borderRadius: BorderRadius.circular(10)),
+            child: Text(rotulo,
+                style: EdTexto.corpo(context)
+                    .copyWith(fontWeight: FontWeight.w500)),
+          ),
+        ));
   }
 }
 
@@ -300,22 +314,33 @@ class _SugestoesReembolsoState extends State<SugestoesReembolso> {
           borderRadius: BorderRadius.circular(12),
           onTap: () => popRoute(context, s.gasto),
           child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
+            padding: const EdgeInsetsDirectional.symmetric(
+                vertical: 10, horizontal: 4),
             child: Row(children: [
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  TextFont(text: s.gasto.nome, fontSize: 15, fontWeight: FontWeight.bold, maxLines: 1),
-                  TextFont(
-                      text: [
-                        diaMes(s.gasto.data),
-                        if (s.gasto.categoria.isNotEmpty) s.gasto.categoria,
-                        if (s.afinidade == MbAfinidadeReembolso.igual) 'mesmo valor',
-                      ].join(' · '),
-                      fontSize: 13,
-                      textColor: getColor(context, "textLight")),
-                ]),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFont(
+                          text: s.gasto.nome,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          maxLines: 1),
+                      TextFont(
+                          text: [
+                            diaMes(s.gasto.data),
+                            if (s.gasto.categoria.isNotEmpty) s.gasto.categoria,
+                            if (s.afinidade == MbAfinidadeReembolso.igual)
+                              'mesmo valor',
+                          ].join(' · '),
+                          fontSize: 13,
+                          textColor: getColor(context, "textLight")),
+                    ]),
               ),
-              TextFont(text: brl(s.gasto.valor), fontSize: 15, fontWeight: FontWeight.bold),
+              TextFont(
+                  text: brl(s.gasto.valor),
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold),
             ]),
           ),
         ),

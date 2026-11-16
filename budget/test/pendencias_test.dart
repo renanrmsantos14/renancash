@@ -1,4 +1,4 @@
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart';
+import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/revisao.dart';

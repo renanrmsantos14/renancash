@@ -76,6 +76,7 @@ void main() {
     expect(m.indiceHoje, 14);
     expect(m.ultimas.map((u) => u.quando), ['hoje', 'ontem']);
     expect(_montar(nome: '  ').saudacao, 'Olá');
+    expect(_montar().periodo, '26 out – 25 nov');
   });
 
   test('formatadores', () {
@@ -140,18 +141,7 @@ void main() {
   });
 
   testWidgets('InicioEditorial mostra Contas e não mostra cartões', (t) async {
-    appStateSettings = {
-      'materialYou': false,
-      'accentSystemColor': false,
-      'batterySaver': false,
-      'increaseTextContrast': false,
-      'forceFullDarkBackground': false,
-    };
-    await t.pumpWidget(MaterialApp(
-      theme: temaEditorial(Brightness.light),
-      home: Scaffold(body: InicioEditorial.comModelo(_montar())),
-    ));
-    await t.pump(const Duration(seconds: 2));
+    await abrir(t, _montar());
     expect(find.text('Contas'), findsOneWidget);
     expect(find.text('Cartões'), findsNothing);
     expect(find.textContaining('Cartão Gold'), findsNothing);
@@ -160,20 +150,8 @@ void main() {
   });
 
   testWidgets('sem dados mostra estado vazio em vez de R\$ 0,00', (t) async {
-    appStateSettings = {
-      'materialYou': false,
-      'accentSystemColor': false,
-      'batterySaver': false,
-      'increaseTextContrast': false,
-      'forceFullDarkBackground': false,
-    };
-    final vazio = montarModeloInicio(
-        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora);
-    await t.pumpWidget(MaterialApp(
-      theme: temaEditorial(Brightness.light),
-      home: Scaffold(body: InicioEditorial.comModelo(vazio)),
-    ));
-    await t.pump(const Duration(seconds: 2));
+    await abrir(t, montarModeloInicio(
+        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora));
     expect(find.text('Ainda sem dados. Puxe a tela para atualizar.'), findsOneWidget);
     expect(find.textContaining('Disponível'), findsNothing);
     await t.pumpWidget(const SizedBox());

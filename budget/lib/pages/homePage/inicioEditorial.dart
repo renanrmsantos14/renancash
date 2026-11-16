@@ -195,8 +195,7 @@ class _Topo extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(modelo.ciclo.replaceFirst(RegExp(r'^Ciclo (?=\d)'), ''),
-              style: EdTexto.rotulo(context)),
+          Text(modelo.periodo, style: EdTexto.rotulo(context)),
           const SizedBox(height: 6),
           Text(modelo.saudacao, style: EdTexto.h1(context)),
         ],
@@ -332,74 +331,74 @@ class _SemLimite extends StatelessWidget {
 }
 
 /// Metas (não arquivadas) e empréstimos ao pai em aberto, em grupos de até 2 linhas.
-/// Com um grupo só, ele dá o título do bloco. Some quando não há nada.
-class _MetasEmprestimos extends StatelessWidget {
+/// Com um grupo só, ele dá o título do bloco e o subtítulo some. Sem nada, o bloco some.
+class _MetasEmprestimos extends StatefulWidget {
   const _MetasEmprestimos();
+
+  @override
+  State<_MetasEmprestimos> createState() => _MetasEmprestimosState();
+}
+
+class _MetasEmprestimosState extends State<_MetasEmprestimos> {
+  // Criado uma vez: recriar no build reassinaria a consulta a cada recarga da Início.
+  late final Stream<List<Objective>> _metas = database.watchAllObjectives(
+      objectiveType: ObjectiveType.goal, hideArchived: true);
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Objective>>(
-      stream: database.watchAllObjectives(
-          objectiveType: ObjectiveType.goal, hideArchived: true),
+      stream: _metas,
       builder: (context, snap) => ValueListenableBuilder<MbEmprestimos>(
         valueListenable: meuBancoEmprestimos,
         builder: (context, emprestimos, _) {
           final metas = snap.data ?? const <Objective>[];
           final abertos = emprestimos.abertos;
           if (metas.isEmpty && abertos.isEmpty) return const SizedBox.shrink();
-          final verMetas = metas.length > 2
-              ? () => pushRoute(
-                  context, const ObjectivesListPage(backButton: true))
-              : null;
-          final linhasMetas = [
-            for (final o in metas.take(2))
-              WatchTotalAndAmountOfObjective(
-                objective: o,
-                builder: (alvo, total, fracao) => _LinhaProgresso(
-                  titulo: o.name,
-                  valor: '${brl(total)} de ${brl(alvo)}',
-                  fracao: fracao,
-                  onTap: () => pushRoute(
-                      context, ObjectivePage(objectivePk: o.objectivePk)),
-                ),
+          final unico = metas.isEmpty || abertos.isEmpty;
+          final grupos = [
+            if (metas.isNotEmpty)
+              _Grupo(
+                titulo: 'Metas',
+                subtitulo: !unico,
+                acao: metas.length > 2 ? 'Ver todas' : null,
+                onAcao: () => pushRoute(
+                    context, const ObjectivesListPage(backButton: true)),
+                linhas: [
+                  for (final o in metas.take(2))
+                    WatchTotalAndAmountOfObjective(
+                      objective: o,
+                      builder: (alvo, total, fracao) => _LinhaProgresso(
+                        titulo: o.name,
+                        valor: '${brl(total)} de ${brl(alvo)}',
+                        fracao: fracao,
+                        onTap: () => pushRoute(context,
+                            ObjectivePage(objectivePk: o.objectivePk)),
+                      ),
+                    ),
+                ],
+              ),
+            if (abertos.isNotEmpty)
+              _Grupo(
+                titulo: 'Empréstimos',
+                subtitulo: !unico,
+                nota: abertos.length > 2 ? 'mais ${abertos.length - 2}' : null,
+                linhas: [
+                  for (final e in abertos.take(2))
+                    _LinhaProgresso(
+                      titulo: switch (DateTime.tryParse(e.data ?? '')) {
+                        final d? => 'Empréstimo de ${diaMes(d)}',
+                        null => 'Empréstimo',
+                      },
+                      valor: 'Falta ${brl(e.restante)}',
+                      fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
+                    ),
+                ],
               ),
           ];
-          final linhasEmprestimos = [
-            for (final e in abertos.take(2))
-              _LinhaProgresso(
-                titulo: e.data == null
-                    ? 'Empréstimo'
-                    : 'Empréstimo de ${diaMes(DateTime.parse(e.data!))}',
-                valor: 'Falta ${brl(e.restante)}',
-                fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
-              ),
-          ];
-          final maisEmprestimos =
-              abertos.length > 2 ? 'mais ${abertos.length - 2}' : null;
-          if (metas.isEmpty || abertos.isEmpty) {
-            final soMetas = abertos.isEmpty;
-            return _Secao(
-              titulo: soMetas ? 'Metas' : 'Empréstimos',
-              acao: soMetas ? 'Ver todas' : maisEmprestimos,
-              onAcao: soMetas ? verMetas : null,
-              filhos: soMetas ? linhasMetas : linhasEmprestimos,
-            );
-          }
           return _Secao(
-            titulo: 'Metas e empréstimos',
+            titulo: unico ? grupos.single.titulo : 'Metas e empréstimos',
             divisores: false,
-            filhos: [
-              _Grupo(
-                  titulo: 'Metas',
-                  acao: 'Ver todas',
-                  onAcao: verMetas,
-                  linhas: linhasMetas),
-              const SizedBox(height: 8),
-              _Grupo(
-                  titulo: 'Empréstimos',
-                  nota: maisEmprestimos,
-                  linhas: linhasEmprestimos),
-            ],
+            filhos: grupos,
           );
         },
       ),
@@ -408,17 +407,20 @@ class _MetasEmprestimos extends StatelessWidget {
 }
 
 /// Subtítulo pequeno com ação (ou nota) à direita e as linhas do grupo com divisória.
+/// Sem subtítulo (grupo único), a ação e a nota ficam ao lado das linhas, no mesmo lugar.
 class _Grupo extends StatelessWidget {
   const _Grupo(
       {required this.titulo,
       required this.linhas,
       this.acao,
       this.onAcao,
-      this.nota});
+      this.nota,
+      required this.subtitulo});
   final String titulo;
   final String? acao, nota;
   final VoidCallback? onAcao;
   final List<Widget> linhas;
+  final bool subtitulo;
 
   @override
   Widget build(BuildContext context) {
@@ -439,13 +441,17 @@ class _Grupo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Row(children: [
-            Expanded(child: Text(titulo, style: EdTexto.rotulo(context))),
-            if (direita != null) direita,
-          ]),
-        ),
+        if (subtitulo || direita != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(children: [
+              Expanded(
+                  child: subtitulo
+                      ? Text(titulo, style: EdTexto.rotulo(context))
+                      : const SizedBox.shrink()),
+              if (direita != null) direita,
+            ]),
+          ),
         for (var i = 0; i < linhas.length; i++) ...[
           if (i > 0) Divider(height: 1, thickness: 1, color: e.line),
           linhas[i],

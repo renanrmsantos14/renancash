@@ -5,7 +5,7 @@
 import 'dart:io';
 
 import 'package:budget/pages/aparenciaPage.dart';
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart' show meuBancoAvisos;
+import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/mbSync/revisao.dart' show MbItemRevisao, meuBancoRevisar;

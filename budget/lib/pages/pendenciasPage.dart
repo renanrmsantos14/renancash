@@ -1,13 +1,11 @@
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart';
+import 'package:budget/pages/homePage/homePageConexaoCaida.dart' show mbReconectarAviso;
 import 'package:budget/pages/homePage/homePageParaRevisar.dart' show ItemParaRevisar;
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
-
-/// Quantas pendências a aba tem: itens Para revisar + bancos desconectados (selo da barra).
-int mbTotalPendencias() => meuBancoRevisar.value.length + meuBancoAvisos.value.length;
 
 /// Aba Pendências: bancos desconectados numa faixa fixa e a fila Para revisar um item por vez.
 /// "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da fila só nesta sessão.
@@ -26,10 +24,7 @@ class _PendenciasPageState extends State<PendenciasPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.atualizar) {
-      mbAtualizarRevisar();
-      mbAtualizarAvisos();
-    }
+    if (widget.atualizar) mbAtualizarRevisar();
   }
 
   /// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
@@ -228,6 +223,8 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
           duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
     }
     pular();
+    // O mesmo cartão pode voltar a mostrar o item (fila de um só): recoloca no lugar.
+    if (mounted) _dx.value = 0;
   }
 
   @override

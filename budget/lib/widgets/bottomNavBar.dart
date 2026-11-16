@@ -5,10 +5,8 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
 import 'package:budget/pages/editObjectivesPage.dart';
-import 'package:budget/pages/homePage/homePageConexaoCaida.dart'
-    show meuBancoAvisos, mbAtualizarAvisos;
-import 'package:budget/pages/pendenciasPage.dart' show mbTotalPendencias;
-import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar;
+import 'package:budget/struct/mbSync/avisos.dart';
+import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar, mbTotalPendencias;
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
@@ -45,23 +43,27 @@ class BottomNavBar extends StatefulWidget {
 
 class BottomNavBarState extends State<BottomNavBar> {
   // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Metas ("Mais" sai).
-  static const int _indiceMetas = 14;
   static const int _indicePendencias = 18;
 
+  List<String> get _atalhosPareado => [
+        "${appStateSettings["customNavBarShortcut0"]}",
+        "${appStateSettings["customNavBarShortcut1"]}",
+        "pendencias",
+        "${appStateSettings["customNavBarShortcut2"]}",
+        "goals",
+      ];
+
   List<int> get _indicesPareado => [
-        for (var i = 0; i < 3; i++)
-          navBarIconsData[appStateSettings["customNavBarShortcut$i"]]
-                  ?.navigationIndexedStackIndex ??
-              i,
-        _indiceMetas,
-      ]..insert(2, _indicePendencias);
+        for (final a in _atalhosPareado)
+          a == "pendencias"
+              ? _indicePendencias
+              : navBarIconsData[a]?.navigationIndexedStackIndex ?? 0,
+      ];
 
   @override
   void initState() {
     super.initState();
     meuBancoPareado.addListener(_aoMudarPareado);
-    meuBancoUltimaSync.addListener(mbAtualizarAvisos);
-    mbAtualizarAvisos();
   }
 
   void _aoMudarPareado() => setState(() {});
@@ -69,7 +71,6 @@ class BottomNavBarState extends State<BottomNavBar> {
   @override
   void dispose() {
     meuBancoPareado.removeListener(_aoMudarPareado);
-    meuBancoUltimaSync.removeListener(mbAtualizarAvisos);
     super.dispose();
   }
 
@@ -156,13 +157,7 @@ class BottomNavBarState extends State<BottomNavBar> {
     if (getIsFullScreen(context)) return SizedBox.shrink();
     if (meuBancoPareado.value) {
       return _BarraEditorial(
-        atalhos: [
-          "${appStateSettings["customNavBarShortcut0"]}",
-          "${appStateSettings["customNavBarShortcut1"]}",
-          "pendencias",
-          "${appStateSettings["customNavBarShortcut2"]}",
-          "goals",
-        ],
+        atalhos: _atalhosPareado,
         ativo: navigationBarIndex,
         aoTocar: onItemTapped,
       );

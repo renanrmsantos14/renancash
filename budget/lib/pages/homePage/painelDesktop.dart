@@ -292,7 +292,7 @@ class _Disponivel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pontas = modelo.ciclo.replaceFirst('Ciclo ', '').split(' – ');
+    final pontas = modelo.periodo.split(' – ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
