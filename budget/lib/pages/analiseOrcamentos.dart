@@ -4,7 +4,8 @@ import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/homePage/homePagePieChart.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
+import 'package:budget/widgets/editorial/layoutDesktop.dart'
+    show inicioNovaAtiva;
 import 'package:flutter/material.dart';
 
 /// Gráficos e patrimônio no topo de Orçamentos, no celular pareado (a Início nova não os mostra mais).
@@ -16,22 +17,28 @@ class AnaliseOrcamentos extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
         valueListenable: meuBancoPareado,
         builder: (context, _, __) {
-          if (!inicioNovaAtiva(context)) return const SizedBox.shrink();
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(13, 4, 13, 10),
-                child: Text('Análise', style: EdTexto.h2(context)),
-              ),
-              const HomePagePatrimonio(),
-              // 1 = tudo (gastos e receitas), o padrão da Início antiga.
-              const HomePageLineGraph(selectedSlidingSelector: 1),
-              const HomePagePieChart(),
-              const HomePageHeatMap(),
-              const SizedBox(height: 8),
-            ],
-          );
+          if (!inicioNovaAtiva()) return const SizedBox.shrink();
+          return Align(
+              alignment: AlignmentDirectional.topStart,
+              child: ConstrainedBox(
+                  // Computador: os gráficos foram feitos para a largura do celular.
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding:
+                            const EdgeInsetsDirectional.fromSTEB(13, 4, 13, 10),
+                        child: Text('Análise', style: EdTexto.h2(context)),
+                      ),
+                      const HomePagePatrimonio(),
+                      // 1 = tudo (gastos e receitas), o padrão da Início antiga.
+                      const HomePageLineGraph(selectedSlidingSelector: 1),
+                      const HomePagePieChart(),
+                      const HomePageHeatMap(),
+                      const SizedBox(height: 8),
+                    ],
+                  )));
         },
       );
 }

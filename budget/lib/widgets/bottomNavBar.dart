@@ -5,8 +5,7 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart' show inicioNovaAtiva;
 import 'package:budget/pages/editObjectivesPage.dart';
-import 'package:budget/struct/mbSync/avisos.dart';
-import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar, mbTotalPendencias;
+import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
@@ -44,7 +43,6 @@ class BottomNavBar extends StatefulWidget {
 class BottomNavBarState extends State<BottomNavBar> {
   // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Mais.
   // As metas ficam na Início ("Ver todas"); Mais é o caminho para configurações, backup e sobre.
-  static const int _indicePendencias = 18;
 
   List<String> get _atalhosPareado => [
         "${appStateSettings["customNavBarShortcut0"]}",
@@ -55,7 +53,7 @@ class BottomNavBarState extends State<BottomNavBar> {
       ];
 
   // Atalho inválido cai no índice padrão da posição, como na barra normal (0, 1, 2).
-  static const List<int> _padraoPareado = [0, 1, _indicePendencias, 2, 3];
+  static const List<int> _padraoPareado = [0, 1, 18, 2, 3];
 
   List<int> get _indicesPareado {
     final atalhos = _atalhosPareado;
@@ -457,7 +455,7 @@ class SelectNavBarShortcutPopup extends StatelessWidget {
           shortcutAppSettingKey: shortcutAppSettingKey,
           navBarIconDataKey: "home",
           // Celular: a Início é fixa (sem editor de seções).
-          onSettings: !inicioNovaAtiva(context)
+          onSettings: !inicioNovaAtiva()
               ? () => pushRoute(context, EditHomePage())
               : null,
         ),
@@ -746,39 +744,8 @@ class _IconeAba extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (atalho != "pendencias") {
-      return Icon(navBarIconsData[atalho]?.iconData ?? Icons.circle_outlined,
-          size: 22, color: cor);
-    }
-    final e = cores(context);
-    return ListenableBuilder(
-      listenable: Listenable.merge([meuBancoRevisar, meuBancoAvisos]),
-      builder: (context, _) {
-        final total = mbTotalPendencias();
-        return Stack(clipBehavior: Clip.none, children: [
-          Icon(Icons.inbox_outlined, size: 22, color: cor),
-          if (total > 0)
-            Positioned(
-              top: -5,
-              right: -9,
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 16),
-                height: 16,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: e.acc, borderRadius: BorderRadius.circular(8)),
-                child: Text(total > 99 ? '99+' : '$total',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 10,
-                        height: 1,
-                        fontWeight: FontWeight.w700,
-                        color: e.bg)),
-              ),
-            ),
-        ]);
-      },
-    );
+    final icone = Icon(navBarIconsData[atalho]?.iconData ?? Icons.circle_outlined,
+        size: 22, color: cor);
+    return atalho == "pendencias" ? SeloPendencias(child: icone) : icone;
   }
 }

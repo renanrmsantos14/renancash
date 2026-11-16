@@ -9,14 +9,4 @@ void main() {
     await t.pumpWidget(const MaterialApp(home: Scaffold(body: AnaliseOrcamentos())));
     expect(find.text('Análise'), findsNothing);
   });
-
-  testWidgets('computador pareado: Análise fica na Início antiga, não em Orçamentos', (t) async {
-    meuBancoPareado.value = true;
-    addTearDown(() => meuBancoPareado.value = false);
-    t.view.physicalSize = const Size(1440, 900);
-    t.view.devicePixelRatio = 1;
-    addTearDown(t.view.reset);
-    await t.pumpWidget(const MaterialApp(home: Scaffold(body: AnaliseOrcamentos())));
-    expect(find.text('Análise'), findsNothing);
-  });
 }

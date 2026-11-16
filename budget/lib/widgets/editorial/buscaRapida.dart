@@ -115,7 +115,7 @@ class _BuscaRapidaState extends State<BuscaRapida> {
   List<_Item> get _itens {
     final q = _campo.text.trim().toLowerCase();
     return [
-      for (final p in mbItensLateral)
+      for (final p in mbItensLateralVisiveis())
         if (q.isEmpty || p.rotulo.toLowerCase().contains(q))
           _Item(p.rotulo, 'Ir para', () {
             Navigator.of(context).pop();

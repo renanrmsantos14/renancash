@@ -15,9 +15,9 @@ const double mbLarguraFormulario = 420;
 bool ehDesktop(BuildContext c) =>
     MediaQuery.sizeOf(c).width >= mbLarguraDesktop;
 
-/// Celular pareado com o Meu Banco: Início nova (fixa) e gráficos em Orçamentos.
-/// Computador e app não pareado: Início antiga, com seções e gráficos.
-bool inicioNovaAtiva(BuildContext c) => meuBancoPareado.value && !ehDesktop(c);
+/// Pareado com o Meu Banco: Início nova (fixa; no computador, o PainelDesktop) e gráficos em
+/// Orçamentos. Não pareado: Início antiga, com seções e gráficos.
+bool inicioNovaAtiva() => meuBancoPareado.value;
 
 // transactionPk da transação com o detalhe aberto na coluna 3.
 final ValueNotifier<String?> mbTransacaoSelecionada = ValueNotifier(null);

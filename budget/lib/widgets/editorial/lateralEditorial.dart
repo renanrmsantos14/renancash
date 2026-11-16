@@ -12,6 +12,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/versaoCanto.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
+import 'package:budget/widgets/editorial/seloPendencias.dart';
 import 'package:flutter/material.dart';
 import 'package:timer_builder/timer_builder.dart';
 
@@ -20,11 +21,18 @@ typedef ItemLateral = ({String chave, String rotulo});
 const List<ItemLateral> mbItensLateral = [
   (chave: 'home', rotulo: 'Início'),
   (chave: 'transactions', rotulo: 'Transações'),
+  (chave: 'pendencias', rotulo: 'Pendências'),
   (chave: 'budgets', rotulo: 'Orçamentos'),
   (chave: 'goals', rotulo: 'Metas'),
   (chave: 'loans', rotulo: 'Dívidas'),
   (chave: 'subscriptions', rotulo: 'Assinaturas'),
 ];
+
+/// Itens da lateral e da busca: Pendências só existe no modo pareado.
+List<ItemLateral> mbItensLateralVisiveis() => [
+      for (final i in mbItensLateral)
+        if (i.chave != 'pendencias' || meuBancoPareado.value) i
+    ];
 
 typedef ContaLateral = ({String id, String nome});
 
@@ -119,18 +127,18 @@ class _LateralEditorialState extends State<LateralEditorial> {
               ),
             ),
             Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: mbPaginaAtual,
-                builder: (context, atual, _) => ListView(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([mbPaginaAtual, meuBancoPareado]),
+                builder: (context, _) => ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
-                    for (final item in mbItensLateral)
+                    for (final item in mbItensLateralVisiveis())
                       _ItemNavegacao(
-                        icone: navBarIconsData[item.chave]!.iconData,
+                        icone: _icone(item.chave),
                         rotulo: item.rotulo,
                         ativo: navBarIconsData[item.chave]!
                                 .navigationIndexedStackIndex ==
-                            atual,
+                            mbPaginaAtual.value,
                         onTap: () => mbIrParaPagina(navBarIconsData[item.chave]!
                             .navigationIndexedStackIndex),
                       ),
@@ -177,13 +185,20 @@ class _LateralEditorialState extends State<LateralEditorial> {
   }
 }
 
+/// Ícone do item; Pendências leva a bolinha com o total.
+Widget Function(Color) _icone(String chave) => (cor) {
+      final icone =
+          Icon(navBarIconsData[chave]!.iconData, size: 18, color: cor);
+      return chave == 'pendencias' ? SeloPendencias(child: icone) : icone;
+    };
+
 class _ItemNavegacao extends StatelessWidget {
   const _ItemNavegacao(
       {this.icone,
       required this.rotulo,
       required this.ativo,
       required this.onTap});
-  final IconData? icone;
+  final Widget Function(Color cor)? icone;
   final String rotulo;
   final bool ativo;
   final VoidCallback onTap;
@@ -215,7 +230,7 @@ class _ItemNavegacao extends StatelessWidget {
           child: Row(
             children: [
               if (icone != null) ...[
-                Icon(icone, size: 18, color: ativo ? e.acc : e.mu),
+                icone!(ativo ? e.acc : e.mu),
                 const SizedBox(width: 10),
               ],
               Expanded(

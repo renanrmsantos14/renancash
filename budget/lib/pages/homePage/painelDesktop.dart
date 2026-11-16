@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
-import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/pages/homePage/inicioEditorial.dart';
+import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
-import 'package:budget/pages/budgetPage.dart' show determineBudgetPolarity;
 import 'package:budget/widgets/editorial/buscaRapida.dart';
 import 'package:budget/widgets/editorial/detalheTransacao.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
@@ -16,41 +16,6 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/globalSnackbar.dart' show SnackbarMessage;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-typedef OrcamentoPainel = ({String nome, double gasto, double limite});
-
-Future<List<OrcamentoPainel>> mbCarregarOrcamentos(BuildContext context) async {
-  final carteiras = Provider.of<AllWallets>(context, listen: false);
-  final agora = DateTime.now();
-  final saida = <OrcamentoPainel>[];
-  for (final b in await database.getAllBudgets()) {
-    if (b.archived) continue;
-    final periodo = getBudgetDate(b, agora);
-    final total = await database
-        .watchTotalSpentInTimeRangeFromCategories(
-          allWallets: carteiras,
-          start: periodo.start,
-          end: periodo.end,
-          categoryFks: b.categoryFks,
-          categoryFksExclude: b.categoryFksExclude,
-          budgetTransactionFilters: b.budgetTransactionFilters,
-          memberTransactionFilters: b.memberTransactionFilters,
-          onlyShowTransactionsBelongingToBudgetPk:
-              b.sharedKey != null || b.addedTransactionsOnly == true
-                  ? b.budgetPk
-                  : null,
-          budget: b,
-        )
-        .first;
-    saida.add((
-      nome: b.name,
-      gasto: absoluteZero((total ?? 0) * determineBudgetPolarity(b)),
-      limite: b.amount
-    ));
-  }
-  return saida;
-}
 
 Future<void> mbAtualizarComAviso() async =>
     openSnackbar(SnackbarMessage(title: await meuBancoAtualizar()));
@@ -58,19 +23,14 @@ Future<void> mbAtualizarComAviso() async =>
 class PainelDesktop extends StatefulWidget {
   const PainelDesktop({super.key})
       : _modelo = null,
-        _transacoes = const [],
-        _orcamentos = const [];
+        _transacoes = const [];
   const PainelDesktop.comDados(ModeloInicio modelo,
-      {super.key,
-      List<TransacaoInicio> transacoes = const [],
-      List<OrcamentoPainel> orcamentos = const []})
+      {super.key, List<TransacaoInicio> transacoes = const []})
       : _modelo = modelo,
-        _transacoes = transacoes,
-        _orcamentos = orcamentos;
+        _transacoes = transacoes;
 
   final ModeloInicio? _modelo;
   final List<TransacaoInicio> _transacoes;
-  final List<OrcamentoPainel> _orcamentos;
 
   @override
   State<PainelDesktop> createState() => _PainelDesktopState();
@@ -79,7 +39,6 @@ class PainelDesktop extends StatefulWidget {
 class _PainelDesktopState extends State<PainelDesktop> {
   ModeloInicio? _modelo;
   List<TransacaoInicio> _transacoes = const [];
-  List<OrcamentoPainel> _orcamentos = const [];
   bool _atualizando = false;
   StreamSubscription<void>? _assinatura;
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
@@ -90,9 +49,9 @@ class _PainelDesktopState extends State<PainelDesktop> {
     if (widget._modelo != null) {
       _modelo = widget._modelo;
       _transacoes = widget._transacoes;
-      _orcamentos = widget._orcamentos;
       _publicarLista();
     } else {
+      mbAtualizarRevisar();
       meuBancoUltimaSync.addListener(_recarga.pedir);
       // O 1º evento do stream já faz a carga inicial (sem corrida com uma gravação entre duas leituras).
       _assinatura = mbMudouUltimas().listen((_) => _recarga.pedir());
@@ -117,18 +76,13 @@ class _PainelDesktopState extends State<PainelDesktop> {
   Future<void> _carregar() async {
     final r = await mbCarregarModeloInicio(
         '${appStateSettings["username"] ?? ""}', DateTime.now());
-    if (!mounted) return;
-    final orc = await mbCarregarOrcamentos(context);
-    if (!mounted) return;
-    if (r.modelo == _modelo &&
-        listEquals(r.transacoes, _transacoes) &&
-        listEquals(orc, _orcamentos)) {
+    if (!mounted ||
+        (r.modelo == _modelo && listEquals(r.transacoes, _transacoes))) {
       return;
     }
     setState(() {
       _modelo = r.modelo;
       _transacoes = r.transacoes;
-      _orcamentos = orc;
     });
     _publicarLista();
   }
@@ -144,6 +98,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
   Widget build(BuildContext context) {
     final e = cores(context);
     final m = _modelo;
+    final real = widget._modelo == null;
     return ColoredBox(
       color: e.bg,
       child: m == null
@@ -160,26 +115,41 @@ class _PainelDesktopState extends State<PainelDesktop> {
                   Text('Ainda sem dados. Use Atualizar.',
                       style: EdTexto.corpo(context).copyWith(color: e.mu))
                 else
-                  CartaoEscuro(
-                    padding: const EdgeInsets.all(28),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _Disponivel(modelo: m)),
-                          const _Separador(),
-                          Expanded(child: _GastoCiclo(modelo: m)),
-                        ],
-                      ),
-                    ),
+                  CartaoSaldoCiclo(
+                    modelo: m,
+                    onTap: real
+                        ? () => mbAbrirOrcamentoCiclo(context, editar: false)
+                        : null,
+                    onDefinirLimite: real
+                        ? () => mbAbrirOrcamentoCiclo(context, editar: true)
+                        : null,
+                    lateral: _GastoPorDia(modelo: m),
                   ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 8),
+                // Mesmos blocos do celular, lado a lado, mais as últimas transações.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: _Tabela(transacoes: _transacoes)),
-                    const SizedBox(width: 40),
-                    Expanded(flex: 2, child: _Orcamentos(itens: _orcamentos)),
+                    // Metas leem o banco local; fora do app (testes, prints) a coluna sai.
+                    if (real) const MetasEmprestimosInicio(colunaFlex: 3),
+                    if (m.contas.isNotEmpty) ...[
+                      Expanded(
+                        flex: 3,
+                        child: ContasInicio(
+                            modelo: m,
+                            onGerenciar: real
+                                ? () => pushRoute(context, const MeuBancoPage())
+                                : null,
+                            onAbrirConta:
+                                real ? (c) => mbAbrirConta(context, c) : null),
+                      ),
+                      const SizedBox(width: 40),
+                    ],
+                    Expanded(
+                        flex: 4,
+                        child: Padding(
+                            padding: const EdgeInsets.only(top: 20),
+                            child: _Tabela(transacoes: _transacoes))),
                   ],
                 ),
               ],
@@ -200,7 +170,6 @@ class _Topo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final d = modelo.diasRestantes;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -208,9 +177,7 @@ class _Topo extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                  '${modelo.ciclo} · $d ${d == 1 ? 'dia restante' : 'dias restantes'}',
-                  style: EdTexto.rotulo(context)),
+              Text(modelo.periodo, style: EdTexto.rotulo(context)),
               const SizedBox(height: 6),
               Text(modelo.saudacao, style: EdTexto.h1(context)),
             ],
@@ -276,149 +243,35 @@ class _Topo extends StatelessWidget {
   }
 }
 
-class _Separador extends StatelessWidget {
-  const _Separador();
-
-  @override
-  Widget build(BuildContext context) => Container(
-      width: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 32),
-      color: cores(context).line);
-}
-
-class _Disponivel extends StatelessWidget {
-  const _Disponivel({required this.modelo});
+class _GastoPorDia extends StatelessWidget {
+  const _GastoPorDia({required this.modelo});
   final ModeloInicio modelo;
 
   @override
   Widget build(BuildContext context) {
     final pontas = modelo.periodo.split(' – ');
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Disponível agora', style: EdTexto.rotulo(context)),
-        const SizedBox(height: 8),
-        ContagemValor(
-            valor: modelo.disponivel,
-            formatar: brl,
-            estilo: EdTexto.numeroGrande(context, desktop: true)),
-        if (modelo.origemDisponivel.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(modelo.origemDisponivel, style: EdTexto.rotulo(context)),
-        ],
-        const SizedBox(height: 24),
-        BarrasDias(
-            valores: modelo.porDia, indiceHoje: modelo.indiceHoje, altura: 50),
+        Text('Gasto por dia', style: EdTexto.rotulo(context)),
+        const SizedBox(height: 16),
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: BarrasDias(
+                valores: modelo.porDia,
+                indiceHoje: modelo.indiceHoje,
+                altura: 90),
+          ),
+        ),
         const SizedBox(height: 6),
         Row(
           children: [
             Expanded(child: Text(pontas.first, style: EdTexto.mono(context))),
-            Text('Gasto por dia', style: EdTexto.rotulo(context)),
-            Expanded(
-                child: Text(pontas.length > 1 ? pontas.last : '',
-                    textAlign: TextAlign.end, style: EdTexto.mono(context))),
+            Text(pontas.length > 1 ? pontas.last : '',
+                style: EdTexto.mono(context)),
           ],
         ),
-      ],
-    );
-  }
-}
-
-class _GastoCiclo extends StatelessWidget {
-  const _GastoCiclo({required this.modelo});
-  final ModeloInicio modelo;
-
-  @override
-  Widget build(BuildContext context) {
-    final e = cores(context);
-    final m = modelo;
-    final limite = m.limite;
-    final pct = m.percentual ??
-        (limite != null && limite > 0 ? m.consumido / limite * 100 : null);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Gasto no ciclo', style: EdTexto.h2(context)),
-        const SizedBox(height: 8),
-        Text(brl(m.consumido),
-            style: EdTexto.numeroGrande(context)
-                .copyWith(fontSize: 32, letterSpacing: -.03 * 32)),
-        const SizedBox(height: 14),
-        if (limite != null && limite > 0) ...[
-          MedidorEditorial(
-              fracao: m.consumido / limite, alerta: (pct ?? 0) >= 100),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                  child: Text('${(pct ?? 0).round()}% do previsto',
-                      overflow: TextOverflow.ellipsis,
-                      style: EdTexto.rotulo(context))),
-              const SizedBox(width: 8),
-              Flexible(
-                  child: Text('Previsto ${brl(limite)}',
-                      overflow: TextOverflow.ellipsis,
-                      style: EdTexto.rotulo(context))),
-            ],
-          ),
-        ] else
-          Text('Defina o limite no painel', style: EdTexto.rotulo(context)),
-        for (final c in m.cartoes) ...[
-          const SizedBox(height: 20),
-          Divider(height: 1, thickness: 1, color: e.line),
-          const SizedBox(height: 16),
-          _Cartao(cartao: c),
-        ],
-      ],
-    );
-  }
-}
-
-class _Cartao extends StatelessWidget {
-  const _Cartao({required this.cartao});
-  final CartaoInicio cartao;
-
-  @override
-  Widget build(BuildContext context) {
-    final e = cores(context);
-    final c = cartao;
-    final pct = c.pct;
-    final alto = pct != null && pct >= 100;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('${c.nome}${c.final4.isEmpty ? '' : ' ·${c.final4}'}',
-                  overflow: TextOverflow.ellipsis, style: EdTexto.h2(context)),
-            ),
-            if (pct != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                    color: alto ? e.warnbg : e.chip,
-                    borderRadius: BorderRadius.circular(6)),
-                child: Text('${pct.round()}% DO LIMITE',
-                    style: TextStyle(
-                        fontFamily: 'Geist',
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: alto ? e.warntx : e.acc)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text('Fatura ${brl(c.fatura)}',
-            style:
-                EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
-        if (c.limite != null) ...[
-          const SizedBox(height: 8),
-          MedidorEditorial(fracao: c.fatura / c.limite!, alerta: alto),
-          const SizedBox(height: 8),
-          Text('Limite ${brl(c.limite!)}', style: EdTexto.rotulo(context)),
-        ],
       ],
     );
   }
@@ -545,54 +398,6 @@ class _Tabela extends StatelessWidget {
                 ),
               );
             },
-          ),
-      ],
-    );
-  }
-}
-
-class _Orcamentos extends StatelessWidget {
-  const _Orcamentos({required this.itens});
-  final List<OrcamentoPainel> itens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 44,
-          child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Orçamentos', style: EdTexto.h2(context))),
-        ),
-        if (itens.isEmpty)
-          Text('Nenhum orçamento.', style: EdTexto.rotulo(context)),
-        for (final o in itens)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(o.nome,
-                          overflow: TextOverflow.ellipsis,
-                          style: EdTexto.corpo(context)
-                              .copyWith(fontWeight: FontWeight.w500)),
-                    ),
-                    Text('${brl(o.gasto)} de ${brl(o.limite)}',
-                        style: EdTexto.rotulo(context)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                MedidorEditorial(
-                    fracao: o.limite > 0 ? o.gasto / o.limite : 0,
-                    alerta: o.limite > 0 && o.gasto >= o.limite),
-              ],
-            ),
           ),
       ],
     );
