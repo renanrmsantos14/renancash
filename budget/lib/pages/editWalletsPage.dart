@@ -2,8 +2,6 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
-import 'package:budget/pages/editAssociatedTitlesPage.dart';
-import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
@@ -22,7 +20,6 @@ import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:budget/widgets/textWidgets.dart';
-import 'package:budget/widgets/transactionEntry/transactionEntryTag.dart';
 import 'package:budget/widgets/walletEntry.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart' hide SliverReorderableList;
@@ -32,6 +29,11 @@ import 'package:budget/modified/reorderable_list.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:provider/provider.dart';
 import 'exchangeRatesPage.dart';
+import 'package:budget/struct/currencyFunctions.dart';
+import 'package:budget/struct/mbSync/estadoInicio.dart' show mbSigla;
+import 'package:budget/widgets/editorial/contas.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:sliver_tools/sliver_tools.dart';
 
 class EditWalletsPage extends StatefulWidget {
   EditWalletsPage({Key? key, this.runWhenOpen}) : super(key: key);
@@ -47,6 +49,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
   int currentReorder = -1;
   String searchValue = "";
   bool isFocused = false;
+  final DateTime _aberta = DateTime.now();
 
   @override
   void initState() {
@@ -77,7 +80,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
         dragDownToDismiss: true,
         dragDownToDismissEnabled: dragDownToDismissEnabled,
         scrollToTopButton: true,
-        title: "edit-accounts".tr(),
+        title: "Contas",
         floatingActionButton: AnimateFABDelayed(
           fab: AddFAB(
             tooltip: "add-account".tr(),
@@ -125,81 +128,38 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
           ),
         ],
         slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-              child: Focus(
-                onFocusChange: (value) {
-                  setState(() {
-                    isFocused = value;
-                  });
-                },
-                child: TextInput(
-                  labelText: "search-accounts-placeholder".tr(),
-                  icon: appStateSettings["outlinedIcons"]
-                      ? Icons.search_outlined
-                      : Icons.search_rounded,
-                  onSubmitted: (value) {
+          // Busca só quando a lista é longa; com poucas contas ela é ruído.
+          if (Provider.of<AllWallets>(context).list.length > 6 ||
+              searchValue != "")
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(bottom: 8.0),
+                child: Focus(
+                  onFocusChange: (value) {
                     setState(() {
-                      searchValue = value;
+                      isFocused = value;
                     });
                   },
-                  onChanged: (value) {
-                    setState(() {
-                      searchValue = value;
-                    });
-                  },
-                  autoFocus: false,
+                  child: TextInput(
+                    labelText: "search-accounts-placeholder".tr(),
+                    icon: appStateSettings["outlinedIcons"]
+                        ? Icons.search_outlined
+                        : Icons.search_rounded,
+                    onSubmitted: (value) {
+                      setState(() {
+                        searchValue = value;
+                      });
+                    },
+                    onChanged: (value) {
+                      setState(() {
+                        searchValue = value;
+                      });
+                    },
+                    autoFocus: false,
+                  ),
                 ),
               ),
             ),
-          ),
-          // SliverToBoxAdapter(
-          //   child: AnimatedExpanded(
-          //     expand: hideIfSearching(searchValue, isFocused, context) == false,
-          //     child: ShowAccountLabelSettingToggle(),
-          //   ),
-          // ),
-          // SliverToBoxAdapter(
-          //   child: AnimatedExpanded(
-          //     expand: hideIfSearching(searchValue, isFocused, context) == false,
-          //     child: SettingsContainerOpenPage(
-          //       onOpen: () {
-          //         checkIfExchangeRateChangeBefore();
-          //       },
-          //       onClosed: () {
-          //         checkIfExchangeRateChangeAfter();
-          //       },
-          //       openPage: ExchangeRates(),
-          //       title: "exchange-rates".tr(),
-          //       icon: appStateSettings["outlinedIcons"]
-          //           ? Icons.account_balance_wallet_outlined
-          //           : Icons.account_balance_wallet_rounded,
-          //     ),
-          //   ),
-          // ),
-          // SliverToBoxAdapter(
-          //   child: AnimatedExpanded(
-          //     expand: hideIfSearching(searchValue, isFocused, context) == false,
-          //     child: SettingsContainer(
-          //       onTap: () {
-          //         openBottomSheet(
-          //           context,
-          //           fullSnap: true,
-          //           TransferBalancePopup(
-          //             allowEditWallet: true,
-          //             wallet: Provider.of<AllWallets>(context, listen: false)
-          //                 .indexedByPk[appStateSettings["selectedWalletPk"]]!,
-          //           ),
-          //         );
-          //       },
-          //       title: "transfer-balance".tr(),
-          //       icon: appStateSettings["outlinedIcons"]
-          //           ? Icons.compare_arrows_outlined
-          //           : Icons.compare_arrows_rounded,
-          //     ),
-          //   ),
-          // ),
           StreamBuilder<List<WalletWithDetails>>(
             stream: database.watchAllWalletsWithDetails(
                 searchFor: searchValue == "" ? null : searchValue),
@@ -212,148 +172,111 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                 );
               }
               if (snapshot.hasData && (snapshot.data ?? []).length > 0) {
-                return SliverReorderableList(
-                  onReorderStart: (index) {
-                    HapticFeedback.heavyImpact();
-                    setState(() {
-                      dragDownToDismissEnabled = false;
-                      currentReorder = index;
-                    });
-                  },
-                  onReorderEnd: (_) {
-                    setState(() {
-                      dragDownToDismissEnabled = true;
-                      currentReorder = -1;
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    WalletWithDetails walletWithDetails = snapshot.data![index];
-                    TransactionWallet wallet = walletWithDetails.wallet;
-                    Color accentColor = dynamicPastel(
-                        context,
-                        HexColor(wallet.colour,
-                            defaultColor:
-                                Theme.of(context).colorScheme.primary),
-                        amountLight: 0.55,
-                        amountDark: 0.35);
-                    return EditRowEntry(
-                      extraIcon: Provider.of<SelectedWalletPk>(context)
-                                  .selectedWalletPk ==
-                              wallet.walletPk
-                          ? appStateSettings["outlinedIcons"]
-                              ? Icons.star_outlined
-                              : Icons.star_rounded
-                          : Icons.star_outline,
-                      onExtra: () async {
-                        setPrimaryWallet(
-                          wallet.walletPk,
-                          allWallets:
-                              Provider.of<AllWallets>(context, listen: false),
-                        );
-                      },
-                      canDelete: (wallet.walletPk != "0" ||
-                          Provider.of<AllWallets>(context, listen: true)
-                                  .indexedByPk
-                                  .entries
-                                  .length >
-                              1),
-                      canReorder: searchValue == "" &&
-                          (snapshot.data ?? []).length != 1,
-                      currentReorder:
-                          currentReorder != -1 && currentReorder != index,
-                      index: index,
-                      accentColor: accentColor,
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TextFont(
-                            text: wallet.name,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 21,
-                          ),
-                          Container(height: 2),
-                          TextFont(
-                            textAlign: TextAlign.start,
-                            text: convertToMoney(
-                              Provider.of<AllWallets>(context),
-                              walletWithDetails.totalSpent ?? 0,
-                              currencyKey: wallet.currency,
-                              decimals: wallet.decimals,
-                              addCurrencyName: true,
-                            ).toString(),
-                            fontSize: 15,
-                          ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              AnimatedSizeSwitcher(
-                                child: Provider.of<SelectedWalletPk>(context)
-                                            .selectedWalletPk ==
-                                        wallet.walletPk
-                                    ? Padding(
-                                        padding:
-                                            const EdgeInsetsDirectional.only(
-                                                top: 1, end: 5),
-                                        child: TransactionTag(
-                                          padding: const EdgeInsetsDirectional
-                                              .symmetric(
-                                              horizontal: 7, vertical: 1.1),
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          name: "primary-default".tr(),
-                                          margin: EdgeInsetsDirectional.zero,
-                                        ),
-                                      )
-                                    : Container(),
-                              ),
-                              TextFont(
-                                textAlign: TextAlign.start,
-                                text: walletWithDetails.numberTransactions
-                                        .toString() +
-                                    " " +
-                                    (walletWithDetails.numberTransactions == 1
-                                        ? "transaction".tr().toLowerCase()
-                                        : "transactions".tr().toLowerCase()),
-                                fontSize: 14,
-                                textColor: getColor(context, "black")
-                                    .withOpacity(0.65),
-                              ),
-                            ],
-                          ),
-                        ],
+                final allWallets = Provider.of<AllWallets>(context);
+                final contas = snapshot.data!;
+                // Total na moeda principal, como na Início.
+                final total = contas.fold<double>(
+                    0,
+                    (soma, w) =>
+                        soma +
+                        (w.totalSpent ?? 0) *
+                            amountRatioToPrimaryCurrency(
+                                allWallets, w.wallet.currency));
+                return MultiSliver(children: [
+                  if (searchValue == "")
+                    SliverToBoxAdapter(
+                      child: TotalContas(
+                        total: total,
+                        quantidade: contas.length,
+                        formatar: (v) => convertToMoney(allWallets, v),
                       ),
-                      onDelete: () async {
-                        return (await deleteWalletPopup(
-                              context,
+                    ),
+                  SliverReorderableList(
+                    onReorderStart: (index) {
+                      HapticFeedback.heavyImpact();
+                      setState(() {
+                        dragDownToDismissEnabled = false;
+                        currentReorder = index;
+                      });
+                    },
+                    onReorderEnd: (_) {
+                      setState(() {
+                        dragDownToDismissEnabled = true;
+                        currentReorder = -1;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      WalletWithDetails walletWithDetails =
+                          snapshot.data![index];
+                      TransactionWallet wallet = walletWithDetails.wallet;
+                      final principal = Provider.of<SelectedWalletPk>(context)
+                              .selectedWalletPk ==
+                          wallet.walletPk;
+                      final n = walletWithDetails.numberTransactions;
+                      return EntradaSuave(
+                        key: ValueKey(wallet.walletPk),
+                        indice: index,
+                        animar: DateTime.now().difference(_aberta) <
+                            const Duration(milliseconds: 600),
+                        child: EditRowEntry(
+                          extraIcon: principal
+                              ? appStateSettings["outlinedIcons"]
+                                  ? Icons.star_outlined
+                                  : Icons.star_rounded
+                              : Icons.star_outline,
+                          onExtra: () async {
+                            setPrimaryWallet(
+                              wallet.walletPk,
+                              allWallets: Provider.of<AllWallets>(context,
+                                  listen: false),
+                            );
+                          },
+                          // Excluir fica no menu da conta (com confirmação):
+                          // a linha mantém só principal e reordenar.
+                          canDelete: false,
+                          canReorder: searchValue == "" &&
+                              (snapshot.data ?? []).length != 1,
+                          currentReorder:
+                              currentReorder != -1 && currentReorder != index,
+                          index: index,
+                          content: LinhaConta(
+                            sigla: mbSigla(wallet.name),
+                            nome: wallet.name,
+                            detalhe: [
+                              if (principal) "Principal",
+                              n == 1 ? "1 transação" : "$n transações",
+                            ].join(" · "),
+                            saldo: comSinal(
+                                walletWithDetails.totalSpent ?? 0,
+                                (v) => convertToMoney(allWallets, v,
+                                    currencyKey: wallet.currency,
+                                    decimals: wallet.decimals,
+                                    addCurrencyName: true)),
+                          ),
+                          openPage: AddWalletPage(
                               wallet: wallet,
                               routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.None,
-                            )) ==
-                            DeletePopupAction.Delete;
-                      },
-                      openPage: AddWalletPage(
-                          wallet: wallet,
-                          routesToPopAfterDelete: RoutesToPopAfterDelete.One),
-                      key: ValueKey(wallet.walletPk),
-                    );
-                  },
-                  itemCount: snapshot.data!.length,
-                  onReorder: (_intPrevious, _intNew) async {
-                    WalletWithDetails oldWalletWithDetails =
-                        snapshot.data![_intPrevious];
-                    TransactionWallet oldWallet = oldWalletWithDetails.wallet;
+                                  RoutesToPopAfterDelete.One),
+                        ),
+                      );
+                    },
+                    itemCount: snapshot.data!.length,
+                    onReorder: (_intPrevious, _intNew) async {
+                      WalletWithDetails oldWalletWithDetails =
+                          snapshot.data![_intPrevious];
+                      TransactionWallet oldWallet = oldWalletWithDetails.wallet;
 
-                    if (_intNew > _intPrevious) {
-                      await database.moveWallet(
-                          oldWallet.walletPk, _intNew - 1, oldWallet.order);
-                    } else {
-                      await database.moveWallet(
-                          oldWallet.walletPk, _intNew, oldWallet.order);
-                    }
-                    return true;
-                  },
-                );
+                      if (_intNew > _intPrevious) {
+                        await database.moveWallet(
+                            oldWallet.walletPk, _intNew - 1, oldWallet.order);
+                      } else {
+                        await database.moveWallet(
+                            oldWallet.walletPk, _intNew, oldWallet.order);
+                      }
+                      return true;
+                    },
+                  ),
+                ]);
               }
               return SliverToBoxAdapter(
                 child: Container(),
