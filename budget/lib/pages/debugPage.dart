@@ -36,7 +36,7 @@ class DebugPage extends StatelessWidget {
     return PageFramework(
       dragDownToDismiss: true,
       horizontalPaddingConstrained: true,
-      title: "Debug Flags",
+      title: "Depuração",
       actions: [
         CustomPopupMenuButton(
           showButtons: true,
@@ -54,10 +54,10 @@ class DebugPage extends StatelessWidget {
         ),
       ],
       subtitle: TextFont(
-        text: "Use at your own risk",
+        text: "Opções de teste. Use por sua conta e risco.",
         textColor: getColor(context, "expenseAmount"),
-        fontWeight: FontWeight.bold,
-        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        fontSize: 13,
         maxLines: 5,
       ),
       subtitleAlignment: AlignmentDirectional.bottomStart,

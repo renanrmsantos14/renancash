@@ -161,8 +161,11 @@ class MorePages extends StatelessWidget {
           pagina("categoriesDetails", EditCategoriesPage()),
           pagina("titlesDetails", EditAssociatedTitlesPage()),
         ],
-        SettingsHeader(title: "App"),
-        if (hasSideNavigation == false)
+        // No computador esta página já é a de Configurações.
+        if (hasSideNavigation)
+          ...configuracoesItens(context)
+        else ...[
+          SettingsHeader(title: "App"),
           SettingsContainerOpenPage(
             openPage: SettingsPageFramework(
               key: settingsPageFrameworkStateKey,
@@ -171,21 +174,20 @@ class MorePages extends StatelessWidget {
             icon: navBarIconsData["settings"]!.iconData,
             description: appStateSettings["showExtraInfoText"] == false
                 ? null
-                : "settings-and-customization-description".tr(),
+                : "Aparência, transações e backup",
           ),
-        if (notificationsGlobalEnabled)
-          pagina("notifications", NotificationsPage()),
-        if (hasSideNavigation == false)
+          if (notificationsGlobalEnabled)
+            pagina("notifications", NotificationsPage()),
           GoogleAccountLoginButton(
             key: settingsGoogleAccountLoginButtonKey,
             isOutlinedButton: false,
           ),
-        SettingsContainerOpenPage(
-          openPage: AboutPage(),
-          title: "about-app".tr(namedArgs: {"app": globalAppName}),
-          icon: navBarIconsData["about"]!.iconData,
-        ),
-        if (hasSideNavigation) SettingsPageContent(),
+          SettingsContainerOpenPage(
+            openPage: AboutPage(),
+            title: "about-app".tr(namedArgs: {"app": globalAppName}),
+            icon: navBarIconsData["about"]!.iconData,
+          ),
+        ],
       ],
     );
   }
@@ -252,151 +254,145 @@ class SettingsPageFrameworkState extends State<SettingsPageFramework> {
     return PageFramework(
       title: "settings".tr(),
       dragDownToDismiss: true,
-      listWidgets: [SettingsPageContent()],
+      listWidgets: configuracoesItens(context),
     );
   }
 }
 
-class SettingsPageContent extends StatelessWidget {
-  const SettingsPageContent({super.key});
+/// Configurações em grupos curtos, do mais usado ao mais raro; o que quase
+/// ninguém muda (estilo, formatos, rótulos, widgets) fica em Avançado.
+/// Itens soltos na lista para a entrada em cascata do PageFramework.
+List<Widget> configuracoesItens(BuildContext context) {
+  bool contorno = appStateSettings["outlinedIcons"] == true;
+  return [
+    SettingsHeader(title: "Aparência"),
+    SettingsContainerOpenPage(
+      openPage: const AparenciaPage(),
+      title: "Tema e cor",
+      description: temaPorId(idTemaSalvo()).nome,
+      icon: contorno ? Icons.palette_outlined : Icons.palette_rounded,
+    ),
+    LanguageSetting(),
+    ...ajustesInicioEntradas(),
+    SettingsHeader(title: "Transações"),
+    AutoPayTransactionsSetting(),
+    MarkAsPaidOnDaySetting(),
+    AskForTitlesToggle(),
+    AutoTitlesToggle(),
+    if (notificationsGlobalEnabled)
+      SettingsContainerOpenPage(
+        openPage: NotificationsPage(),
+        title: "notifications".tr(),
+        description: "Lembrete diário e próximas transações",
+        icon: contorno
+            ? Icons.notifications_outlined
+            : Icons.notifications_rounded,
+      ),
+    SettingsHeader(title: "Dados e backup"),
+    SettingsContainerOpenPage(
+      openPage: MeuBancoPage(),
+      title: "Meu Banco",
+      description: "Sincronizar transações do Meu Banco",
+      icon: contorno ? Icons.sync_alt_outlined : Icons.sync_alt_rounded,
+    ),
+    GoogleAccountLoginButton(
+      isOutlinedButton: false,
+      forceButtonName: "Backup no Google Drive",
+    ),
+    ExportDB(),
+    ImportDB(),
+    ExportCSV(),
+    ImportCSV(),
+    SettingsContainerOpenPage(
+      openPage: ActivityPage(),
+      title: "activity-log".tr(),
+      description: "Alteradas e apagadas, com restauração",
+      icon: contorno ? Icons.history_outlined : Icons.history_rounded,
+    ),
+    BiometricsSettingToggle(),
+    SettingsHeader(title: "Avançado"),
+    SettingsContainerOpenPage(
+      openPage: MoreOptionsPagePreferences(),
+      title: "Mais ajustes",
+      description: "Estilo, formatos, contas, orçamentos e widgets",
+      icon: contorno ? Icons.tune_outlined : Icons.tune_rounded,
+    ),
+    SettingsHeader(title: "Sobre"),
+    SettingsContainerOpenPage(
+      openPage: AboutPage(),
+      title: "about-app".tr(namedArgs: {"app": globalAppName}),
+      description: getVersionString(),
+      icon: navBarIconsData["about"]!.iconData,
+    ),
+  ];
+}
+
+class LanguageSetting extends StatelessWidget {
+  const LanguageSetting({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsHeader(title: "theme".tr()),
-        SettingsContainerOpenPage(
-          openPage: const AparenciaPage(),
-          title: "Aparência",
-          description: temaPorId(idTemaSalvo()).nome,
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.palette_outlined
-              : Icons.palette_rounded,
-        ),
-
-        // EnterName(),
-        ...ajustesInicioEntradas(),
-        SettingsHeader(title: "preferences".tr()),
-
-        notificationsGlobalEnabled && getIsFullScreen(context) == false
-            ? SettingsContainerOpenPage(
-                openPage: NotificationsPage(),
-                title: "notifications".tr(),
-                icon: appStateSettings["outlinedIcons"]
-                    ? Icons.notifications_outlined
-                    : Icons.notifications_rounded,
-              )
-            : SizedBox.shrink(),
-
-        BiometricsSettingToggle(),
-
-        SettingsContainer(
-          title: "language".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.language_outlined
-              : Icons.language_rounded,
-          afterWidget: Tappable(
-            color: cores(context).chip,
-            borderRadius: 10,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.symmetric(
-                  horizontal: 16, vertical: 10),
-              child: TextFont(
-                text: languageDisplayFilter(
-                    appStateSettings["locale"].toString()),
-                fontSize: 14,
-              ),
-            ),
+    return SettingsContainer(
+      title: "language".tr(),
+      icon: appStateSettings["outlinedIcons"]
+          ? Icons.language_outlined
+          : Icons.language_rounded,
+      afterWidget: Tappable(
+        color: cores(context).chip,
+        borderRadius: 10,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.symmetric(
+              horizontal: 16, vertical: 10),
+          child: TextFont(
+            text: languageDisplayFilter(appStateSettings["locale"].toString()),
+            fontSize: 14,
           ),
-          onTap: () {
-            openLanguagePicker(context);
-          },
         ),
-
-        SettingsContainerOpenPage(
-          openPage: MoreOptionsPagePreferences(),
-          title: "more-options".tr(),
-          description: "more-options-description".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.app_registration_outlined
-              : Icons.app_registration_rounded,
-        ),
-
-        SettingsHeader(title: "tools-and-extras".tr()),
-        SettingsContainerOpenPage(
-          openPage: MeuBancoPage(),
-          title: "Meu Banco",
-          description: "Sincronizar transações do Meu Banco",
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.sync_alt_outlined
-              : Icons.sync_alt_rounded,
-        ),
-        SettingsContainerOpenPage(
-          openPage: ActivityPage(),
-          title: "transaction-activity-log".tr(),
-          icon: appStateSettings["outlinedIcons"]
-              ? Icons.ballot_outlined
-              : Icons.ballot_rounded,
-        ),
-
-        SettingsHeader(title: "import-and-export".tr()),
-
-        ExportCSV(),
-
-        ImportCSV(),
-
-        SettingsHeader(title: "backups".tr()),
-
-        ExportDB(),
-
-        ImportDB(),
-
-        GoogleAccountLoginButton(
-          isOutlinedButton: false,
-          forceButtonName: "google-drive".tr(),
-        ),
-      ],
+      ),
+      onTap: () {
+        openLanguagePicker(context);
+      },
     );
   }
 }
 
+/// Avançado: opções raras, agrupadas por assunto.
 class MoreOptionsPagePreferences extends StatelessWidget {
   const MoreOptionsPagePreferences({super.key});
 
   @override
   Widget build(BuildContext context) {
     return PageFramework(
-      title: "more".tr(),
+      title: "Mais ajustes",
       dragDownToDismiss: true,
       horizontalPaddingConstrained: true,
       listWidgets: [
-        SettingsHeader(title: "style".tr()),
+        SettingsHeader(title: "Estilo"),
         OutlinedIconsSetting(),
         FontPickerSetting(),
         AppAnimationSetting(),
         CountingNumberAnimationSetting(),
         IncreaseTextContrastSetting(),
-        SettingsHeader(title: "transactions".tr()),
-        TransactionsSettings(),
-        SettingsHeader(title: "accounts".tr()),
+        SettingsHeader(title: "Transações"),
+        NetSpendingDayTotalSetting(),
+        ShowTransactionsMonthlySpendingSummarySettingToggle(),
+        ShowTransactionsBalanceTransferTabSettingToggle(),
+        SettingsHeader(title: "Contas e moedas"),
         WalletsSettings(),
         PrimaryCurrencySetting(),
-        SettingsHeader(title: "budgets".tr()),
+        SettingsHeader(title: "Orçamentos e metas"),
         BudgetSettings(),
-        SettingsHeader(title: "goals".tr()),
         ObjectiveSettings(),
-        SettingsHeader(title: "titles".tr()),
-        TitlesSettings(),
-        SettingsHeader(title: "widgets".tr()),
-        WidgetSettings(),
-        SettingsHeader(title: "formatting".tr()),
+        SettingsHeader(title: "Formatação"),
         NumberFormattingSetting(),
         PercentagePrecisionSetting(),
         Time24HourFormatSetting(),
         FirstDayOfWeekSetting(updateHomePage: true),
         NumberPadFormatSetting(),
+        if (getPlatform(ignoreEmulation: true) == PlatformOS.isAndroid) ...[
+          SettingsHeader(title: "Widgets"),
+          WidgetSettings(),
+        ],
       ],
     );
   }
@@ -697,8 +693,8 @@ class IncreaseTextContrastSetting extends StatelessWidget {
           ? Icons.exposure_outlined
           : Icons.exposure_rounded,
       descriptionColor: appStateSettings["increaseTextContrast"]
-          ? getColor(context, "black").withOpacity(0.84)
-          : Theme.of(context).colorScheme.secondary.withOpacity(0.45),
+          ? cores(context).tx
+          : cores(context).mu,
     );
   }
 }

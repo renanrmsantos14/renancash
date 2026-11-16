@@ -6,6 +6,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
@@ -173,6 +174,7 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
                       return SliverToBoxAdapter(
                         child: NoResults(
                           message: "no-categories-found".tr(),
+                          noSearchResultsVariation: searchValue != "",
                         ),
                       );
                     }
@@ -312,29 +314,20 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           TextFont(
-                                            text: category.name
-                                            // +
-                                            //     " - " +
-                                            //     category.order.toString()
-                                            ,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 19,
+                                            text: category.name,
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 16,
                                           ),
+                                          // Tipo e quantidade numa linha só.
                                           TextFont(
                                             textAlign: TextAlign.start,
-                                            text: category.categoryPk == "0"
-                                                ? "balance-correction".tr()
-                                                : category.income
-                                                    ? "income".tr()
-                                                    : "expense".tr(),
-                                            fontSize: 14,
-                                            textColor:
-                                                getColor(context, "black")
-                                                    .withOpacity(0.65),
-                                          ),
-                                          TextFont(
-                                            textAlign: TextAlign.start,
-                                            text: categoryDetails
+                                            text: (category.categoryPk == "0"
+                                                    ? "balance-correction".tr()
+                                                    : category.income
+                                                        ? "income".tr()
+                                                        : "expense".tr()) +
+                                                " · " +
+                                                categoryDetails
                                                     .numberTransactions
                                                     .toString() +
                                                 " " +
@@ -347,10 +340,8 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
                                                     : "transactions"
                                                         .tr()
                                                         .toLowerCase()),
-                                            fontSize: 14,
-                                            textColor:
-                                                getColor(context, "black")
-                                                    .withOpacity(0.65),
+                                            fontSize: 13,
+                                            textColor: cores(context).mu,
                                           ),
                                         ],
                                       ),

@@ -1,3 +1,4 @@
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/notificationsSettings.dart';
@@ -53,7 +54,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               icon: appStateSettings["outlinedIcons"]
                   ? Icons.warning_outlined
                   : Icons.warning_rounded,
-              color: Theme.of(context).colorScheme.error,
+              color: cores(context).warn,
               onTap: () {
                 AppSettings.openAppSettings(type: AppSettingsType.notification);
               },
