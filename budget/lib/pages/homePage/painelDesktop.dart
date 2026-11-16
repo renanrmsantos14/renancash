@@ -5,6 +5,7 @@ import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/buscaRapida.dart';
@@ -50,6 +51,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
       _transacoes = widget._transacoes;
       _publicarLista();
     } else {
+      mbAtualizarRevisar();
       meuBancoUltimaSync.addListener(_recarga.pedir);
       // O 1º evento do stream já faz a carga inicial (sem corrida com uma gravação entre duas leituras).
       _assinatura = mbMudouUltimas().listen((_) => _recarga.pedir());
@@ -129,21 +131,20 @@ class _PainelDesktopState extends State<PainelDesktop> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Metas leem o banco local; fora do app (testes, prints) a coluna sai.
-                    if (real) ...[
-                      const Expanded(flex: 3, child: MetasEmprestimosInicio()),
+                    if (real) const MetasEmprestimosInicio(colunaFlex: 3),
+                    if (m.contas.isNotEmpty) ...[
+                      Expanded(
+                        flex: 3,
+                        child: ContasInicio(
+                            modelo: m,
+                            onGerenciar: real
+                                ? () => pushRoute(context, const MeuBancoPage())
+                                : null,
+                            onAbrirConta:
+                                real ? (c) => mbAbrirConta(context, c) : null),
+                      ),
                       const SizedBox(width: 40),
                     ],
-                    Expanded(
-                      flex: 3,
-                      child: ContasInicio(
-                          modelo: m,
-                          onGerenciar: real
-                              ? () => pushRoute(context, const MeuBancoPage())
-                              : null,
-                          onAbrirConta:
-                              real ? (c) => mbAbrirConta(context, c) : null),
-                    ),
-                    const SizedBox(width: 40),
                     Expanded(
                         flex: 4,
                         child: Padding(
@@ -176,9 +177,7 @@ class _Topo extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                  modelo.periodo,
-                  style: EdTexto.rotulo(context)),
+              Text(modelo.periodo, style: EdTexto.rotulo(context)),
               const SizedBox(height: 6),
               Text(modelo.saudacao, style: EdTexto.h1(context)),
             ],

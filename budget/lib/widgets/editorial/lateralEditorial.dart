@@ -28,6 +28,12 @@ const List<ItemLateral> mbItensLateral = [
   (chave: 'subscriptions', rotulo: 'Assinaturas'),
 ];
 
+/// Itens da lateral e da busca: Pendências só existe no modo pareado.
+List<ItemLateral> mbItensLateralVisiveis() => [
+      for (final i in mbItensLateral)
+        if (i.chave != 'pendencias' || meuBancoPareado.value) i
+    ];
+
 typedef ContaLateral = ({String id, String nome});
 
 Future<({List<ContaLateral> contas, DateTime? sincronizadoEm})>
@@ -121,24 +127,21 @@ class _LateralEditorialState extends State<LateralEditorial> {
               ),
             ),
             Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: mbPaginaAtual,
-                builder: (context, atual, _) => ListView(
+              child: ListenableBuilder(
+                listenable: Listenable.merge([mbPaginaAtual, meuBancoPareado]),
+                builder: (context, _) => ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
-                    for (final item in mbItensLateral)
-                      if (item.chave != 'pendencias' || meuBancoPareado.value)
-                        _ItemNavegacao(
-                          selo: item.chave == 'pendencias',
-                          icone: navBarIconsData[item.chave]!.iconData,
-                          rotulo: item.rotulo,
-                          ativo: navBarIconsData[item.chave]!
-                                  .navigationIndexedStackIndex ==
-                              atual,
-                          onTap: () => mbIrParaPagina(
-                              navBarIconsData[item.chave]!
-                                  .navigationIndexedStackIndex),
-                        ),
+                    for (final item in mbItensLateralVisiveis())
+                      _ItemNavegacao(
+                        icone: _icone(item.chave),
+                        rotulo: item.rotulo,
+                        ativo: navBarIconsData[item.chave]!
+                                .navigationIndexedStackIndex ==
+                            mbPaginaAtual.value,
+                        onTap: () => mbIrParaPagina(navBarIconsData[item.chave]!
+                            .navigationIndexedStackIndex),
+                      ),
                     if (_contas.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
@@ -182,15 +185,20 @@ class _LateralEditorialState extends State<LateralEditorial> {
   }
 }
 
+/// Ícone do item; Pendências leva a bolinha com o total.
+Widget Function(Color) _icone(String chave) => (cor) {
+      final icone =
+          Icon(navBarIconsData[chave]!.iconData, size: 18, color: cor);
+      return chave == 'pendencias' ? SeloPendencias(child: icone) : icone;
+    };
+
 class _ItemNavegacao extends StatelessWidget {
   const _ItemNavegacao(
       {this.icone,
       required this.rotulo,
       required this.ativo,
-      required this.onTap,
-      this.selo = false});
-  final IconData? icone;
-  final bool selo; // Pendências: bolinha com o total
+      required this.onTap});
+  final Widget Function(Color cor)? icone;
   final String rotulo;
   final bool ativo;
   final VoidCallback onTap;
@@ -222,11 +230,7 @@ class _ItemNavegacao extends StatelessWidget {
           child: Row(
             children: [
               if (icone != null) ...[
-                if (selo)
-                  SeloPendencias(
-                      child: Icon(icone, size: 18, color: ativo ? e.acc : e.mu))
-                else
-                  Icon(icone, size: 18, color: ativo ? e.acc : e.mu),
+                icone!(ativo ? e.acc : e.mu),
                 const SizedBox(width: 10),
               ],
               Expanded(

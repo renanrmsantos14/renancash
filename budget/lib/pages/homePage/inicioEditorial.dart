@@ -354,7 +354,11 @@ class _SemLimite extends StatelessWidget {
 /// Metas (não arquivadas) e empréstimos ao pai em aberto, em grupos de até 2 linhas.
 /// Com um grupo só, ele dá o título do bloco e o subtítulo some. Sem nada, o bloco some.
 class MetasEmprestimosInicio extends StatefulWidget {
-  const MetasEmprestimosInicio({super.key});
+  const MetasEmprestimosInicio({super.key, this.colunaFlex});
+
+  /// Computador: vira uma coluna `Expanded(flex)` de uma Row, com 40 px à direita.
+  /// Vazio, não ocupa a coluna.
+  final int? colunaFlex;
 
   @override
   State<MetasEmprestimosInicio> createState() => _MetasEmprestimosInicioState();
@@ -416,11 +420,18 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
                 ],
               ),
           ];
-          return _Secao(
+          final bloco = _Secao(
             titulo: unico ? grupos.single.titulo : 'Metas e empréstimos',
             divisores: false,
             filhos: grupos,
           );
+          final flex = widget.colunaFlex;
+          return flex == null
+              ? bloco
+              : Expanded(
+                  flex: flex,
+                  child: Padding(
+                      padding: const EdgeInsets.only(right: 40), child: bloco));
         },
       ),
     );

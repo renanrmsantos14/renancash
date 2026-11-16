@@ -71,3 +71,9 @@ As etapas 1 e 2 saem juntas no mesmo build publicado, para que Para revisar e co
 - Banco desconectado fica numa faixa fixa no topo da aba, com "Reconectar".
 - No modo Meu Banco a barra é Início · Transações · Pendências · Orçamentos · Metas (o "Mais" já não aparecia nesse modo).
 - Revisão de código: a barra pareada volta a ter "Mais" no 5º lugar (Metas sai, porque as metas aparecem na Início com "Ver todas"), senão não haveria caminho para configurações. A Início nova só vale para celular pareado; app não pareado mantém a Início antiga e o "Editar Início".
+
+## Etapa 4 — computador (16/11/2026)
+- Cartão escuro igual ao celular, com as barras de gasto por dia à direita.
+- Abaixo: Metas e empréstimos | Contas | Últimas transações (orçamentos saem do painel).
+- Pendências: item na lateral com contador (e na busca Ctrl K), só pareado.
+- Gráficos e patrimônio em Orçamentos também no computador: pareado = Início nova nos dois aparelhos.
