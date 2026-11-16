@@ -63,3 +63,10 @@ As etapas 1 e 2 saem juntas no mesmo build publicado, para que Para revisar e co
 - Contas: cartões saem da Início por enquanto; uma linha por banco (poupanças agrupadas); tocar abre as transações das carteiras com o mesmo nome (sem correspondência, abre o Meu Banco).
 - Barra de abas: contador de Pendências em bolinha com número (etapa 2); rótulo só na aba ativa; a aba continua "Orçamentos".
 - Densidade compacta: menos espaço entre blocos e linhas mais baixas.
+
+## Etapa 2 — decisões de implementação (16/11/2026)
+
+- A fila Para revisar não tem resposta sugerida, então o cartão mostra as opções reais do item (categoria; Empréstimo/Investimento/Ajuda; Devolução/Reembolso/Renda; candidatos a salário) mais "Pular". Não há deslizar para a direita.
+- "Pular" (botão ou deslizar à esquerda) manda o item para o fim da fila só nesta sessão; nada é gravado.
+- Banco desconectado fica numa faixa fixa no topo da aba, com "Reconectar".
+- No modo Meu Banco a barra é Início · Transações · Pendências · Orçamentos · Metas (o "Mais" já não aparecia nesse modo).

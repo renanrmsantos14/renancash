@@ -23,6 +23,11 @@ Future<List<Map<String, dynamic>>> mbLerAvisos() async {
   return [];
 }
 
+/// Avisos lidos do aparelho, para a aba Pendências e o selo da barra.
+final ValueNotifier<List<Map<String, dynamic>>> meuBancoAvisos = ValueNotifier(const []);
+
+Future<void> mbAtualizarAvisos() async => meuBancoAvisos.value = await mbLerAvisos();
+
 Future<void> mbReconectarAviso(BuildContext context, Map<String, dynamic> aviso) async {
   final itemId = aviso['item_id'];
   if (itemId is String && itemId.isNotEmpty) {

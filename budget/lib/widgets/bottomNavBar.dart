@@ -5,6 +5,10 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/pages/editHomePage.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart' show ehDesktop;
 import 'package:budget/pages/editObjectivesPage.dart';
+import 'package:budget/pages/homePage/homePageConexaoCaida.dart'
+    show meuBancoAvisos, mbAtualizarAvisos;
+import 'package:budget/pages/pendenciasPage.dart' show mbTotalPendencias;
+import 'package:budget/struct/mbSync/revisao.dart' show meuBancoRevisar;
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
@@ -40,13 +44,24 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class BottomNavBarState extends State<BottomNavBar> {
-  // No modo Meu Banco o 4º item é Metas e "Mais" sai da barra.
+  // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Metas ("Mais" sai).
   static const int _indiceMetas = 14;
+  static const int _indicePendencias = 18;
+
+  List<int> get _indicesPareado => [
+        for (var i = 0; i < 3; i++)
+          navBarIconsData[appStateSettings["customNavBarShortcut$i"]]
+                  ?.navigationIndexedStackIndex ??
+              i,
+        _indiceMetas,
+      ]..insert(2, _indicePendencias);
 
   @override
   void initState() {
     super.initState();
     meuBancoPareado.addListener(_aoMudarPareado);
+    meuBancoUltimaSync.addListener(mbAtualizarAvisos);
+    mbAtualizarAvisos();
   }
 
   void _aoMudarPareado() => setState(() {});
@@ -54,6 +69,7 @@ class BottomNavBarState extends State<BottomNavBar> {
   @override
   void dispose() {
     meuBancoPareado.removeListener(_aoMudarPareado);
+    meuBancoUltimaSync.removeListener(mbAtualizarAvisos);
     super.dispose();
   }
 
@@ -89,6 +105,7 @@ class BottomNavBarState extends State<BottomNavBar> {
   }
 
   int getNavigationStackedIndexFromBarIndex(int barIndex) {
+    if (meuBancoPareado.value) return _indicesPareado[barIndex];
     if (barIndex == 0) {
       return navBarIconsData[appStateSettings["customNavBarShortcut0"]]
               ?.navigationIndexedStackIndex ??
@@ -102,11 +119,15 @@ class BottomNavBarState extends State<BottomNavBar> {
               ?.navigationIndexedStackIndex ??
           2;
     } else {
-      return meuBancoPareado.value ? _indiceMetas : 3;
+      return 3;
     }
   }
 
   int getNavigationBarIndexFromStackedIndex(int stackedIndex) {
+    if (meuBancoPareado.value) {
+      final i = _indicesPareado.indexOf(stackedIndex);
+      return i < 0 ? _indicesPareado.length - 1 : i;
+    }
     if (stackedIndex ==
         (navBarIconsData[appStateSettings["customNavBarShortcut0"]]
                 ?.navigationIndexedStackIndex ??
@@ -136,8 +157,10 @@ class BottomNavBarState extends State<BottomNavBar> {
     if (meuBancoPareado.value) {
       return _BarraEditorial(
         atalhos: [
-          for (final k in ["customNavBarShortcut0", "customNavBarShortcut1", "customNavBarShortcut2"])
-            "${appStateSettings[k]}",
+          "${appStateSettings["customNavBarShortcut0"]}",
+          "${appStateSettings["customNavBarShortcut1"]}",
+          "pendencias",
+          "${appStateSettings["customNavBarShortcut2"]}",
           "goals",
         ],
         ativo: navigationBarIndex,
@@ -277,7 +300,7 @@ class BottomNavBarState extends State<BottomNavBar> {
               );
             }
           }),
-          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         ),
         child: NavigationBar(
           animationDuration: Duration(milliseconds: 1000),
@@ -648,6 +671,7 @@ const Map<String, String> _rotulosEditorial = {
   "transactions": "Transações",
   "budgets": "Orçamentos",
   "goals": "Metas",
+  "pendencias": "Pendências",
 };
 
 class _BarraEditorial extends StatelessWidget {
@@ -673,6 +697,7 @@ class _BarraEditorial extends StatelessWidget {
               child: Semantics(
                 button: true,
                 selected: i == ativo,
+                label: _rotuloAba(atalhos[i]),
                 child: ToqueEscala(
                   onTap: () => aoTocar(i),
                   child: SizedBox(
@@ -680,21 +705,19 @@ class _BarraEditorial extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                            navBarIconsData[atalhos[i]]?.iconData ??
-                                Icons.circle_outlined,
-                            size: 22,
-                            color: i == ativo ? e.tx : e.mu),
-                        const SizedBox(height: 4),
-                        Text(
-                            _rotulosEditorial[atalhos[i]] ??
-                                (navBarIconsData[atalhos[i]]?.label ?? "").tr(),
-                            style: TextStyle(
-                                fontFamily: 'Geist',
-                                fontSize: 11,
-                                fontWeight:
-                                    i == ativo ? FontWeight.w600 : FontWeight.w500,
-                                color: i == ativo ? e.tx : e.mu)),
+                        _IconeAba(
+                            atalho: atalhos[i],
+                            cor: i == ativo ? e.tx : e.mu),
+                        // Rótulo só na aba ativa.
+                        if (i == ativo) ...[
+                          const SizedBox(height: 4),
+                          Text(_rotuloAba(atalhos[i]),
+                              style: TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: e.tx)),
+                        ],
                       ],
                     ),
                   ),
@@ -703,6 +726,54 @@ class _BarraEditorial extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+String _rotuloAba(String atalho) =>
+    _rotulosEditorial[atalho] ?? (navBarIconsData[atalho]?.label ?? "").tr();
+
+/// Ícone da aba; em Pendências leva a bolinha com o total, que some em zero.
+class _IconeAba extends StatelessWidget {
+  const _IconeAba({required this.atalho, required this.cor});
+  final String atalho;
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (atalho != "pendencias") {
+      return Icon(navBarIconsData[atalho]?.iconData ?? Icons.circle_outlined,
+          size: 22, color: cor);
+    }
+    final e = cores(context);
+    return ListenableBuilder(
+      listenable: Listenable.merge([meuBancoRevisar, meuBancoAvisos]),
+      builder: (context, _) {
+        final total = mbTotalPendencias();
+        return Stack(clipBehavior: Clip.none, children: [
+          Icon(Icons.inbox_outlined, size: 22, color: cor),
+          if (total > 0)
+            Positioned(
+              top: -5,
+              right: -9,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 16),
+                height: 16,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    color: e.acc, borderRadius: BorderRadius.circular(8)),
+                child: Text(total > 99 ? '99+' : '$total',
+                    style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 10,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                        color: e.bg)),
+              ),
+            ),
+        ]);
+      },
     );
   }
 }
