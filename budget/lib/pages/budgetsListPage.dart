@@ -1,6 +1,7 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
+import 'package:budget/pages/analiseOrcamentos.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
@@ -79,6 +80,7 @@ class BudgetsListPageState extends State<BudgetsListPage> {
           ),
       ],
       slivers: [
+        const SliverToBoxAdapter(child: AnaliseOrcamentos()),
         StreamBuilder<List<Budget>>(
           stream: database.watchAllBudgets(hideArchived: true),
           builder: (context, snapshot) {
