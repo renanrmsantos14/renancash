@@ -53,6 +53,23 @@ void main() {
     expect(m.origemDisponivel, 'Inter e poupanças · há 12 min');
   });
 
+  test('poupanças separadas: uma linha por conta, com o banco no tipo', () {
+    final m = montarModeloInicio(
+        ciclo: {},
+        contas: [
+          {'id': 'b', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poup 1', 'bank': 'Inter', 'balance': 500.0},
+          {'id': 'c', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poup 2', 'bank': 'Santander', 'balance': 100.0},
+        ],
+        faturas: {},
+        sincronizadoEm: null,
+        ultimas: [],
+        nome: '',
+        agora: _agora,
+        agruparPoupancas: false);
+    expect(m.contas.map((c) => c.nome), ['Poup 1', 'Poup 2']);
+    expect(m.contas.map((c) => c.tipo), ['Poupança · Inter', 'Poupança · Santander']);
+  });
+
   test('cartão: dias para fechar, vencimento, final e percentual', () {
     final c = _montar().cartoes.single;
     expect(c.nome, 'Cartão Gold');
@@ -108,6 +125,21 @@ void main() {
       ciclo: ciclo, contas: [
         {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Inter', 'balance': 1000.0}
       ], faturas: {}, sincronizadoEm: null, ultimas: [], nome: 'Renan', agora: _agora);
+
+  testWidgets('Configurações › Início: sem ritmo diário e sem saldo nas contas', (t) async {
+    await abrir(t, _montar());
+    appStateSettings['inicioRitmoDiario'] = false;
+    appStateSettings['inicioSaldoContas'] = false;
+    await t.pumpWidget(MaterialApp(
+      theme: temaEditorial(Brightness.light),
+      home: Scaffold(body: InicioEditorial.comModelo(_montar())),
+    ));
+    await t.pump(const Duration(seconds: 2));
+    expect(find.textContaining('/dia'), findsNothing);
+    expect(find.textContaining('Nas contas'), findsNothing);
+    expect(find.text('Para gastar no ciclo'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
 
   testWidgets('cartão mostra o restante do ciclo e o ritmo diário', (t) async {
     await abrir(t, _montar());

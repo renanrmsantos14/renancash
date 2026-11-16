@@ -4,6 +4,7 @@
 // Os PNGs vão para .verificacao/prints/ (fora do git; a renderização muda por máquina).
 import 'dart:io';
 
+import 'package:budget/pages/ajustesInicioPage.dart';
 import 'package:budget/pages/aparenciaPage.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/pages/homePage/inicioEditorial.dart';
@@ -143,6 +144,37 @@ void main() {
         await t.pump(const Duration(seconds: 1));
         await expectLater(find.byType(MaterialApp),
             matchesGoldenFile('../../.verificacao/prints/pendencias_$modo${vazio ? '_vazio' : ''}.png'));
+      });
+    }
+    for (final pagina in ['inicio', 'pendencias', 'analise']) {
+      testWidgets('print ajustes $pagina $modo', skip: _pular, (t) async {
+        appStateSettings = {
+          ...appStateSettings,
+          'materialYou': false,
+          'accentSystemColor': false,
+          'batterySaver': false,
+          'increaseTextContrast': false,
+          'forceFullDarkBackground': false,
+          'outlinedIcons': true,
+          'font': 'Geist',
+          'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
+        };
+        t.view.physicalSize = const Size(390 * 2, 700 * 2);
+        t.view.devicePixelRatio = 2;
+        addTearDown(t.view.reset);
+        final b = modo == 'claro' ? Brightness.light : Brightness.dark;
+        await t.pumpWidget(MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: temaFlutter(temaAtivo(b)),
+          home: switch (pagina) {
+            'inicio' => const AjustesInicioPage(),
+            'pendencias' => const AjustesPendenciasPage(),
+            _ => const AjustesAnalisePage(),
+          },
+        ));
+        await t.pump(const Duration(seconds: 1));
+        await expectLater(find.byType(MaterialApp),
+            matchesGoldenFile('../../.verificacao/prints/ajustes_${pagina}_$modo.png'));
       });
     }
     testWidgets('print aparência $modo', skip: _pular, (t) async {

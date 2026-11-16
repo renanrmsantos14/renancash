@@ -26,6 +26,7 @@ import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
 import 'package:flutter/material.dart';
+import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
 
 /// Início do celular: responde "quanto posso gastar neste ciclo".
@@ -320,17 +321,19 @@ class _Restante extends StatelessWidget {
             Text(quando, style: EdTexto.rotulo(context)),
           ],
         ),
-        if (!estourou) ...[
+        if (!estourou && AjustesInicio.ritmoDiario) ...[
           const SizedBox(height: 10),
           Text('Pode gastar ${brl(restante / (dias + 1))}/dia',
               style: EdTexto.corpo(context)
                   .copyWith(fontWeight: FontWeight.w500)),
         ],
-        const SizedBox(height: 4),
-        Text('Nas contas ${brl(modelo.disponivel)}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: EdTexto.rotulo(context)),
+        if (AjustesInicio.saldoContas) ...[
+          const SizedBox(height: 4),
+          Text('Nas contas ${brl(modelo.disponivel)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: EdTexto.rotulo(context)),
+        ],
       ],
     );
   }
@@ -407,16 +410,17 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
           final abertos = emprestimos.abertos;
           if (metas.isEmpty && abertos.isEmpty) return const SizedBox.shrink();
           final unico = metas.isEmpty || abertos.isEmpty;
+          final n = AjustesInicio.linhasMetas;
           final grupos = [
             if (metas.isNotEmpty)
               _Grupo(
                 titulo: 'Metas',
                 subtitulo: !unico,
-                acao: metas.length > 2 ? 'Ver todas' : null,
+                acao: metas.length > n ? 'Ver todas' : null,
                 onAcao: () => pushRoute(
                     context, const ObjectivesListPage(backButton: true)),
                 linhas: [
-                  for (final o in metas.take(2))
+                  for (final o in metas.take(n))
                     WatchTotalAndAmountOfObjective(
                       objective: o,
                       builder: (alvo, total, fracao) => _LinhaProgresso(
@@ -433,9 +437,9 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
               _Grupo(
                 titulo: 'Empréstimos',
                 subtitulo: !unico,
-                nota: abertos.length > 2 ? 'mais ${abertos.length - 2}' : null,
+                nota: abertos.length > n ? 'mais ${abertos.length - n}' : null,
                 linhas: [
-                  for (final e in abertos.take(2))
+                  for (final e in abertos.take(n))
                     _LinhaProgresso(
                       titulo: switch (DateTime.tryParse(e.data ?? '')) {
                         final d? => 'Empréstimo de ${diaMes(d)}',

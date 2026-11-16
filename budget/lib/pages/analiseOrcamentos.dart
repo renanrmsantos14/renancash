@@ -2,6 +2,7 @@ import 'package:budget/pages/homePage/homePageFaturaPatrimonio.dart';
 import 'package:budget/pages/homePage/homePageHeatmap.dart';
 import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/homePage/homePagePieChart.dart';
+import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:flutter/material.dart';
 
@@ -22,11 +23,14 @@ class AnaliseOrcamentos extends StatelessWidget {
                 padding: const EdgeInsetsDirectional.fromSTEB(13, 4, 13, 10),
                 child: Text('Análise', style: EdTexto.h2(context)),
               ),
-              const HomePagePatrimonio(),
-              // 1 = tudo (gastos e receitas), o padrão da Início antiga.
-              const HomePageLineGraph(selectedSlidingSelector: 1),
-              const HomePagePieChart(),
-              const HomePageHeatMap(),
+              // Configurações › Análise: cada gráfico pode ser desligado.
+              if (AjustesInicio.grafico('patrimonio')) const HomePagePatrimonio(),
+              // 1 = tudo, 2 = só gastos, 3 = só receitas.
+              if (AjustesInicio.grafico('linha'))
+                HomePageLineGraph(
+                    selectedSlidingSelector: AjustesInicio.linhaTipo),
+              if (AjustesInicio.grafico('pizza')) const HomePagePieChart(),
+              if (AjustesInicio.grafico('mapa')) const HomePageHeatMap(),
               const SizedBox(height: 8),
             ],
           )));
