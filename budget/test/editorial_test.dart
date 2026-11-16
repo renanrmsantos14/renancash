@@ -114,6 +114,12 @@ void main() {
       expect(fade(), findsNothing);
     });
 
+    testWidgets('fora da janela de entrada aparece direto', (t) async {
+      await t.pumpWidget(
+          _app(const EntradaSuave(animar: false, child: Text('a'))));
+      expect(fade(), findsNothing);
+    });
+
     testWidgets('nada com reduzir movimento ou animações desligadas',
         (t) async {
       await t.pumpWidget(

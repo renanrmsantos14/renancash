@@ -138,6 +138,9 @@ class PageFramework extends StatefulWidget {
 class PageFrameworkState extends State<PageFramework>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final double leftBackSwipeDetectionWidth = 30;
+  // Itens só entram com animação logo após abrir a página; ao voltar à tela
+  // pela rolagem aparecem direto.
+  final DateTime _abertaEm = DateTime.now();
 
   // Com subtítulo (ex.: total gasto do orçamento) o cabeçalho precisa de
   // altura extra; com 56 o subtítulo fica com opacidade 0.
@@ -467,7 +470,14 @@ class PageFrameworkState extends State<PageFramework>
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   for (final (i, w) in widget.listWidgets!.indexed)
-                    EntradaSuave(indice: i, child: w),
+                    EntradaSuave(
+                      // Repassa a chave do item para o SliverList achá-lo.
+                      key: w.key == null ? null : ValueKey(w.key),
+                      indice: i,
+                      animar: DateTime.now().difference(_abertaEm) <
+                          const Duration(milliseconds: 600),
+                      child: w,
+                    ),
                   widget.bottomPadding
                       ? SizedBox(
                           height: MediaQuery.paddingOf(context).bottom + 15)

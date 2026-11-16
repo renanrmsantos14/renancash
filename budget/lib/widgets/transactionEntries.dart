@@ -138,8 +138,10 @@ class _TransactionEntriesState extends State<TransactionEntries> {
               : false
           : true;
 
-  // Ordem do item na lista montada agora: só os primeiros entram em cascata.
+  // Ordem do item na lista montada agora: só os primeiros entram em cascata,
+  // e só logo após a primeira carga (não ao rolar de volta nem em atualização).
   int _ordemEntrada = 0;
+  DateTime? _primeiraCarga;
 
   Widget createTransactionEntry(
     List<TransactionWithCategory> transactionListForDay,
@@ -179,6 +181,8 @@ class _TransactionEntriesState extends State<TransactionEntries> {
     return EntradaSuave(
       key: ValueKey(item.transaction.transactionPk),
       indice: _ordemEntrada++,
+      animar: DateTime.now().difference(_primeiraCarga ?? DateTime.now()) <
+          const Duration(milliseconds: 600),
       child: entry,
     );
   }
@@ -205,6 +209,7 @@ class _TransactionEntriesState extends State<TransactionEntries> {
         if (snapshot.data != null && snapshot.hasData) {
           List<TransactionWithCategory> data = snapshot.data ?? [];
           _ordemEntrada = 0;
+          _primeiraCarga ??= DateTime.now();
           int totalNumberTransactionsAll = data.length;
           if (loadAll == false)
             data = data.take(widget.initialLoadLimit ?? 30).toList();
@@ -254,8 +259,6 @@ class _TransactionEntriesState extends State<TransactionEntries> {
                                         widget.endDay ?? DateTime.now()) +
                                     ")")
                                 : ""),
-                    tintColor:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.6),
                     noSearchResultsVariation: widget.noSearchResultsVariation,
                     padding: widget.noResultsPadding,
                   ),

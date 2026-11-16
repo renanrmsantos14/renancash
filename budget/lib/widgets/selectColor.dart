@@ -485,11 +485,7 @@ class _ColorIconCustomState extends State<ColorIconCustom> {
     );
     return Tooltip(
       message: "custom-color".tr(),
-      child: Tappable(
-        onTap: () => openBottomSheet(context, colorPickerPopup),
-        borderRadius: 20,
-        color: Colors.transparent,
-        child: Container(
+      child: Container(
           margin: widget.margin ??
               EdgeInsetsDirectional.only(start: 8, end: 8, top: 8, bottom: 8),
           height: widget.size,
@@ -531,7 +527,6 @@ class _ColorIconCustomState extends State<ColorIconCustom> {
             ),
           ),
         ),
-      ),
     );
   }
 }

@@ -106,8 +106,10 @@ class CategoryIcon extends StatelessWidget {
                                     Theme.of(context).colorScheme.primary,
                                 amount: 0.5,
                               )
-                            // Fundo neutro: a cor fica só no ícone.
-                            : cores(context).chip
+                            // Cor da categoria só como tinta leve no fundo.
+                            : category.colour == null
+                                ? cores(context).chip
+                                : HexColor(category.colour).withOpacity(0.16)
                         : cores(context).chip,
                 onTap: onTap,
                 onLongPress: canEditByLongPress == false && onLongPress == null

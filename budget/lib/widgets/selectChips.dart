@@ -170,7 +170,7 @@ class _SelectChipsState<T> extends State<SelectChips<T>> {
                       // Selecionado sem cor própria: chip invertido (fundo na
                       // cor do texto), como o botão principal.
                       selectedColor: customSelectedColor ?? e.tx,
-                      checkmarkColor: e.bg,
+                      checkmarkColor: customSelectedColor == null ? e.bg : null,
                       side: widget.getCustomBorderColor == null ||
                               widget.getCustomBorderColor!(item) == null ||
                               widget.getCustomBorderColor!(item) == null

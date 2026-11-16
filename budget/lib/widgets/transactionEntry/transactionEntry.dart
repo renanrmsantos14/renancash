@@ -426,11 +426,12 @@ class TransactionEntry extends StatelessWidget {
       );
 
       // Linha secundária: categoria (quando o nome é a descrição) e a conta,
-      // esta só se houver mais de uma.
+      // esta só com mais de uma conta e sem a etiqueta de conta ligada.
       AllWallets allWallets = Provider.of<AllWallets>(context);
       String secondaryInfo = [
-        if (transaction.name.trim() != "") category?.name,
-        if (allWallets.list.length > 1)
+        if (transaction.name != "") category?.name,
+        if (allWallets.list.length > 1 &&
+            appStateSettings["showAccountLabelTagInTransactionEntry"] != true)
           allWallets.indexedByPk[transaction.walletFk]?.name,
       ].whereType<String>().join(" · ");
 

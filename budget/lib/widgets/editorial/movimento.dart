@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 const Curve curvaEditorial = Cubic(.23, 1, .32, 1);
 
-bool semMovimento(BuildContext c) => MediaQuery.of(c).disableAnimations;
+bool semMovimento(BuildContext c) => MediaQuery.disableAnimationsOf(c);
 
 class ContagemValor extends StatefulWidget {
   const ContagemValor(
@@ -209,12 +209,15 @@ class _ToqueEscalaState extends State<ToqueEscala> {
 /// Entrada curta de itens de lista e cartões: fade + 8 px em 200 ms, em
 /// cascata de 30 ms só nos primeiros [EntradaSuave.cascata] itens; os demais
 /// aparecem direto. Não bloqueia toques e some com "reduzir movimento" ou com
-/// as animações do app desligadas.
+/// as animações do app desligadas. [animar] falso (lista já montada, item que
+/// volta à tela ao rolar) mostra o item direto.
 class EntradaSuave extends StatefulWidget {
-  const EntradaSuave({super.key, required this.child, this.indice = 0});
+  const EntradaSuave(
+      {super.key, required this.child, this.indice = 0, this.animar = true});
 
   final Widget child;
   final int indice;
+  final bool animar;
 
   static const cascata = 8;
 
@@ -230,7 +233,8 @@ class _EntradaSuaveState extends State<EntradaSuave>
   @override
   void initState() {
     super.initState();
-    if (widget.indice >= EntradaSuave.cascata ||
+    if (!widget.animar ||
+        widget.indice >= EntradaSuave.cascata ||
         appStateSettings["appAnimations"] != AppAnimations.all.index) return;
     // Atraso dentro da própria animação (Interval), sem Timer pendente.
     final atraso = 30 * widget.indice;
