@@ -338,8 +338,9 @@ void main() {
       [_cat('beleza', 'Beleza'), _cat('viagem', 'Viagem')],
     );
     var backups = 0, aplicados = 0;
-    t.view.physicalSize = const Size(390 * 2, 1400 * 2);
-    t.view.devicePixelRatio = 2;
+    // 800 px de largura: o fonte de teste tem glifos quadrados e "Continuar revisando" estoura num popup de 390.
+    t.view.physicalSize = const Size(800, 1400);
+    t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
       theme: temaFlutter(temaPorId('padrao-claro')),
