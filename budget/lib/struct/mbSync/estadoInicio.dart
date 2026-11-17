@@ -4,8 +4,9 @@ import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
 import 'package:budget/struct/meuBancoMapping.dart'
-    show mbCarteiraInvestimentos, mbPkConta;
+    show mbCarteiraInvestimentos, mbPkConta, mbPrefixo;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:intl/intl.dart' show NumberFormat;
@@ -171,6 +172,9 @@ ModeloInicio montarModeloInicio({
   required DateTime agora,
   // Configurações › Início: poupanças numa linha só (padrão) ou uma linha por conta.
   bool agruparPoupancas = true,
+  // Orçamento Geral (o que "Definir limite do ciclo" edita): limite e gasto vêm dele, pela mesma
+  // consulta da tela do orçamento. Sem Geral no aparelho, valem os números do Worker.
+  ({double limite, double gasto})? geral,
 }) {
   final ini = DateTime.tryParse('${ciclo['inicio']}');
   final fim = DateTime.tryParse('${ciclo['fim']}');
@@ -268,14 +272,25 @@ ModeloInicio montarModeloInicio({
         : 0;
   }
 
+  final limiteCiclo = geral != null
+      ? (geral.limite > 0 ? geral.limite : null)
+      : ciclo['limite'] is num
+          ? _num(ciclo['limite'])
+          : null;
+  final gastoCiclo = geral?.gasto ?? _num(ciclo['consumido']);
+
   return ModeloInicio(
     ciclo: rotuloCiclo,
     saudacao: nome.trim().isEmpty ? 'Olá' : 'Olá, ${nome.trim()}',
     disponivel: saldoDe(bancarias),
     origemDisponivel: origem,
-    consumido: _num(ciclo['consumido']),
-    limite: ciclo['limite'] is num ? _num(ciclo['limite']) : null,
-    percentual: ciclo['percentual'] is num ? _num(ciclo['percentual']) : null,
+    consumido: gastoCiclo,
+    limite: limiteCiclo,
+    percentual: geral == null && ciclo['percentual'] is num
+        ? _num(ciclo['percentual'])
+        : limiteCiclo == null
+            ? null
+            : gastoCiclo / limiteCiclo * 100,
     diasRestantes: (ciclo['diasRestantes'] as num?)?.toInt() ??
         (fim == null ? 0 : _soDia(fim).difference(_soDia(agora)).inDays),
     porDia: dias,
@@ -360,6 +375,7 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
   };
   final txs = await mbUltimasTransacoes();
   final modelo = montarModeloInicio(
+    geral: await mbLerCicloGeral(agora),
     agruparPoupancas: AjustesInicio.poupancasJuntas,
     ciclo: ((mapa['ciclo'] as Map?) ?? const {}).cast<String, dynamic>(),
     contas: [
@@ -416,20 +432,30 @@ List<FaturaAberta> mbFaturasAbertas({
   return out;
 }
 
-/// Patrimônio = conta do Inter + investimentos − fatura atual do cartão. Empréstimos ficam de fora.
-typedef Patrimonio = ({double inter, double investimentos, double fatura, double total});
+/// Patrimônio = contas correntes + poupanças + investimentos − fatura atual do cartão.
+/// Empréstimos e carteiras manuais ficam de fora.
+typedef Patrimonio = ({
+  double correntes,
+  double poupancas,
+  double investimentos,
+  double fatura,
+  double total
+});
 
 Patrimonio mbPatrimonio(
-        {required double inter,
+        {required double correntes,
+        double poupancas = 0,
         required double investimentos,
         required double fatura}) =>
     (
-      inter: inter,
+      correntes: correntes,
+      poupancas: poupancas,
       investimentos: investimentos,
       fatura: fatura.abs(),
-      total: inter + investimentos - fatura.abs()
+      total: correntes + poupancas + investimentos - fatura.abs()
     );
 
+/// Carteira manual (fora do Meu Banco): saldo = soma dos lançamentos dela, fora do patrimônio.
 typedef CarteiraInicio = ({String nome, double saldo});
 typedef PatrimonioInicio = ({
   Patrimonio patrimonio,
@@ -444,29 +470,31 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
   final faturas = ((_decodificar(await mbLerEstado('faturas')) as Map?) ?? const {})
       .cast<String, dynamic>();
   final abertas = mbFaturasAbertas(contas: contas, faturas: faturas, agora: agora);
-  final inter = contas
-      .where((c) => c['type'] == 'BANK' && c['subtype'] != 'SAVINGS_ACCOUNT')
+  double saldoBancario(bool poupanca) => contas
+      .where((c) =>
+          c['type'] == 'BANK' && (c['subtype'] == 'SAVINGS_ACCOUNT') == poupanca)
       .fold<double>(0, (s, c) => s + _num(c['balance']));
-  // Saldo por carteira: Investimentos entra no patrimônio; as demais aparecem só como informação.
-  // Conta bancária do Meu Banco mostra o saldo real, como na Início.
+  // Investimentos (soma dos ajustes de saldo da carteira) entra no patrimônio. As carteiras do
+  // Meu Banco (mb:) já estão nas linhas de contas e fatura; as manuais aparecem à parte, fora do total.
   final linhas = await database.customSelect(
       'SELECT w.wallet_pk AS pk, w.name AS nome, COALESCE(SUM(t.amount), 0) AS saldo '
       'FROM wallets w LEFT JOIN transactions t ON t.wallet_fk = w.wallet_pk '
       'GROUP BY w.wallet_pk, w.name ORDER BY w."order"').get();
-  final reais = mbSaldosReais(contas);
   var investimentos = 0.0;
   final carteiras = <CarteiraInicio>[];
   for (final l in linhas) {
-    final saldo = reais[l.read<String>('pk')] ?? l.read<double>('saldo');
-    if (l.read<String>('pk') == mbCarteiraInvestimentos) {
+    final pk = l.read<String>('pk');
+    final saldo = l.read<double>('saldo');
+    if (pk == mbCarteiraInvestimentos) {
       investimentos = saldo;
-    } else if (saldo != 0) {
+    } else if (!pk.startsWith(mbPrefixo) && saldo != 0) {
       carteiras.add((nome: l.read<String>('nome'), saldo: saldo));
     }
   }
   return (
     patrimonio: mbPatrimonio(
-        inter: inter,
+        correntes: saldoBancario(false),
+        poupancas: saldoBancario(true),
         investimentos: investimentos,
         fatura: abertas.fold<double>(0, (s, f) => s + f.valor)),
     faturas: abertas,

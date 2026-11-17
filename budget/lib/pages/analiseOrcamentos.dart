@@ -28,15 +28,30 @@ class AnaliseOrcamentos extends StatelessWidget {
                 child: Text('Análise', style: EdTexto.h2(context)),
               ),
               // Configurações › Análise: cada gráfico pode ser desligado.
-              if (AjustesInicio.grafico('patrimonio'))
-                const HomePagePatrimonio(),
-              // 1 = tudo, 2 = só gastos, 3 = só receitas.
-              if (AjustesInicio.grafico('linha'))
-                HomePageLineGraph(
-                    selectedSlidingSelector: AjustesInicio.linhaTipo),
+              if (AjustesInicio.grafico('patrimonio') ||
+                  AjustesInicio.grafico('linha'))
+                CarregaPatrimonio(
+                  semDados: _linha(null),
+                  construir: (context, d) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (AjustesInicio.grafico('patrimonio'))
+                        HomePagePatrimonio(d),
+                      _linha(d.patrimonio.total),
+                    ],
+                  ),
+                ),
               if (AjustesInicio.grafico('pizza')) const HomePagePieChart(),
               if (AjustesInicio.grafico('mapa')) const HomePageHeatMap(),
               const SizedBox(height: 8),
             ],
           )));
+
+  // 1 = tudo, 2 = só gastos, 3 = só receitas. "Tudo" é a evolução do patrimônio: termina no
+  // total do cartão acima, senão a soma local das carteiras contradiz o Patrimônio.
+  Widget _linha(double? patrimonio) => AjustesInicio.grafico('linha')
+      ? HomePageLineGraph(
+          selectedSlidingSelector: AjustesInicio.linhaTipo,
+          ancoraFinal: AjustesInicio.linhaTipo == 1 ? patrimonio : null)
+      : const SizedBox.shrink();
 }

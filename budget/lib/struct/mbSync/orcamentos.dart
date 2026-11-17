@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:budget/database/tables.dart';
+import 'package:budget/functions.dart' show getBudgetDate;
+import 'package:budget/struct/currencyFunctions.dart' show budgetAmountToPrimaryCurrency;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:drift/drift.dart';
@@ -187,6 +189,45 @@ Future<Budget> mbGarantirOrcamentoGeral({DateTime? agora}) async {
         ..where((b) => b.budgetPk.equals(mbOrcamentoGeralPk)))
       .getSingle();
 }
+
+/// Gasto do orçamento em [periodo] (positivo = gastou): a consulta do cartão e da tela do orçamento.
+/// A Início usa a mesma para o ciclo (Geral), então os números não divergem.
+Stream<double> mbWatchGastoOrcamento(
+        Budget b, AllWallets carteiras, DateTimeRange periodo) =>
+    database
+        .watchTotalSpentInEachCategoryInTimeRangeFromCategories(
+          allWallets: carteiras,
+          start: periodo.start,
+          end: periodo.end,
+          categoryFks: b.categoryFks,
+          categoryFksExclude: b.categoryFksExclude,
+          budgetTransactionFilters: b.budgetTransactionFilters,
+          memberTransactionFilters: b.memberTransactionFilters,
+          onlyShowTransactionsBelongingToBudgetPk:
+              b.sharedKey != null || b.addedTransactionsOnly ? b.budgetPk : null,
+          budget: b,
+        )
+        .map((l) =>
+            l.fold<double>(0, (s, c) => s + c.total) * (b.income ? 1 : -1));
+
+/// Limite (0 = sem valor) e gasto do Geral no ciclo atual: o que a Início mostra no cartão do ciclo.
+/// `null` quando o Geral não existe (aparelho ainda sem Meu Banco).
+Future<({double limite, double gasto})?> mbLerCicloGeral(DateTime agora) async {
+  final b = await (database.select(database.budgets)
+        ..where((x) => x.budgetPk.equals(mbOrcamentoGeralPk)))
+      .getSingleOrNull();
+  if (b == null) return null;
+  final carteiras = await database.watchAllWalletsIndexed().first;
+  return (
+    limite: budgetAmountToPrimaryCurrency(carteiras, b),
+    gasto: await mbWatchGastoOrcamento(b, carteiras, getBudgetDate(b, agora)).first,
+  );
+}
+
+/// Avisa quando o Geral muda (ex.: "Definir limite do ciclo"), para a Início recarregar.
+Stream<void> mbMudouGeral() => (database.select(database.budgets)
+      ..where((x) => x.budgetPk.equals(mbOrcamentoGeralPk)))
+    .watch();
 
 Future<int> _proximaOrdem() async => (await database
         .customSelect('SELECT COUNT(*) AS n FROM budgets')

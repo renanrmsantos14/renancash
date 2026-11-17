@@ -5,6 +5,7 @@ import 'package:budget/database/initializeDefaultDatabase.dart' show defaultWall
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/budgetPage.dart' show determineBudgetPolarity;
+import 'package:budget/widgets/transactionEntry/transactionEntryAmount.dart' show ehAjusteDeSaldo;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
@@ -236,6 +237,63 @@ void main() {
     });
   });
 
+  group('ciclo da Início = orçamento Geral', () {
+    test('limite e gasto vêm do Geral, pela mesma consulta do cartão do orçamento', () async {
+      mbCicloCache = _ciclo;
+      await mbGarantirOrcamentoGeral();
+      await (database.update(database.budgets)
+            ..where((b) => b.budgetPk.equals(mbOrcamentoGeralPk)))
+          .write(const BudgetsCompanion(amount: Value(1300)));
+      await _tx('gasto', -700);
+      await _tx('estorno', 31.04);
+      await _tx('salario', 5000, income: true);
+      await _tx('inv', 550.03, carteira: mbCarteiraInvestimentos, categoria: '0');
+      await _tx('antigo', -999, data: DateTime(2026, 9, 1));
+      final r = await mbLerCicloGeral(DateTime(2026, 11, 9));
+      expect(r!.limite, 1300);
+      expect(r.gasto, closeTo(668.96, 1e-9));
+      expect(r.gasto, closeTo(await _gasto(await database.getBudgetInstance(mbOrcamentoGeralPk)), 1e-9));
+    });
+
+    test('sem Geral no aparelho não há número local (vale o do Worker)', () async {
+      expect(await mbLerCicloGeral(DateTime(2026, 11, 9)), isNull);
+    });
+
+    test('a Início usa o Geral: limite 0 vira "sem limite" e o gasto é o do orçamento', () {
+      ModeloInicio m(({double limite, double gasto})? geral) => montarModeloInicio(
+          ciclo: {'inicio': '2026-11-06', 'fim': '2026-12-05', 'consumido': 1094.67},
+          contas: const [],
+          faturas: const {},
+          sincronizadoEm: null,
+          ultimas: const [],
+          nome: '',
+          agora: DateTime(2026, 11, 16),
+          geral: geral);
+      expect(m(null).consumido, 1094.67);
+      expect(m(null).limite, isNull);
+      final com = m((limite: 1300, gasto: 668.96));
+      expect(com.consumido, 668.96);
+      expect(com.limite, 1300);
+      expect(com.percentual, closeTo(51.46, 0.01));
+      final sem = m((limite: 0, gasto: 668.96));
+      expect(sem.limite, isNull);
+      expect(sem.consumido, 668.96);
+    });
+  });
+
+  group('ajuste de saldo na lista', () {
+    test('lançado com categoria "0" é ajuste (fora do total do dia); pendente ou outra categoria não', () async {
+      await _tx('inv', 550.03, carteira: mbCarteiraInvestimentos, categoria: '0');
+      await _tx('gasto', -0.01);
+      Future<Transaction> t(String pk) => (database.select(database.transactions)
+            ..where((x) => x.transactionPk.equals(pk)))
+          .getSingle();
+      expect(ehAjusteDeSaldo(await t('inv')), true);
+      expect(ehAjusteDeSaldo(await t('gasto')), false);
+      expect(ehAjusteDeSaldo((await t('inv')).copyWith(paid: false)), false);
+    });
+  });
+
   group('alerta de 80% e 100% (função do PR 7)', () {
     test('níveis', () {
       expect(mbNivelOrcamento(valor: 1000, gasto: 799), 0);
@@ -284,13 +342,13 @@ void main() {
       expect(f.vence, DateTime(2026, 12, 5));
     });
 
-    test('patrimônio = Inter + investimentos − fatura, sem empréstimos', () {
-      final p = mbPatrimonio(inter: 1000, investimentos: 500, fatura: 300);
-      expect(p.total, 1200);
-      expect(mbPatrimonio(inter: 100, investimentos: 0, fatura: -50).total, 50);
+    test('patrimônio = correntes + poupanças + investimentos − fatura, sem empréstimos', () {
+      final p = mbPatrimonio(correntes: 1000, poupancas: 200, investimentos: 500, fatura: 300);
+      expect(p.total, 1400);
+      expect(mbPatrimonio(correntes: 100, investimentos: 0, fatura: -50).total, 50);
     });
 
-    test('carrega do que está no aparelho: conta corrente, investimentos, fatura e carteiras', () async {
+    test('carrega do que está no aparelho: correntes, poupança, investimentos, fatura e carteiras manuais', () async {
       await mbCriarTabelas();
       await mbGravarEstado({
         'contas': jsonEncode([
@@ -303,12 +361,18 @@ void main() {
       await _tx('i1', 400, carteira: mbCarteiraInvestimentos, categoria: '0');
       await _tx('i2', 100, carteira: mbCarteiraInvestimentos, categoria: '0');
       await _tx('d1', 50, carteira: '0', categoria: 'c1');
+      // Carteira do Meu Banco: a soma local (sem saldo inicial nem transferências) não é saldo e
+      // não aparece como carteira; a conta já está em "Contas correntes" com o saldo real.
+      await database.createOrUpdateWallet(
+          defaultWallet().copyWith(walletPk: 'mb:a', name: 'BANCO INTER ·69-6'));
+      await _tx('a1', 4253.79, carteira: 'mb:a', categoria: 'c1');
       final r = await mbCarregarPatrimonioInicio(agora);
       expect(r.semDados, false);
-      expect(r.patrimonio.inter, 1000);
+      expect(r.patrimonio.correntes, 1000);
+      expect(r.patrimonio.poupancas, 700);
       expect(r.patrimonio.investimentos, 500);
       expect(r.patrimonio.fatura, 300);
-      expect(r.patrimonio.total, 1200);
+      expect(r.patrimonio.total, 1900);
       expect(r.carteiras.map((c) => c.saldo), [50.0]);
     });
 
