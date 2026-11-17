@@ -196,7 +196,7 @@ final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const [
 int mbTotalPendencias() =>
     meuBancoRevisar.value.length +
     meuBancoClassificar.value.where((l) => l.revisao == null).length -
-    max(0, mbRendimentosJuntos(meuBancoClassificar.value).length - 1) + // rendimentos: um cartão só
+    max<int>(0, mbRendimentosJuntos(meuBancoClassificar.value).length - 1) + // rendimentos: um cartão só
     (AjustesInicio.bancos ? meuBancoAvisos.value.length : 0) +
     (AjustesInicio.vencidas
         ? meuBancoVencidas.value.where((t) => !t.income).length
