@@ -115,6 +115,8 @@ class InitializeLocalizations extends StatelessWidget {
       // Sem isto o idioma salvo nas configurações (padrão "pt") só vale depois de
       // escolhido de novo na tela de idioma; até lá vale o idioma do aparelho.
       startLocale: supportedLocales[appStateSettings["locale"]],
+      // A fonte da verdade é appStateSettings["locale"]; um idioma salvo pelo pacote passaria por cima.
+      saveLocale: false,
       path: 'assets/translations/generated',
       useFallbackTranslations: true,
       fallbackLocale: supportedLocales.values.toList().first,
