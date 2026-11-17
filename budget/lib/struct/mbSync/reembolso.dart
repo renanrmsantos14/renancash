@@ -96,7 +96,7 @@ MbSugestaoReembolso? mbReembolsoForte(List<MbSugestaoReembolso> s) =>
 /// Minha parte de um gasto (centavos, positivo) depois dos reembolsos ligados. Nunca abaixo de zero: `excesso` > 0
 /// quando os reembolsos passam do gasto (o app avisa).
 ({int parte, int excesso}) mbMinhaParte(int gasto, Iterable<int> reembolsos) {
-  final resto = gasto - reembolsos.fold(0, (s, r) => s + r);
+  final resto = gasto - reembolsos.fold<int>(0, (s, r) => s + r);
   return resto < 0 ? (parte: 0, excesso: -resto) : (parte: resto, excesso: 0);
 }
 
