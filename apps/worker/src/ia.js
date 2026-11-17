@@ -3,10 +3,13 @@
 // A IA nunca aplica nada: devolve uma sugestão que o usuário confirma, corrige ou explica no app.
 // O app manda o contexto (categorias, empréstimos/metas e exemplos de respostas dele); o modelo vê só códigos curtos
 // (C1, S3, V2) e o Worker os troca pelos pks. Código que não existe no contexto é descartado.
-// Qualquer falha (sem binding, limite do plano, timeout, JSON inválido) devolve resposta vazia: o app segue sem IA.
+// Qualquer falha (sem binding, modelo removido, limite do plano, timeout) devolve `ia: false`: o app segue sem IA e
+// mostra "Sem IA agora". Resposta fora do formato só descarta as sugestões (`ia: true`, lista vazia).
 // Nada de descrição ou valor vai para o log.
 
-export const MODELO = "@cf/meta/llama-3.1-8b-instruct"; // na lista de JSON mode da doc do Workers AI
+// Na lista de JSON mode da doc do Workers AI e no catálogo atual, sem data de remoção. O @cf/meta/llama-3.1-8b-instruct
+// saiu do catálogo (toda chamada falhava e o app recebia lista vazia).
+export const MODELO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 export const MAX_LANCAMENTOS = 8;
 const MAX_CATEGORIAS = 80;
 const MAX_SUBS = 30;
@@ -196,13 +199,13 @@ async function rodar(ai, mensagens, maxTokens) {
   }
 }
 
-// Falha da IA vira lista vazia. O log leva só o tipo do erro (nunca prompt, descrição ou valor).
+// Falha da IA vira null. O log leva só o tipo do erro (nunca prompt, descrição ou valor).
 async function seguro(fn) {
   try {
     return await fn();
   } catch (e) {
     console.error("IA indisponível:", e?.name || "Erro", String(e?.message || "").slice(0, 80));
-    return [];
+    return null;
   }
 }
 
@@ -213,7 +216,7 @@ export async function sugerir(env, corpo) {
   const ctx = montarContexto(corpo?.contexto);
   if (!ctx.cats.size) return { sugestoes: [], ia: true };
   const sugestoes = await seguro(async () => lerResposta(await rodar(env.AI, promptSugerir(ctx, lancamentos), 110 * lancamentos.length + 60), ctx, lancamentos));
-  return { sugestoes, ia: true };
+  return { sugestoes: sugestoes ?? [], ia: sugestoes !== null };
 }
 
 // POST /api/ia/entender { contexto, lancamento, explicacao } → { sugestao | null }
@@ -223,6 +226,6 @@ export async function entender(env, corpo) {
   if (!env.AI || !l || !explicacao) return { sugestao: null, ia: Boolean(env.AI) };
   const ctx = montarContexto(corpo?.contexto);
   if (!ctx.cats.size) return { sugestao: null, ia: true };
-  const [sugestao] = await seguro(async () => lerResposta(await rodar(env.AI, promptEntender(ctx, l, explicacao), 200), ctx, [l]));
-  return { sugestao: sugestao ?? null, ia: true };
+  const sugestoes = await seguro(async () => lerResposta(await rodar(env.AI, promptEntender(ctx, l, explicacao), 200), ctx, [l]));
+  return { sugestao: sugestoes?.[0] ?? null, ia: sugestoes !== null };
 }

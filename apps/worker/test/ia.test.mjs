@@ -58,7 +58,7 @@ test("lerResposta: aceita objeto ou texto com cercas, uma sugestão por lançame
   assert.deepEqual(lerResposta(null, ctx, [PIX]), []);
 });
 
-test("sugerir: lote limitado, JSON mode no modelo e falha vira lista vazia", async () => {
+test("sugerir: lote limitado, JSON mode no modelo e falha vira lista vazia com ia: false", async () => {
   const chamadas = [];
   const AI = { run: async (modelo, opcoes) => { chamadas.push({ modelo, opcoes }); return { response: { sugestoes: [{ n: 1, categoria: "C1", subcategoria: "", titulo: "Empréstimo Mãe", vinculo: "V1", confianca: 0.5, pergunta: "Esse Pix de R$ 500 para Fabiana foi empréstimo para a Mãe?" }] } }; } };
   const muitos = Array.from({ length: 20 }, (_, i) => ({ ...PIX, id: "t" + i }));
@@ -73,11 +73,13 @@ test("sugerir: lote limitado, JSON mode no modelo e falha vira lista vazia", asy
   console.error = (...a) => erros.push(a.join(" "));
   try {
     const falha = await sugerir({ AI: { run: async () => { throw new Error("JSON Mode couldn't be met"); } } }, { contexto: CONTEXTO, lancamentos: [PIX] });
-    assert.deepEqual(falha, { sugestoes: [], ia: true });
+    assert.deepEqual(falha, { sugestoes: [], ia: false }); // o app mostra "Sem IA agora"
+    const removido = await entender({ AI: { run: async () => { throw new Error("5007: No such model"); } } }, { contexto: CONTEXTO, lancamento: PIX, explicacao: "almoço" });
+    assert.deepEqual(removido, { sugestao: null, ia: false });
   } finally {
     console.error = original;
   }
-  assert.equal(erros.length, 1);
+  assert.equal(erros.length, 2);
   assert.doesNotMatch(erros[0], /FABIANA|500/); // nada de descrição ou valor no log
   assert.deepEqual(await sugerir({}, { contexto: CONTEXTO, lancamentos: [PIX] }), { sugestoes: [], ia: false });
 });
