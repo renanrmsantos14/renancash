@@ -1,12 +1,17 @@
 // Fila "Para classificar" da aba Pendências (funções puras, test/mb_classificar_test.dart).
 //
-// Entram os lançamentos do Meu Banco novos (desde que a fila existe) e os antigos sem categoria útil. A sugestão vem da
+// Entram os lançamentos do Meu Banco novos (a partir de quando a fila foi instalada) e os antigos sem categoria útil;
+// ajuste de saldo e investimentos nunca entram. A sugestão vem da
 // IA do Meu Banco (POST /api/ia/sugerir, Workers AI) ou, sem ela, dos padrões que o usuário já confirmou. Nada é
 // aplicado sem o toque do usuário. Os padrões (favorecido normalizado → escolha) ficam só neste aparelho e vão como
 // exemplos para a IA; a escolha confirmada sobe pelo sync normal (ajuste da categoria).
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
 import 'package:budget/struct/mbSync/revisao.dart'
     show MbItemRevisao, mbNormalizarRevisao;
+import 'package:budget/struct/meuBancoMapping.dart' show mbPkInvestimento;
+
+/// Categoria de ajuste de saldo (também a dos investimentos): nunca entra na fila nem vira opção.
+const String mbCategoriaAjuste = '0';
 
 /// Categorias que não dizem nada sobre o gasto (fonte única da fila). Também conta qualquer "Transferência…".
 const Set<String> mbCategoriasSemUtilidade = {
@@ -29,8 +34,12 @@ bool mbSemCategoriaUtil(String? nome) {
   return n.isEmpty || mbCategoriasSemUtilidade.contains(n) || n.startsWith('transferência');
 }
 
-/// Dias antes da ativação da fila que ainda contam como "novos" (banco que posta com atraso).
-const int mbDiasFolgaFila = 7;
+/// Marco dos lançamentos "novos": quando a fila foi instalada (gravado na primeira execução). O marco da v5.4.41
+/// (primeira abertura − 7 dias) pegava uma semana de histórico; quem já o tem volta ao dia da instalação.
+DateTime mbMarcoNovos(DateTime? marcoAntigo, DateTime agora) => marcoAntigo == null
+    ? agora
+    : DateTime(marcoAntigo.year, marcoAntigo.month, marcoAntigo.day + 7);
+
 const double mbLimiarPergunta = 0.7; // igual a LIMIAR_PERGUNTA do Worker (src/ia.js)
 const int mbMaxPadroes = 300;
 const int mbMaxExemplos = 20;
@@ -133,14 +142,17 @@ class MbLancamentoIa {
       };
 }
 
-/// Fila: fora os pendentes e os já revisados; entra o antigo sem categoria útil e o novo que o usuário ainda não
-/// editou. Mais recentes primeiro.
+/// Fila: fora os pendentes, os já revisados, o ajuste de saldo e os investimentos; entra o antigo sem categoria útil
+/// e o novo (data a partir de `desde`, quando a fila foi instalada) que o usuário ainda não editou. Mais recentes
+/// primeiro.
 List<MbLancamentoIa> mbFilaClassificar(Iterable<MbLancamentoIa> lancamentos,
     {required DateTime desde, Set<String> revisados = const {}}) {
   final fila = [
     for (final l in lancamentos)
       if (!l.pendente &&
           !revisados.contains(l.pk) &&
+          l.categoriaPk != mbCategoriaAjuste &&
+          !l.pk.startsWith(mbPkInvestimento('')) &&
           (l.revisao != null ||
               mbSemCategoriaUtil(l.categoriaNome) ||
               (!l.editado && !l.data.isBefore(desde))))
@@ -161,19 +173,24 @@ class MbVinculoOpcao {
   const MbVinculoOpcao(this.pk, this.nome, this.tipo);
 }
 
-/// O que o usuário pode escolher: categorias úteis (uma por nome, a do usuário antes da `mb:`) e empréstimos/metas abertos.
+/// O que o usuário pode escolher: categorias úteis (uma por nome, a do usuário antes da `mb:`; nunca a de ajuste) e
+/// empréstimos/metas abertos.
 class MbOpcoes {
   final List<MbCategoriaOpcao> categorias;
   final List<MbVinculoOpcao> vinculos;
-  const MbOpcoes([this.categorias = const [], this.vinculos = const []]);
+  final Map<String, String> _mesmoNome; // pk de cada categoria útil → pk da que ficou com aquele nome
+  const MbOpcoes([this.categorias = const [], this.vinculos = const [], this._mesmoNome = const {}]);
 
   factory MbOpcoes.montar(Iterable<CatLocal> cats, [List<MbVinculoOpcao> vinculos = const []]) {
+    String chave(CatLocal c) => '${c.receita}:${c.nome.toLowerCase()}';
+    final uteis = [
+      for (final c in cats)
+        if (c.paiPk == null && c.pk != mbCategoriaAjuste && !mbSemCategoriaUtil(c.nome)) c
+    ];
     final pais = <String, CatLocal>{};
-    for (final c in cats) {
-      if (c.paiPk != null || mbSemCategoriaUtil(c.nome)) continue;
-      final chave = '${c.receita}:${c.nome.toLowerCase()}';
-      final atual = pais[chave];
-      if (atual == null || (atual.pk.startsWith('mb:') && !c.pk.startsWith('mb:'))) pais[chave] = c;
+    for (final c in uteis) {
+      final atual = pais[chave(c)];
+      if (atual == null || (atual.pk.startsWith('mb:') && !c.pk.startsWith('mb:'))) pais[chave(c)] = c;
     }
     return MbOpcoes([
       for (final p in pais.values)
@@ -181,10 +198,16 @@ class MbOpcoes {
           for (final s in cats)
             if (s.paiPk == p.pk) (pk: s.pk, nome: s.nome)
         ])
-    ], vinculos);
+    ], vinculos, {
+      for (final c in uteis) c.pk: pais[chave(c)]!.pk
+    });
   }
 
-  MbCategoriaOpcao? categoria(String? pk) => categorias.where((c) => c.pk == pk).firstOrNull;
+  /// Também acha pela repetida de mesmo nome ("mb:cat:d:Transporte" → a Transporte do usuário).
+  MbCategoriaOpcao? categoria(String? pk) {
+    final alvo = _mesmoNome[pk] ?? pk;
+    return categorias.where((c) => c.pk == alvo).firstOrNull;
+  }
   MbVinculoOpcao? vinculo(String? pk) => vinculos.where((v) => v.pk == pk).firstOrNull;
 
   /// Contexto do POST /api/ia/*: categorias, vínculos e exemplos (pks; o Worker os troca por códigos curtos).
@@ -281,23 +304,62 @@ MbSugestao? mbSugestaoLocal(MbLancamentoIa l, List<MbPadrao> padroes, MbOpcoes o
   return MbSugestao(l.pk, atual.pk, confianca: 0.5, fonte: MbFonteSugestao.atual);
 }
 
-/// Chips de alternativas: a categoria atual (se útil), as mais usadas nos padrões e as primeiras do tipo certo,
-/// sem repetir a sugerida.
-List<MbCategoriaOpcao> mbAlternativas(
-    MbLancamentoIa l, String? sugeridaPk, List<MbPadrao> padroes, MbOpcoes op,
-    {int max = 4}) {
-  final uso = <String, int>{};
-  for (final p in padroes) {
-    uso[p.categoriaPk] = (uso[p.categoriaPk] ?? 0) + p.vezes;
+// Palavras do favorecido que identificam descrições parecidas ("MUNDO DO CABELEIREIRO" → MUNDO, CABELEIREIRO).
+Set<String> _palavras(String descricao) => {
+      for (final p in mbChavePadrao(descricao).split(' '))
+        if (p.length > 2) p
+    };
+
+/// Quantas vezes cada categoria foi usada nos lançamentos já classificados: no geral e por palavra do favorecido.
+class MbUso {
+  final Map<String, int> geral;
+  final Map<String, Map<String, int>> porPalavra;
+  const MbUso([this.geral = const {}, this.porPalavra = const {}]);
+
+  factory MbUso.de(Iterable<({String descricao, String categoriaPk})> lancamentos) {
+    final geral = <String, int>{};
+    final porPalavra = <String, Map<String, int>>{};
+    for (final l in lancamentos) {
+      geral.update(l.categoriaPk, (n) => n + 1, ifAbsent: () => 1);
+      for (final p in _palavras(l.descricao)) {
+        porPalavra.putIfAbsent(p, () => {}).update(l.categoriaPk, (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    return MbUso(geral, porPalavra);
   }
-  final porUso = op.categorias.toList()
-    ..sort((a, b) => (uso[b.pk] ?? 0).compareTo(uso[a.pk] ?? 0));
-  final out = <MbCategoriaOpcao>[];
-  final atual = op.categoria(l.categoriaPk);
-  for (final c in [if (atual != null) atual, ...porUso]) {
-    if (out.length >= max) break;
-    if (c.pk == sugeridaPk || out.contains(c) || c.receita != (l.valor > 0)) continue;
-    out.add(c);
+}
+
+/// Chips de alternativas do tipo certo (despesa ou receita), sem a sugerida: a categoria atual (se útil), depois as
+/// mais usadas em descrições parecidas, depois as mais usadas em geral.
+List<MbCategoriaOpcao> mbAlternativas(MbLancamentoIa l, String? sugeridaPk, MbUso uso, MbOpcoes op, {int max = 4}) {
+  // Contagens por opção (a categoria repetida de mesmo nome conta para a que ficou).
+  Map<String, int> somar(Iterable<Map<String, int>> contagens) {
+    final out = <String, int>{};
+    for (final e in contagens.expand((m) => m.entries)) {
+      if (op.categoria(e.key) case final c?) out.update(c.pk, (n) => n + e.value, ifAbsent: () => e.value);
+    }
+    return out;
   }
-  return out;
+
+  final parecidas = somar([for (final p in _palavras(l.descricao)) uso.porPalavra[p] ?? const {}]);
+  final geral = somar([uso.geral]);
+  final atual = op.categoria(l.categoriaPk)?.pk;
+  final candidatas = [
+    for (final c in op.categorias)
+      if (c.pk != sugeridaPk && c.receita == (l.valor > 0)) c
+  ];
+  int comparar(int a, int b) {
+    final (ca, cb) = (candidatas[a], candidatas[b]);
+    for (final d in [
+      (cb.pk == atual ? 1 : 0) - (ca.pk == atual ? 1 : 0),
+      (parecidas[cb.pk] ?? 0) - (parecidas[ca.pk] ?? 0),
+      (geral[cb.pk] ?? 0) - (geral[ca.pk] ?? 0),
+    ]) {
+      if (d != 0) return d;
+    }
+    return a - b; // empate fica na ordem das opções (o sort do Dart não é estável)
+  }
+
+  final ordem = [for (var i = 0; i < candidatas.length; i++) i]..sort(comparar);
+  return [for (final i in ordem.take(max)) candidatas[i]];
 }

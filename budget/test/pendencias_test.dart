@@ -67,7 +67,25 @@ void main() {
     expect(find.text('Nada na fila.'), findsOneWidget);
   });
 
-  testWidgets('um item por vez; Pular manda para o fim da fila', (t) async {
+  test('ordem com pulados: posição real avança a cada Pular e volta a 1 na segunda volta', () {
+    const itens = ['a', 'b', 'c'];
+    final pulados = <String>[];
+    int posicao() => itens.indexOf(ordenarPulados(itens, pulados, (i) => i).first) + 1;
+    int pularEVer() {
+      final atual = ordenarPulados(itens, pulados, (i) => i).first;
+      pulados
+        ..remove(atual)
+        ..add(atual);
+      return posicao();
+    }
+
+    expect(posicao(), 1);
+    final vistas = [for (var i = 0; i < 5; i++) pularEVer()];
+    expect(vistas, [2, 3, 1, 2, 3]);
+    expect(ordenarPulados(itens, ['b', 'sumiu'], (i) => i), ['a', 'c', 'b']);
+  });
+
+  testWidgets('um item por vez; Pular manda para o fim da fila e o contador avança', (t) async {
     await _abrir(t, itens: [_pix('a', 'X'), _pix('b', 'Y')]);
     expect(find.text('1 de 2'), findsOneWidget);
     expect(find.text(_itemA), findsOneWidget);
@@ -75,9 +93,11 @@ void main() {
     await t.tap(find.text('Pular'));
     await t.pumpAndSettle();
     expect(_noCartao(t, 'b'), true);
+    expect(find.text('2 de 2'), findsOneWidget);
     await t.tap(find.text('Pular'));
     await t.pumpAndSettle();
     expect(_noCartao(t, 'a'), true);
+    expect(find.text('1 de 2'), findsOneWidget);
   });
 
   testWidgets('item único não tem Pular', (t) async {
