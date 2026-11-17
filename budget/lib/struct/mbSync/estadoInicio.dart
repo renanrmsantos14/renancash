@@ -4,14 +4,15 @@ import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
-import 'package:budget/struct/meuBancoMapping.dart' show mbCarteiraInvestimentos;
+import 'package:budget/struct/meuBancoMapping.dart'
+    show mbCarteiraInvestimentos, mbPkConta;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:intl/intl.dart' show NumberFormat;
 
-/// `contas`: nomes das contas do Meu Banco agrupadas na linha (separados por '|'),
-/// usados para achar as carteiras e abrir as transações delas.
-typedef ContaInicio = ({String sigla, String nome, String tipo, double saldo, String contas});
+/// `carteiras`: pks das carteiras locais das contas da linha (`mb:<id da conta>`, separados por '|').
+/// Pelo id, não pelo nome: corrente e poupança do mesmo banco podem ter o mesmo nome.
+typedef ContaInicio = ({String sigla, String nome, String tipo, double saldo, String carteiras});
 typedef CartaoInicio = ({
   String nome,
   String final4,
@@ -192,7 +193,7 @@ ModeloInicio montarModeloInicio({
         nome: '${c['bank'] ?? c['name']}',
         tipo: 'Conta corrente',
         saldo: _num(c['balance']),
-        contas: '${c['name']}'
+        carteiras: mbPkConta('${c['id']}')
       ),
     if (poupancas.length == 1 || !agruparPoupancas)
       for (final p in poupancas)
@@ -201,7 +202,7 @@ ModeloInicio montarModeloInicio({
           nome: poupancas.length == 1 ? '${p['bank'] ?? p['name']}' : '${p['name']}',
           tipo: poupancas.length == 1 ? 'Poupança' : 'Poupança · ${p['bank'] ?? ''}',
           saldo: _num(p['balance']),
-          contas: '${p['name']}'
+          carteiras: mbPkConta('${p['id']}')
         )
     else if (poupancas.length > 1)
       (
@@ -209,7 +210,7 @@ ModeloInicio montarModeloInicio({
         nome: 'Poupanças',
         tipo: '${poupancas.length} contas',
         saldo: saldoDe(poupancas),
-        contas: poupancas.map((c) => '${c['name']}').join('|')
+        carteiras: poupancas.map((c) => mbPkConta('${c['id']}')).join('|')
       ),
   ];
 

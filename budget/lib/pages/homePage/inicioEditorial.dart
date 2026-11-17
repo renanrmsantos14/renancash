@@ -11,6 +11,7 @@ import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/transactionFilters.dart' show SearchFilters;
 import 'package:budget/pages/transactionsSearchPage.dart';
+import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
@@ -186,24 +187,21 @@ Future<void> mbAbrirOrcamentoCiclo(BuildContext context,
           : BudgetPage(budgetPk: geral.budgetPk));
 }
 
-/// Abre as transações das carteiras com o nome do banco ou das contas da linha.
-/// Sem carteira correspondente, cai no Meu Banco.
+/// Uma carteira: abre o detalhe da conta. Várias (Poupanças juntas): as transações delas.
+/// Sem carteira no aparelho, cai no Meu Banco.
 Future<void> mbAbrirConta(BuildContext context, ContaInicio c) async {
-  final nomes = {c.nome, ...c.contas.split('|')}
-      .map((n) => n.trim().toLowerCase())
-      .where((n) => n.isNotEmpty)
-      .toSet();
   final pks = [
-    for (final w in await database.select(database.wallets).get())
-      if (nomes.contains(w.name.trim().toLowerCase())) w.walletPk
+    for (final pk in c.carteiras.split('|').toSet())
+      if (pk.isNotEmpty && await database.getWalletInstanceOrNull(pk) != null) pk
   ];
   if (!context.mounted) return;
   pushRoute(
       context,
-      pks.isEmpty
-          ? const MeuBancoPage()
-          : TransactionsSearchPage(
-              initialFilters: SearchFilters(walletPks: pks)));
+      switch (pks) {
+        [] => const MeuBancoPage(),
+        [final pk] => WatchedWalletDetailsPage(walletPk: pk),
+        _ => TransactionsSearchPage(initialFilters: SearchFilters(walletPks: pks)),
+      });
 }
 
 /// Sem dados: pareado, ainda não sincronizou (`dica`); não pareado, convite para conectar o banco.

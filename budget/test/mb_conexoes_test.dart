@@ -145,4 +145,15 @@ void main() {
     expect(removidos, ['a']);
     expect(find.text('Nubank'), findsNothing);
   });
+
+  test('chips de carteira: nomes iguais ganham o tipo e, sem tipo ou empatando, a posição', () {
+    expect(mbRotulosCarteiras(['Nubank', 'Inter'], [null, null]), ['Nubank', 'Inter']);
+    expect(
+        mbRotulosCarteiras(
+            ['BANCO INTER ·69-6', 'BANCO INTER ·69-6', 'Nubank'], ['Conta corrente', 'Poupança', null]),
+        ['BANCO INTER ·69-6 · Conta corrente', 'BANCO INTER ·69-6 · Poupança', 'Nubank']);
+    expect(mbRotulosCarteiras(['X', 'X'], [null, null]), ['X · 1', 'X · 2']);
+    expect(mbRotulosCarteiras(['X', 'X'], ['Poupança', 'Poupança']),
+        ['X · Poupança · 1', 'X · Poupança · 2']);
+  });
 }

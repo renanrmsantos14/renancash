@@ -1,5 +1,9 @@
+import 'dart:convert';
+
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/meuBancoMapping.dart' show mbPkConta;
 
 /// Situação de uma conexão (item do Pluggy) para a tela "Contas conectadas".
 enum MbSituacao { emDia, atualizando, reconectar }
@@ -92,3 +96,35 @@ Future<List<MbConexao>> mbCarregarConexoes() async =>
 
 Future<void> mbRemoverConexao(String itemId) async =>
     (await _cliente()).removerConexao(itemId);
+
+/// Tipo ("Conta corrente", "Poupança") de cada carteira do Meu Banco, pelo pk.
+/// Vazio fora do Meu Banco (sem a tabela ou sem contas sincronizadas).
+Future<Map<String, String>> mbTiposDasCarteiras() async {
+  try {
+    final contas = jsonDecode(await mbLerEstado('contas') ?? '[]') as List;
+    return {
+      for (final c in contas)
+        if (c is Map)
+          mbPkConta('${c['id']}'):
+              MbContaConexao.deJson(c.cast<String, dynamic>()).tipo
+    };
+  } catch (_) {
+    return const {};
+  }
+}
+
+/// Rótulos sem repetição para carteiras de mesmo nome (corrente e poupança do mesmo banco):
+/// os repetidos ganham o tipo e, se ainda empatarem (ou sem tipo), a posição.
+List<String> mbRotulosCarteiras(List<String> nomes, List<String?> tipos) {
+  List<String> desempatar(List<String> base, String Function(int i) sufixo) {
+    final contagem = <String, int>{};
+    for (final b in base) contagem[b] = (contagem[b] ?? 0) + 1;
+    return [
+      for (var i = 0; i < base.length; i++)
+        contagem[base[i]]! > 1 ? '${base[i]} · ${sufixo(i)}' : base[i]
+    ];
+  }
+
+  return desempatar(
+      desempatar(nomes, (i) => tipos[i] ?? '${i + 1}'), (i) => '${i + 1}');
+}
