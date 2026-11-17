@@ -39,6 +39,7 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 
 - Rejeições do Worker (`packages/core/src/sync.ts`, `TABELAS` + `dadosValidos`): campo `texto` exige string de 1 a 200 caracteres. Caso real (v5.4.27): assinatura do Cashew sem título ia com `nome: ""` e voltava "dados inválidos". Agora `projetarAssinatura` manda `Sem nome` e `completarNovo` refaz o `padrao` `*` (sobra do envio rejeitado) e corta em 200; o item rejeitado se reenvia sozinho na próxima rodada porque a projeção mudou. Testes: `test/mb_mapeamento_test.dart` ("assinatura sem título...") e `test/mb_sync_nucleo_test.dart`. Ao mudar uma projeção, confira cada campo obrigatório contra `TABELAS` do Worker.
 - Tela Meu Banco: `mbRotulosRejeitados` junta rejeições iguais em uma linha com `(n)` e mostra o nome/descrição/padrão do item; sem nome legível fica `tabela: motivo` (nunca `· :` vazio).
+- Contas conectadas: conexão do MeuPluggy mostra o banco tirado das contas (`mbNomeDaConexao`: "BANCO INTER ·69-6" → "Banco Inter", sem "(Brasil)" nem "S.A."; cartões não contam). "Sincronizar" e "Atualizar bancos" numa linha só, mesma altura; "Sincronizado agora" (sem "há pouco").
 
 ## Evidência obrigatória
 - Tail da saída de `flutter test` (todos passando) e de `flutter analyze`.

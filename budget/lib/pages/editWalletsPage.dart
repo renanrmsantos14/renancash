@@ -57,26 +57,25 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
   Map<String, double> _saldosReais = const {};
   double _saldoDe(WalletWithDetails w) =>
       _saldosReais[w.wallet.walletPk] ?? w.totalSpent ?? 0;
+  // Tipo das contas do Meu Banco para o subtítulo (nomes repetidos se distinguem).
+  Map<String, String> _tiposMb = const {};
 
   @override
   void initState() {
     mbLerSaldosReais().then((r) {
       if (mounted) setState(() => _saldosReais = r);
     }, onError: (_) {});
+    mbTiposDasCarteiras().then((t) {
+      if (mounted) setState(() => _tiposMb = t);
+    });
     Future.delayed(Duration.zero, () {
       if (widget.runWhenOpen != null) {
         widget.runWhenOpen!();
       }
       database.fixOrderWallets();
     });
-    // Tipo das contas do Meu Banco para o subtítulo (nomes repetidos se distinguem).
-    mbTiposDasCarteiras().then((t) {
-      if (mounted) setState(() => _tiposMb = t);
-    });
     super.initState();
   }
-
-  Map<String, String> _tiposMb = const {};
 
   @override
   Widget build(BuildContext context) {

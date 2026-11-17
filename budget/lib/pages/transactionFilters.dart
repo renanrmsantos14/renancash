@@ -11,7 +11,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/conexoes.dart'
-    show mbRotulosCarteiras, mbTiposDasCarteiras;
+    show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/selectAmount.dart';
@@ -1405,15 +1405,10 @@ class AppliedFilterChips extends StatelessWidget {
     // ainda divide o nome com a corrente.
     final walletPks = searchFilters.walletPks.toSet().toList();
     final tiposMb = walletPks.isEmpty ? const <String, String>{} : await mbTiposDasCarteiras();
-    final todas = allWallets.list;
-    final rotulos = mbRotulosCarteiras([
-      for (final w in todas) getWalletStringName(allWallets, w)
-    ], [
-      for (final w in todas) tiposMb[w.walletPk]
-    ]);
-    final rotuloDe = {
-      for (final (i, w) in todas.indexed) w.walletPk: rotulos[i]
-    };
+    final rotuloDe = mbRotulosPorPk({
+      for (final w in allWallets.list)
+        w.walletPk: getWalletStringName(allWallets, w)
+    }, tiposMb);
     for (final walletPk in walletPks) {
       out.add(AppliedFilterChip(
         label: rotuloDe[walletPk] ??

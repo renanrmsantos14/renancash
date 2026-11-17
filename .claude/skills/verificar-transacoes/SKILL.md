@@ -39,6 +39,9 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 - Sinal negativo: `convertToMoney` e `brl` usam "−" (U+2212) colado ao símbolo ("−R$ 0,01"), igual ao total do dia e às linhas.
 - Fim da lista do mês: `mbFolgaFab` (88) para o "+" não cobrir o valor da última linha; o mesmo no PageFramework quando a página tem `floatingActionButton`.
 - Entrada de lista (`EntradaSuave`) em Agendadas, Assinaturas e Empréstimos só nos 600 ms após abrir a página; com "reduzir movimento" nada anima (`ContagemValor` mostra o valor final).
+- Assinaturas e Agendadas: legenda "2 assinaturas" / "2 agendadas" (singular e plural). Assinatura sem título com subcategoria mostra a subcategoria ("Spotify") e a categoria vai para a etiqueta (`categoriaDoTitulo`). "R$ 20,90 / mês" some quando repete o valor da linha (recorrência de 1 mês na visão mensal).
+- Seletor de categoria da transação abre só com as categorias do tipo escolhido (Despesa/Receita); "Mostrar todas as categorias" segue no menu do seletor e não vira padrão.
+- Chip de carteira na busca: o desempate de nome olha todas as carteiras do app (`mbRotulosPorPk`), então a poupança "BANCO INTER ·69-6" filtrada sozinha mostra "· Poupança".
 
 ## Evidência obrigatória
 - Tail do analyze e dos testes, os 6 PNGs do passo 2 e os prints do navegador (claro e escuro) em `.verificacao/<data>-<branch>/`.
