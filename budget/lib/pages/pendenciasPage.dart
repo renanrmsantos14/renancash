@@ -12,6 +12,8 @@ import 'package:budget/widgets/openPopup.dart' show RoutesToPopAfterDelete;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
+import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
+import 'package:budget/widgets/editorial/itemClassificar.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
@@ -32,7 +34,7 @@ Future<void> mbReconectarAviso(
   }
 }
 
-/// Item da fila: Para revisar ou conta vencida (Configurações › Pendências).
+/// Item da fila: Para revisar, Para classificar ou conta vencida (Configurações › Pendências).
 typedef _Pendencia = ({String id, String rotulo, Widget Function() conteudo});
 
 /// Aba Pendências: bancos desconectados numa faixa fixa e a fila (Para revisar e, se ligado, contas
@@ -59,23 +61,35 @@ class _PendenciasPageState extends State<PendenciasPage> {
     }
   }
 
-  List<_Pendencia> _itens() => [
-        for (final i in meuBancoRevisar.value)
+  List<_Pendencia> _itens() {
+    final classificar = meuBancoClassificar.value;
+    // Pix enviado do Worker que já está em Para classificar aparece só lá (com a sugestão da IA).
+    final viaIa = {for (final l in classificar) l.revisao?.id};
+    return [
+      for (final i in meuBancoRevisar.value)
+        if (!viaIa.contains(i.id))
           (
             id: i.id,
             rotulo: 'Para revisar',
             conteudo: () => ItemParaRevisar(item: i)
           ),
-        if (AjustesInicio.vencidas)
-          // Só contas a pagar: receitas pendentes não são "conta vencida".
-          for (final t in meuBancoVencidas.value)
-            if (!t.income)
-              (
-                id: 'venc:${t.transactionPk}',
-                rotulo: 'Conta vencida',
-                conteudo: () => _ItemVencido(transacao: t)
-              ),
-      ];
+      for (final l in classificar)
+        (
+          id: 'cls:${l.pk}',
+          rotulo: 'Para classificar',
+          conteudo: () => ItemClassificar(lancamento: l, pedirSugestoes: widget.atualizar)
+        ),
+      if (AjustesInicio.vencidas)
+        // Só contas a pagar: receitas pendentes não são "conta vencida".
+        for (final t in meuBancoVencidas.value)
+          if (!t.income)
+            (
+              id: 'venc:${t.transactionPk}',
+              rotulo: 'Conta vencida',
+              conteudo: () => _ItemVencido(transacao: t)
+            ),
+    ];
+  }
 
   /// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
   List<_Pendencia> _ordenar(List<_Pendencia> itens) {
@@ -103,6 +117,7 @@ class _PendenciasPageState extends State<PendenciasPage> {
           listenable: Listenable.merge([
             meuBancoAvisos,
             meuBancoRevisar,
+            meuBancoClassificar,
             meuBancoVencidas,
             mbAjustesMudaram
           ]),

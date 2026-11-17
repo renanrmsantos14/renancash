@@ -42,7 +42,9 @@ class MbCliente {
   }
 
   Future<Map<String, dynamic>> _chamar(String metodo, String caminho,
-      {Map<String, String>? query, Object? corpo}) async {
+      {Map<String, String>? query,
+      Object? corpo,
+      Duration limite = const Duration(seconds: 45)}) async {
     final req = http.Request(metodo, _uri(caminho, query));
     req.headers['Accept'] = 'application/json';
     if (token != null && token!.isNotEmpty) {
@@ -53,7 +55,7 @@ class MbCliente {
       req.body = jsonEncode(corpo);
     }
     final resp = await http.Response.fromStream(
-        await _http.send(req).timeout(const Duration(seconds: 45)));
+        await _http.send(req).timeout(limite));
     Map<String, dynamic> json = {};
     try {
       final j = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -110,6 +112,15 @@ class MbCliente {
   Future<void> definirSalario(String txId) async {
     await _chamar('PUT', '/api/config', corpo: {'salario_id': txId});
   }
+
+  // Sugestões da aba Pendências (Workers AI no Meu Banco). O Worker devolve lista vazia se a IA falhar.
+  Future<Map<String, dynamic>> iaSugerir(Map<String, dynamic> corpo) => _chamar(
+      'POST', '/api/ia/sugerir',
+      corpo: corpo, limite: const Duration(seconds: 25));
+
+  Future<Map<String, dynamic>> iaEntender(Map<String, dynamic> corpo) => _chamar(
+      'POST', '/api/ia/entender',
+      corpo: corpo, limite: const Duration(seconds: 25));
 
   Future<Map<String, dynamic>> atualizar() =>
       _chamar('POST', '/api/sync/atualizar', corpo: const {});

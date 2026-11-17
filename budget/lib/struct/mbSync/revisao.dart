@@ -4,6 +4,8 @@ import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/pendenciasVencidas.dart' show meuBancoVencidas;
 import 'package:budget/struct/mbSync/avisos.dart' show mbAtualizarAvisos, meuBancoAvisos;
+import 'package:budget/struct/mbSync/classificarDados.dart'
+    show mbAtualizarClassificar, meuBancoClassificar;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
@@ -186,10 +188,11 @@ List<MbItemRevisao> mbFilaVisivel(List<MbItemRevisao> itens, MbRevisoes revisoes
 /// Fila que a Início mostra, lida do que está no aparelho.
 final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const []);
 
-/// Total da aba Pendências (selo): itens Para revisar e, conforme as configurações,
+/// Total da aba Pendências (selo): itens Para revisar, Para classificar (o Pix enviado do Worker conta uma vez só) e, conforme as configurações,
 /// bancos desconectados e contas vencidas.
 int mbTotalPendencias() =>
     meuBancoRevisar.value.length +
+    meuBancoClassificar.value.where((l) => l.revisao == null).length +
     (AjustesInicio.bancos ? meuBancoAvisos.value.length : 0) +
     (AjustesInicio.vencidas
         ? meuBancoVencidas.value.where((t) => !t.income).length
@@ -211,6 +214,7 @@ Future<void> mbAtualizarRevisar() async {
   } catch (e) {
     if (kDebugMode) debugPrint('Meu Banco: falha ao ler a fila Para revisar: $e');
   }
+  await mbAtualizarClassificar(); // depende da fila acima (Pix enviado do Worker) e não lança
   // Fora do try: banco desconectado aparece mesmo se a fila falhar (mbLerAvisos não lança).
   await mbAtualizarAvisos();
 }

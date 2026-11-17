@@ -19,6 +19,9 @@ import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/mbSync/revisao.dart' show MbItemRevisao, meuBancoRevisar;
+import 'package:budget/struct/mbSync/classificar.dart';
+import 'package:budget/struct/mbSync/classificarDados.dart';
+import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
 import 'package:budget/pages/homePage/painelDesktop.dart';
 import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/struct/mbSync/conexoes.dart';
@@ -255,6 +258,60 @@ void main() {
             matchesGoldenFile('../../.verificacao/prints/pendencias_$modo${vazio ? '_vazio' : ''}.png'));
       });
     }
+    testWidgets('print pendências IA $modo', skip: _pular, (t) async {
+      appStateSettings = {
+        'materialYou': false,
+        'accentSystemColor': false,
+        'batterySaver': false,
+        'increaseTextContrast': false,
+        'forceFullDarkBackground': false,
+        'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
+      };
+      mbOpcoesClassificar = MbOpcoes.montar(const [
+        CatLocal(pk: 'alim', nome: 'Alimentação', receita: false),
+        CatLocal(pk: 'deliv', nome: 'Delivery', receita: false, paiPk: 'alim'),
+        CatLocal(pk: 'rest', nome: 'Restaurante', receita: false, paiPk: 'alim'),
+        CatLocal(pk: 'fam', nome: 'Família', receita: false),
+        CatLocal(pk: 'transp', nome: 'Transporte', receita: false),
+        CatLocal(pk: 'mor', nome: 'Moradia', receita: false),
+      ], const [
+        MbVinculoOpcao('mae', 'Mãe', 'emprestimo')
+      ]);
+      meuBancoClassificar.value = [
+        MbLancamentoIa(
+            pk: 'mb:1',
+            descricao: 'PIX ENVIADO FABIANA SILVA',
+            valor: -500,
+            data: DateTime(2026, 11, 10, 12),
+            conta: 'Inter',
+            categoriaNome: 'A classificar'),
+        MbLancamentoIa(pk: 'mb:2', descricao: 'IFOOD', valor: -42.9, data: DateTime(2026, 11, 9, 12)),
+      ];
+      meuBancoSugestoes.value = const {
+        'mb:1': MbSugestao('mb:1', 'fam',
+            titulo: 'Empréstimo Mãe',
+            vinculoPk: 'mae',
+            confianca: .45,
+            pergunta: 'Esse Pix de R\$ 500 para Fabiana foi empréstimo para a Mãe?',
+            fonte: MbFonteSugestao.ia),
+      };
+      addTearDown(() {
+        meuBancoClassificar.value = const [];
+        meuBancoSugestoes.value = const {};
+      });
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final b = modo == 'claro' ? Brightness.light : Brightness.dark;
+      await t.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: temaFlutter(temaAtivo(b)),
+        home: const Scaffold(body: PendenciasPage(atualizar: false)),
+      ));
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/pendencias_ia_$modo.png'));
+    });
     for (final pagina in ['inicio', 'pendencias', 'analise']) {
       testWidgets('print ajustes $pagina $modo', skip: _pular, (t) async {
         appStateSettings = {

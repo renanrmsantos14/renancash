@@ -1,0 +1,303 @@
+// Fila "Para classificar" da aba Pendências (funções puras, test/mb_classificar_test.dart).
+//
+// Entram os lançamentos do Meu Banco novos (desde que a fila existe) e os antigos sem categoria útil. A sugestão vem da
+// IA do Meu Banco (POST /api/ia/sugerir, Workers AI) ou, sem ela, dos padrões que o usuário já confirmou. Nada é
+// aplicado sem o toque do usuário. Os padrões (favorecido normalizado → escolha) ficam só neste aparelho e vão como
+// exemplos para a IA; a escolha confirmada sobe pelo sync normal (ajuste da categoria).
+import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
+import 'package:budget/struct/mbSync/revisao.dart'
+    show MbItemRevisao, mbNormalizarRevisao;
+
+/// Categorias que não dizem nada sobre o gasto (fonte única da fila). Também conta qualquer "Transferência…".
+const Set<String> mbCategoriasSemUtilidade = {
+  'a classificar',
+  'sem categoria',
+  'outros',
+  'other',
+  'pix',
+  'pix para terceiros',
+  'ted',
+  'ted para terceiros',
+  'doc para terceiros',
+  'boleto para terceiros',
+  'débito para terceiros',
+  'transfers',
+};
+
+bool mbSemCategoriaUtil(String? nome) {
+  final n = (nome ?? '').trim().toLowerCase();
+  return n.isEmpty || mbCategoriasSemUtilidade.contains(n) || n.startsWith('transferência');
+}
+
+/// Dias antes da ativação da fila que ainda contam como "novos" (banco que posta com atraso).
+const int mbDiasFolgaFila = 7;
+const double mbLimiarPergunta = 0.7; // igual a LIMIAR_PERGUNTA do Worker (src/ia.js)
+const int mbMaxPadroes = 300;
+const int mbMaxExemplos = 20;
+const int mbLoteIa = 8; // igual a MAX_LANCAMENTOS do Worker
+
+final RegExp _prefixoBanco = RegExp(
+    r'^(?:PIX (?:ENVIAD[OA]|ENVIO|RECEBID[OA]|RECEBIMENTO)|(?:TED|DOC|TRANSFERENCIA)(?: (?:ENVIAD[OA]|RECEBID[OA]))?|PAGAMENTO(?: DE)?|PAG|COMPRA(?: NO)?(?: (?:DEBITO|CREDITO))?)\b ?');
+
+/// Favorecido/estabelecimento normalizado: sem acento, número, pontuação e prefixo do banco ("PIX ENVIADO", "COMPRA"),
+/// até 4 palavras. "PIX ENVIADO - Fabiana Silva 123" e "Pix enviado Fabiana Silva" viram "FABIANA SILVA".
+String mbChavePadrao(String descricao) => mbNormalizarRevisao(descricao)
+    .replaceFirst(_prefixoBanco, '')
+    .split(' ')
+    .where((p) => p.length > 1)
+    .take(4)
+    .join(' ');
+
+/// Uma confirmação do usuário, lembrada pelo favorecido.
+class MbPadrao {
+  final String chave, categoriaPk;
+  final String? subPk, titulo, vinculoPk;
+  final int vezes;
+  const MbPadrao(this.chave, this.categoriaPk,
+      {this.subPk, this.titulo, this.vinculoPk, this.vezes = 1});
+
+  bool mesmaEscolha(MbPadrao o) =>
+      categoriaPk == o.categoriaPk && subPk == o.subPk && vinculoPk == o.vinculoPk;
+
+  Map<String, dynamic> toJson() => {
+        'chave': chave,
+        'categoria': categoriaPk,
+        if (subPk != null) 'sub': subPk,
+        if (titulo != null) 'titulo': titulo,
+        if (vinculoPk != null) 'vinculo': vinculoPk,
+        'vezes': vezes,
+      };
+
+  static MbPadrao? tentar(Object? j) {
+    if (j is! Map || j['chave'] is! String || j['categoria'] is! String) return null;
+    return MbPadrao(j['chave'] as String, j['categoria'] as String,
+        subPk: _texto(j['sub']),
+        titulo: _texto(j['titulo']),
+        vinculoPk: _texto(j['vinculo']),
+        vezes: (j['vezes'] as num?)?.toInt() ?? 1);
+  }
+}
+
+String? _texto(Object? v) => v is String ? v : null;
+
+List<MbPadrao> mbPadroesDeJson(Object? j) => [
+      if (j is List)
+        for (final p in j)
+          if (MbPadrao.tentar(p) case final padrao?) padrao
+    ];
+
+/// Guarda a confirmação na frente (mais recente primeiro). Mesmo favorecido com a mesma escolha soma uma vez.
+List<MbPadrao> mbRegistrarPadrao(List<MbPadrao> atuais, MbPadrao novo) {
+  if (novo.chave.isEmpty) return atuais;
+  final antigo = atuais.where((p) => p.chave == novo.chave).firstOrNull;
+  final vezes = antigo != null && antigo.mesmaEscolha(novo) ? antigo.vezes + 1 : 1;
+  return [
+    MbPadrao(novo.chave, novo.categoriaPk,
+        subPk: novo.subPk, titulo: novo.titulo, vinculoPk: novo.vinculoPk, vezes: vezes),
+    ...atuais.where((p) => p.chave != novo.chave),
+  ].take(mbMaxPadroes).toList();
+}
+
+/// Lançamento do Meu Banco já no aparelho. `revisao`: item "Pix enviado" da fila do Worker para o mesmo lançamento
+/// (a resposta também grava a decisão e a memória do destinatário).
+class MbLancamentoIa {
+  final String pk, descricao, conta, categoriaNome;
+  final String? categoriaPk;
+  final double valor; // sinal do RenanCash: saída negativa
+  final DateTime data;
+  final bool editado, pendente;
+  final MbItemRevisao? revisao;
+  const MbLancamentoIa({
+    required this.pk,
+    required this.descricao,
+    required this.valor,
+    required this.data,
+    this.conta = '',
+    this.categoriaNome = '',
+    this.categoriaPk,
+    this.editado = false,
+    this.pendente = false,
+    this.revisao,
+  });
+
+  String get _dia =>
+      '${data.year}-${data.month.toString().padLeft(2, '0')}-${data.day.toString().padLeft(2, '0')}';
+
+  Map<String, dynamic> toJson() => {
+        'id': pk,
+        'descricao': descricao,
+        'valor': valor,
+        'data': _dia,
+        'conta': conta,
+        'categoria': categoriaNome,
+      };
+}
+
+/// Fila: fora os pendentes e os já revisados; entra o antigo sem categoria útil e o novo que o usuário ainda não
+/// editou. Mais recentes primeiro.
+List<MbLancamentoIa> mbFilaClassificar(Iterable<MbLancamentoIa> lancamentos,
+    {required DateTime desde, Set<String> revisados = const {}}) {
+  final fila = [
+    for (final l in lancamentos)
+      if (!l.pendente &&
+          !revisados.contains(l.pk) &&
+          (l.revisao != null ||
+              mbSemCategoriaUtil(l.categoriaNome) ||
+              (!l.editado && !l.data.isBefore(desde))))
+        l
+  ];
+  return fila..sort((a, b) => b.data.compareTo(a.data));
+}
+
+class MbCategoriaOpcao {
+  final String pk, nome;
+  final bool receita;
+  final List<({String pk, String nome})> subs;
+  const MbCategoriaOpcao(this.pk, this.nome, this.receita, [this.subs = const []]);
+}
+
+class MbVinculoOpcao {
+  final String pk, nome, tipo; // tipo: emprestimo | meta
+  const MbVinculoOpcao(this.pk, this.nome, this.tipo);
+}
+
+/// O que o usuário pode escolher: categorias úteis (uma por nome, a do usuário antes da `mb:`) e empréstimos/metas abertos.
+class MbOpcoes {
+  final List<MbCategoriaOpcao> categorias;
+  final List<MbVinculoOpcao> vinculos;
+  const MbOpcoes([this.categorias = const [], this.vinculos = const []]);
+
+  factory MbOpcoes.montar(Iterable<CatLocal> cats, [List<MbVinculoOpcao> vinculos = const []]) {
+    final pais = <String, CatLocal>{};
+    for (final c in cats) {
+      if (c.paiPk != null || mbSemCategoriaUtil(c.nome)) continue;
+      final chave = '${c.receita}:${c.nome.toLowerCase()}';
+      final atual = pais[chave];
+      if (atual == null || (atual.pk.startsWith('mb:') && !c.pk.startsWith('mb:'))) pais[chave] = c;
+    }
+    return MbOpcoes([
+      for (final p in pais.values)
+        MbCategoriaOpcao(p.pk, p.nome, p.receita, [
+          for (final s in cats)
+            if (s.paiPk == p.pk) (pk: s.pk, nome: s.nome)
+        ])
+    ], vinculos);
+  }
+
+  MbCategoriaOpcao? categoria(String? pk) => categorias.where((c) => c.pk == pk).firstOrNull;
+  MbVinculoOpcao? vinculo(String? pk) => vinculos.where((v) => v.pk == pk).firstOrNull;
+
+  /// Contexto do POST /api/ia/*: categorias, vínculos e exemplos (pks; o Worker os troca por códigos curtos).
+  Map<String, dynamic> contexto(List<MbPadrao> exemplos) => {
+        'categorias': [
+          for (final c in categorias)
+            {
+              'pk': c.pk,
+              'nome': c.nome,
+              'receita': c.receita,
+              'subs': [for (final s in c.subs) {'pk': s.pk, 'nome': s.nome}],
+            }
+        ],
+        'vinculos': [for (final v in vinculos) {'pk': v.pk, 'nome': v.nome, 'tipo': v.tipo}],
+        'exemplos': [
+          for (final p in exemplos)
+            {
+              'descricao': p.chave,
+              'categoria': p.categoriaPk,
+              if (p.subPk != null) 'subcategoria': p.subPk,
+              if (p.titulo != null) 'titulo': p.titulo,
+              if (p.vinculoPk != null) 'vinculo': p.vinculoPk,
+            }
+        ],
+      };
+}
+
+/// Exemplos para a IA: primeiro os do mesmo favorecido do lote, depois os mais recentes.
+List<MbPadrao> mbExemplosPara(Iterable<MbLancamentoIa> lote, List<MbPadrao> padroes) {
+  final chaves = {for (final l in lote) mbChavePadrao(l.descricao)};
+  return [
+    ...padroes.where((p) => chaves.contains(p.chave)),
+    ...padroes.where((p) => !chaves.contains(p.chave)),
+  ].take(mbMaxExemplos).toList();
+}
+
+enum MbFonteSugestao { ia, padrao, atual, usuario }
+
+/// Sugestão para um lançamento (da IA, de um padrão ou a categoria atual) e também a escolha final do usuário.
+class MbSugestao {
+  final String txPk, categoriaPk;
+  final String? subPk, titulo, vinculoPk, pergunta;
+  final double confianca;
+  final MbFonteSugestao fonte;
+  const MbSugestao(this.txPk, this.categoriaPk,
+      {this.subPk,
+      this.titulo,
+      this.vinculoPk,
+      this.pergunta,
+      this.confianca = 0,
+      this.fonte = MbFonteSugestao.usuario});
+
+  MbSugestao comCategoria(String categoriaPk, {String? subPk}) =>
+      MbSugestao(txPk, categoriaPk,
+          subPk: subPk, titulo: titulo, vinculoPk: vinculoPk, confianca: 1);
+
+  /// Resposta do Worker, conferida de novo contra as opções do aparelho: categoria precisa existir (e não ser de
+  /// receita para saída de dinheiro), sub precisa ser dela e o vínculo precisa estar aberto.
+  static MbSugestao? daIa(Object? j, MbOpcoes op, MbLancamentoIa l) {
+    if (j is! Map || j['id'] != l.pk) return null;
+    final cat = op.categoria(_texto(j['categoria']));
+    if (cat == null || (l.valor < 0 && cat.receita)) return null;
+    final sub = cat.subs.where((s) => s.pk == j['subcategoria']).firstOrNull;
+    final c = j['confianca'];
+    final confianca = c is num ? c.toDouble().clamp(0.0, 1.0) : 0.0;
+    final titulo = '${j['titulo'] ?? ''}'.trim();
+    final pergunta = '${j['pergunta'] ?? ''}'.trim();
+    return MbSugestao(l.pk, cat.pk,
+        subPk: sub?.pk,
+        titulo: titulo.isEmpty ? null : titulo,
+        vinculoPk: op.vinculo(_texto(j['vinculo']))?.pk,
+        pergunta: confianca < mbLimiarPergunta && pergunta.isNotEmpty ? pergunta : null,
+        confianca: confianca,
+        fonte: MbFonteSugestao.ia);
+  }
+}
+
+/// Sem IA: o padrão do mesmo favorecido (confiança alta se já confirmado mais de uma vez), senão a categoria atual se
+/// ela for útil. Só sugere o que ainda existe nas opções.
+MbSugestao? mbSugestaoLocal(MbLancamentoIa l, List<MbPadrao> padroes, MbOpcoes op) {
+  final chave = mbChavePadrao(l.descricao);
+  final p = chave.isEmpty ? null : padroes.where((p) => p.chave == chave).firstOrNull;
+  final cat = op.categoria(p?.categoriaPk);
+  if (p != null && cat != null && !(l.valor < 0 && cat.receita)) {
+    return MbSugestao(l.pk, cat.pk,
+        subPk: cat.subs.any((s) => s.pk == p.subPk) ? p.subPk : null,
+        titulo: p.titulo,
+        vinculoPk: op.vinculo(p.vinculoPk)?.pk,
+        confianca: p.vezes > 1 ? 0.9 : 0.8,
+        fonte: MbFonteSugestao.padrao);
+  }
+  final atual = op.categoria(l.categoriaPk);
+  if (atual == null || mbSemCategoriaUtil(l.categoriaNome)) return null;
+  return MbSugestao(l.pk, atual.pk, confianca: 0.5, fonte: MbFonteSugestao.atual);
+}
+
+/// Chips de alternativas: a categoria atual (se útil), as mais usadas nos padrões e as primeiras do tipo certo,
+/// sem repetir a sugerida.
+List<MbCategoriaOpcao> mbAlternativas(
+    MbLancamentoIa l, String? sugeridaPk, List<MbPadrao> padroes, MbOpcoes op,
+    {int max = 4}) {
+  final uso = <String, int>{};
+  for (final p in padroes) {
+    uso[p.categoriaPk] = (uso[p.categoriaPk] ?? 0) + p.vezes;
+  }
+  final porUso = op.categorias.toList()
+    ..sort((a, b) => (uso[b.pk] ?? 0).compareTo(uso[a.pk] ?? 0));
+  final out = <MbCategoriaOpcao>[];
+  final atual = op.categoria(l.categoriaPk);
+  for (final c in [if (atual != null) atual, ...porUso]) {
+    if (out.length >= max) break;
+    if (c.pk == sugeridaPk || out.contains(c) || c.receita != (l.valor > 0)) continue;
+    out.add(c);
+  }
+  return out;
+}
