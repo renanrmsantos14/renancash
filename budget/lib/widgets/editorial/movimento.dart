@@ -50,7 +50,11 @@ class _ContagemValorState extends State<ContagemValor> {
   }
 
   Widget _ajustado(String texto) {
-    final virgula = widget.centavosMenores ? texto.lastIndexOf(',') : -1;
+    // Separador decimal = último ',' ou '.' seguido só de 1–2 dígitos ("1.855,90" e "1,855.90");
+    // "6,500" (milhar sem centavos) fica inteiro.
+    final virgula = widget.centavosMenores
+        ? (RegExp(r'[,.]\d{1,2}$').firstMatch(texto)?.start ?? -1)
+        : -1;
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
