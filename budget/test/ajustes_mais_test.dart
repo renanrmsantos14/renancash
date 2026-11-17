@@ -1,5 +1,6 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/objectivesListPage.dart';
+import 'package:budget/struct/mbSync/conexoes.dart';
 import 'package:budget/widgets/editorial/resumoTransacoes.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,6 +78,40 @@ void main() {
       expect(d.rotulo, 'Valor emprestado');
       expect(d.valor, 0);
     });
+  });
+
+  group('MB2: conexão do MeuPluggy mostra o banco', () {
+    test('nome vem das contas, sem número, S.A. nem caixa alta', () {
+      expect(
+          mbNomeDaConexao('MeuPluggy', [
+            {'type': 'BANK', 'name': 'BANCO INTER ·69-6'},
+            {'type': 'BANK', 'name': 'BANCO INTER ·69-6'},
+            {'type': 'CREDIT', 'name': 'Mastercard Black'},
+          ]),
+          'Banco Inter');
+      expect(
+          mbNomeDaConexao('MeuPluggy', [
+            {'type': 'BANK', 'bank': 'BANCO SANTANDER (BRASIL) S.A.'},
+          ]),
+          'Banco Santander');
+    });
+
+    test('conector que já é o banco fica como está; sem contas, o conector', () {
+      expect(
+          mbNomeDaConexao('Nubank', [
+            {'type': 'BANK', 'name': 'Conta Nubank'}
+          ]),
+          'Nubank');
+      expect(mbNomeDaConexao('MeuPluggy', const []), 'MeuPluggy');
+    });
+  });
+
+  test('C2: origem da carteira no subtítulo', () {
+    final tipos = {'mb:1': 'Conta corrente', 'mb:2': 'Poupança'};
+    expect(mbOrigemCarteira('mb:1', tipos), 'Conta corrente · Meu Banco');
+    expect(mbOrigemCarteira('mb:2', tipos), 'Poupança · Meu Banco');
+    expect(mbOrigemCarteira('mb:investimentos', tipos), 'Meu Banco');
+    expect(mbOrigemCarteira('0', tipos), 'Manual');
   });
 
   test('AS1: contagem diz o que é contado', () {

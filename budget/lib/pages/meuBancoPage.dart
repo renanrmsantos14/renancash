@@ -166,6 +166,10 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
       );
 
   // Pareado: horário da última sincronização, fila e erro, com as duas ações principais.
+  // Rótulo numa linha só: os dois botões ficam da mesma altura em tela estreita.
+  Widget _rotuloBotao(String texto) => FittedBox(
+      fit: BoxFit.scaleDown, child: Text(texto, maxLines: 1, softWrap: false));
+
   Widget _status() {
     final e = cores(context);
     final host = Uri.tryParse(_url.text)?.host ?? _url.text;
@@ -242,7 +246,8 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
                 valueListenable: meuBancoSincronizando,
                 builder: (context, sincronizando, _) => FilledButton(
                   onPressed: sincronizando ? null : sincronizarMeuBanco,
-                  child: Text(sincronizando ? "Sincronizando…" : "Sincronizar"),
+                  child: _rotuloBotao(
+                      sincronizando ? "Sincronizando…" : "Sincronizar"),
                 ),
               ),
             ),
@@ -250,7 +255,8 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _atualizando ? null : _atualizarAgora,
-                child: Text(_atualizando ? "Atualizando…" : "Atualizar bancos"),
+                child: _rotuloBotao(
+                    _atualizando ? "Atualizando…" : "Atualizar bancos"),
               ),
             ),
           ]),

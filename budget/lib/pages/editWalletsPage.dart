@@ -1,4 +1,6 @@
 import 'package:budget/colors.dart';
+import 'package:budget/struct/mbSync/conexoes.dart'
+    show mbOrigemCarteira, mbTiposDasCarteiras;
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
@@ -67,8 +69,14 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
       }
       database.fixOrderWallets();
     });
+    // Tipo das contas do Meu Banco para o subtítulo (nomes repetidos se distinguem).
+    mbTiposDasCarteiras().then((t) {
+      if (mounted) setState(() => _tiposMb = t);
+    });
     super.initState();
   }
+
+  Map<String, String> _tiposMb = const {};
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +260,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                             nome: wallet.name,
                             detalhe: [
                               if (principal) "Principal",
+                              mbOrigemCarteira(wallet.walletPk, _tiposMb),
                               n == 1 ? "1 transação" : "$n transações",
                             ].join(" · "),
                             saldo: comSinal(
@@ -259,7 +268,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                 (v) => convertToMoney(allWallets, v,
                                     currencyKey: wallet.currency,
                                     decimals: wallet.decimals,
-                                    addCurrencyName: true)),
+                                    addCurrencyName:
+                                        !allWallets.allContainSameCurrency())),
                           ),
                           openPage: AddWalletPage(
                               wallet: wallet,

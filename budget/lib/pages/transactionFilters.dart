@@ -1401,17 +1401,23 @@ class AppliedFilterChips extends StatelessWidget {
       ));
     }
     // Carteiras: um chip por pk; nomes iguais (corrente e poupança do mesmo banco) ganham o tipo.
+    // O desempate olha todas as carteiras do app: a poupança filtrada sozinha
+    // ainda divide o nome com a corrente.
     final walletPks = searchFilters.walletPks.toSet().toList();
     final tiposMb = walletPks.isEmpty ? const <String, String>{} : await mbTiposDasCarteiras();
+    final todas = allWallets.list;
     final rotulos = mbRotulosCarteiras([
-      for (final pk in walletPks)
-        getWalletStringName(allWallets, allWallets.indexedByPk[pk])
+      for (final w in todas) getWalletStringName(allWallets, w)
     ], [
-      for (final pk in walletPks) tiposMb[pk]
+      for (final w in todas) tiposMb[w.walletPk]
     ]);
-    for (final (i, walletPk) in walletPks.indexed) {
+    final rotuloDe = {
+      for (final (i, w) in todas.indexed) w.walletPk: rotulos[i]
+    };
+    for (final walletPk in walletPks) {
       out.add(AppliedFilterChip(
-        label: rotulos[i],
+        label: rotuloDe[walletPk] ??
+            getWalletStringName(allWallets, allWallets.indexedByPk[walletPk]),
         customBorderColor: HexColor(
           allWallets.indexedByPk[walletPk]?.colour,
           defaultColor: Theme.of(context).colorScheme.primary,
