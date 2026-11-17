@@ -482,13 +482,14 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
       'FROM wallets w LEFT JOIN transactions t ON t.wallet_fk = w.wallet_pk '
       'GROUP BY w.wallet_pk, w.name ORDER BY w."order"').get();
   var investimentos = 0.0;
+  final arquivadas = carteirasArquivadas();
   final carteiras = <CarteiraInicio>[];
   for (final l in linhas) {
     final pk = l.read<String>('pk');
     final saldo = l.read<double>('saldo');
     if (pk == mbCarteiraInvestimentos) {
       investimentos = saldo;
-    } else if (!pk.startsWith(mbPrefixo) && saldo != 0) {
+    } else if (!pk.startsWith(mbPrefixo) && saldo != 0 && !arquivadas.contains(pk)) {
       carteiras.add((nome: l.read<String>('nome'), saldo: saldo));
     }
   }

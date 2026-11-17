@@ -203,6 +203,14 @@ Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) async {
         revisoes: MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]),
         compras: historico.compras,
         abatimentos: historico.abatimentos,
+        destinos: mbResolverDestinos([
+          for (final c in categorias)
+            CatLocal(
+                pk: c.categoryPk,
+                nome: c.name,
+                receita: c.income,
+                paiPk: c.mainCategoryPk)
+        ]),
         pkCategoria: (id, nome, receita) =>
             id != null && locais.contains(pkDoId(id))
                 ? pkDoId(id)
@@ -309,25 +317,42 @@ Future<void> _aplicar(MbResultado r) async {
     // Estorno e cashback entram como despesa (valor positivo), então a categoria é de despesa.
     await criarCategoriaSeFaltar(t.categoriaPk, t.categoriaNome, t.receita);
   }
+  // Título e nota editados no app (dateTimeModified depois de 2000, como em mbEditadoEm) não voltam ao texto do
+  // banco; pendente volta, porque a nota "Pendente" decide a limpeza abaixo.
+  final editadas = {
+    for (final t in await (database.select(database.transactions)
+          ..where((t) =>
+              t.transactionPk.like('mb:%') &
+              t.dateTimeModified.isBiggerOrEqualValue(DateTime.utc(2001))))
+        .get())
+      t.transactionPk
+  };
   // Upsert idempotente pelo pk "mb:<id>", direto no Drift (createOrUpdateTransaction marcaria a categoria como editada).
+  // A subcategoria do mapa só entra na primeira importação: depois é escolha do usuário.
   for (final t in r.transacoes) {
-    await database.into(database.transactions).insertOnConflictUpdate(
-          TransactionsCompanion(
-            transactionPk: Value(t.pk),
+    final manter = editadas.contains(t.pk) && !t.pendente;
+    final dados = TransactionsCompanion(
+      transactionPk: Value(t.pk),
+      name: manter ? const Value.absent() : Value(t.nome),
+      amount: Value(t.valor),
+      note: manter ? const Value.absent() : Value(t.nota),
+      categoryFk: Value(t.categoriaPk),
+      walletFk: Value(t.carteiraPk),
+      dateCreated: Value(t.data),
+      dateTimeModified: manter ? const Value.absent() : Value(_semEdicao),
+      originalDateDue: Value(t.data),
+      income: Value(t.receita),
+      paid: const Value(true),
+      skipPaid: const Value(false),
+      methodAdded: const Value(MethodAdded.csv),
+    );
+    await database.into(database.transactions).insert(
+        dados.copyWith(
             name: Value(t.nome),
-            amount: Value(t.valor),
             note: Value(t.nota),
-            categoryFk: Value(t.categoriaPk),
-            walletFk: Value(t.carteiraPk),
-            dateCreated: Value(t.data),
             dateTimeModified: Value(_semEdicao),
-            originalDateDue: Value(t.data),
-            income: Value(t.receita),
-            paid: const Value(true),
-            skipPaid: const Value(false),
-            methodAdded: const Value(MethodAdded.csv),
-          ),
-        );
+            subCategoryFk: Value(t.subcategoriaPk)),
+        onConflict: DoUpdate((_) => dados));
   }
   final removidos = <String>[];
   // Importada antes de virar "não é gasto" (transferência): sai do app, sem ajuste para o servidor.
