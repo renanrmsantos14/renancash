@@ -71,7 +71,8 @@ void main() {
             symbol: simbolo,
             currencyName: null);
     expect(fmt(4253.79, 'R\$', '4,253.79'), 'R\$ 4.253,79');
-    expect(fmt(-4253.79, 'R\$', '-4,253.79'), '-R\$ 4.253,79');
+    // Menos tipográfico (−) colado ao símbolo, como nas linhas de transação.
+    expect(fmt(-4253.79, 'R\$', '-4,253.79'), '−R\$ 4.253,79');
     expect(fmt(4253.79, '\$', '4,253.79'), '\$4.253,79');
     expect(brl(927.28), 'R\$ 927,28');
   });
