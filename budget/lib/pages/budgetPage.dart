@@ -6,7 +6,6 @@ import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/editBudgetLimitsPage.dart';
 import 'package:budget/pages/homePage/homePageLineGraph.dart';
 import 'package:budget/pages/pastBudgetsPage.dart';
-import 'package:budget/pages/transactionFilters.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/defaultPreferences.dart';
@@ -19,6 +18,7 @@ import 'package:budget/widgets/iconButtonScaled.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
 import 'package:budget/widgets/budgetContainer.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/categoryEntry.dart';
 import 'package:budget/widgets/categoryLimits.dart';
 import 'package:budget/widgets/fab.dart';
@@ -38,7 +38,6 @@ import 'package:budget/colors.dart';
 import 'package:async/async.dart' show StreamZip;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:budget/widgets/countNumber.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:sliver_tools/sliver_tools.dart';
 
@@ -96,7 +95,7 @@ class _BudgetPageContent extends StatefulWidget {
 }
 
 class _BudgetPageContentState extends State<_BudgetPageContent> {
-  String? selectedMember = null;
+  bool mostrarGasto = appStateSettings["showTotalSpentForBudget"] == true;
   bool showAllSubcategories = appStateSettings["showAllSubcategories"] == true;
   TransactionCategory? selectedCategory =
       null; //We shouldn't always rely on this, if for example the user changes the category and we are still on this page. But for less important info and O(1) we can reference it quickly.
@@ -121,6 +120,12 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
         );
       });
     }
+  }
+
+  void alternarGasto() {
+    setState(() => mostrarGasto = !mostrarGasto);
+    updateSettings("showTotalSpentForBudget", mostrarGasto,
+        pagesNeedingRefresh: [0, 2], updateGlobalState: false);
   }
 
   void toggleAllSubcategories() {
@@ -156,13 +161,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
   }) {
     return Column(
       children: [
-        Container(
-          decoration: BoxDecoration(
-              boxShadow: boxShadowCheck(
-                boxShadowGeneral(context),
-              ),
-              borderRadius: BorderRadiusDirectional.circular(200)),
-          child: PieChartWrapper(
+        PieChartWrapper(
             pieChartDisplayStateKey: _pieChartDisplayStateKey,
             data: dataFilterUnassignedTransactions,
             totalSpent: totalSpent,
@@ -185,7 +184,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
               // }
             },
           ),
-        ),
         PieChartOptions(
           isIncomeBudget: widget.budget.income == true,
           hasSubCategories: hasSubCategories,
@@ -258,45 +256,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
       },
       child: PageFramework(
         belowAppBarPaddingWhenCenteredTitleSmall: 0,
-        subtitle: StreamBuilder<List<CategoryWithTotal>>(
-          stream:
-              database.watchTotalSpentInEachCategoryInTimeRangeFromCategories(
-            allWallets: Provider.of<AllWallets>(context),
-            start: budgetRange.start,
-            end: budgetRange.end,
-            categoryFks: widget.budget.categoryFks,
-            categoryFksExclude: widget.budget.categoryFksExclude,
-            budgetTransactionFilters: widget.budget.budgetTransactionFilters,
-            memberTransactionFilters: widget.budget.memberTransactionFilters,
-            member: selectedMember,
-            onlyShowTransactionsBelongingToBudgetPk:
-                widget.budget.sharedKey != null ||
-                        widget.budget.addedTransactionsOnly == true
-                    ? widget.budget.budgetPk
-                    : null,
-            budget: widget.budget,
-          ),
-          builder: (context, snapshot) {
-            double totalSpent = 0;
-            if (snapshot.hasData) {
-              snapshot.data!.forEach((category) {
-                totalSpent = totalSpent + category.total;
-              });
-              totalSpent = totalSpent * determineBudgetPolarity(widget.budget);
-            }
-
-            if (snapshot.hasData) {
-              return TotalSpent(
-                budget: widget.budget,
-                totalSpent: totalSpent,
-              );
-            } else {
-              return SizedBox.shrink();
-            }
-          },
-        ),
-        subtitleAlignment: AlignmentDirectional.bottomStart,
-        subtitleSize: 10,
         backgroundColor: pageBackgroundColor,
         listID: pageId,
         floatingActionButton: AnimateFABDelayed(
@@ -309,8 +268,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                   : null,
               routesToPopAfterDelete: RoutesToPopAfterDelete.One,
             ),
-            color: Theme.of(context).colorScheme.secondary,
-            colorIcon: Theme.of(context).colorScheme.onSecondary,
           ),
         ),
         actions: [
@@ -334,9 +291,9 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                   );
                 },
               ),
+              // Do histórico já se navega pelos ciclos no topo.
               if (widget.budget.reoccurrence != BudgetReoccurence.custom &&
-                  isPastBudget == false &&
-                  isPastBudgetButCurrentPeriod == false)
+                  !widget.openedFromHistory)
                 DropdownItemMenu(
                   id: "budget-history",
                   label: "budget-history".tr(),
@@ -372,10 +329,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
         ],
         title: widget.budget.name,
         capitalizeTitle: false,
-        appBarBackgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-        appBarBackgroundColorStart:
-            Theme.of(context).colorScheme.secondaryContainer,
-        textColor: getColor(context, "black"),
         dragDownToDismiss: true,
         scrollController: scrollController,
         slivers: [
@@ -395,8 +348,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                         widget.budget.budgetTransactionFilters,
                     memberTransactionFilters:
                         widget.budget.memberTransactionFilters,
-                    member: selectedMember,
-                    onlyShowTransactionsBelongingToBudgetPk:
+                            onlyShowTransactionsBelongingToBudgetPk:
                         widget.budget.sharedKey != null ||
                                 widget.budget.addedTransactionsOnly == true
                             ? widget.budget.budgetPk
@@ -546,111 +498,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                     // print(s.totalSpent);
                     return MultiSliver(
                       children: [
-                        SliverToBoxAdapter(
-                          child: Container(
-                            padding: EdgeInsetsDirectional.only(
-                              bottom: showingSelectedPeriodAppBar
-                                  ? isPastBudgetButCurrentPeriod == true
-                                      ? 14
-                                      : 5
-                                  : 20,
-                              start: 22,
-                              end: 22,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .secondaryContainer,
-                            ),
-                            child: AnimatedSizeSwitcher(
-                              child: Column(
-                                key: ValueKey(isPastBudgetButCurrentPeriod),
-                                children: [
-                                  Transform.scale(
-                                    alignment:
-                                        AlignmentDirectional.bottomCenter,
-                                    scale: 1500,
-                                    child: Container(
-                                      height: 10,
-                                      width: 100,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .secondaryContainer,
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsetsDirectional.symmetric(
-                                      horizontal:
-                                          getHorizontalPaddingConstrained(
-                                              context),
-                                    ),
-                                    child: StreamBuilder<double?>(
-                                      stream: database.watchTotalOfBudget(
-                                        allWallets:
-                                            Provider.of<AllWallets>(context),
-                                        start: budgetRange.start,
-                                        end: budgetRange.end,
-                                        categoryFks: widget.budget.categoryFks,
-                                        categoryFksExclude:
-                                            widget.budget.categoryFksExclude,
-                                        budgetTransactionFilters: widget
-                                            .budget.budgetTransactionFilters,
-                                        memberTransactionFilters: widget
-                                            .budget.memberTransactionFilters,
-                                        member: selectedMember,
-                                        onlyShowTransactionsBelongingToBudgetPk:
-                                            widget.budget.sharedKey != null ||
-                                                    widget.budget
-                                                            .addedTransactionsOnly ==
-                                                        true
-                                                ? widget.budget.budgetPk
-                                                : null,
-                                        budget: widget.budget,
-                                        searchFilters: SearchFilters(
-                                            paidStatus: [PaidStatus.notPaid]),
-                                        paidOnly: false,
-                                      ),
-                                      builder: (context, snapshot) {
-                                        return BudgetTimeline(
-                                          dateForRange: dateForRange,
-                                          budget: widget.budget,
-                                          large: true,
-                                          percent: budgetAmount == 0
-                                              ? 0
-                                              : s.totalSpent /
-                                                  budgetAmount *
-                                                  100,
-                                          yourPercent: 0,
-                                          todayPercent: isPastBudget == true
-                                              ? -1
-                                              : todayPercent,
-                                          ghostPercent: budgetAmount == 0
-                                              ? 0
-                                              : (((snapshot.data ?? 0) *
-                                                          determineBudgetPolarity(
-                                                              widget.budget)) /
-                                                      budgetAmount) *
-                                                  100,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  isPastBudget == true
-                                      ? SizedBox.shrink()
-                                      : DaySpending(
-                                          budget: widget.budget,
-                                          totalAmount: s.totalSpent,
-                                          large: true,
-                                          budgetRange: budgetRange,
-                                          padding:
-                                              const EdgeInsetsDirectional.only(
-                                                  top: 15, bottom: 0),
-                                        ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                         SliverPinnedHeader(
                           child: showingSelectedPeriodAppBar
                               // Based on SelectedPeriodHeaderLabel
@@ -678,16 +525,16 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                       ),
                                       Flexible(
                                         child: AnimatedSizeSwitcher(
-                                          child: TextFont(
+                                          child: Text(
+                                            timeRangeString,
                                             key: ValueKey(timeRangeString),
-                                            text: timeRangeString,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
                                             textAlign: TextAlign.center,
-                                            textColor: Theme.of(context)
-                                                .colorScheme
-                                                .onSecondaryContainer,
                                             maxLines: 2,
+                                            style: EdTexto.corpo(context)
+                                                .copyWith(
+                                                    fontSize: 15,
+                                                    fontWeight:
+                                                        FontWeight.w600),
                                           ),
                                         ),
                                       ),
@@ -711,33 +558,64 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                     ],
                                   ),
                                   decoration: BoxDecoration(
-                                    boxShadow:
-                                        boxShadowCheck(boxShadowSharp(context)),
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .secondaryContainer,
+                                    color: cores(context).bg,
+                                    border: Border(
+                                        bottom: BorderSide(
+                                            color: cores(context).line)),
                                   ),
                                 )
                               : Container(),
                         ),
                         SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsetsDirectional.fromSTEB(
+                              13 + getHorizontalPaddingConstrained(context),
+                              showingSelectedPeriodAppBar ? 16 : 4,
+                              13 + getHorizontalPaddingConstrained(context),
+                              20,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (!showingSelectedPeriodAppBar) ...[
+                                  Text(timeRangeString,
+                                      style: EdTexto.rotulo(context)),
+                                  const SizedBox(height: 8),
+                                ],
+                                ResumoOrcamento(
+                                  gasto: s.totalSpent,
+                                  limite: budgetAmount,
+                                  renda: widget.budget.income,
+                                  grande: true,
+                                  mostrarGasto: mostrarGasto,
+                                  onTapValor: alternarGasto,
+                                  diasRestantes: isPastBudget
+                                      ? null
+                                      : diasRestantesOrcamento(
+                                          budgetRange, DateTime.now()),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
                             child: Column(children: [
-                          appStateSettings["sharedBudgets"]
-                              ? BudgetSpenderSummary(
-                                  budget: widget.budget,
-                                  budgetRange: budgetRange,
-                                  setSelectedMember: (member) {
-                                    setState(() {
-                                      selectedMember = member;
-                                      selectedCategory = null;
-                                    });
-                                    _pieChartDisplayStateKey.currentState
-                                        ?.setTouchedIndex(-1);
-                                  },
-                                )
-                              : SizedBox.shrink(),
                           if (categoryWithTotals.length > 0)
-                            SizedBox(height: 37),
+                            Padding(
+                              padding: EdgeInsetsDirectional.fromSTEB(
+                                  13 + getHorizontalPaddingConstrained(context),
+                                  4,
+                                  13,
+                                  16),
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Text(
+                                    widget.budget.income
+                                        ? 'Por categoria'
+                                        : 'Gasto por categoria',
+                                    style: EdTexto.h2(context)),
+                              ),
+                            ),
 
                           if (categoryWithTotals.length > 0)
                             pieChart(
@@ -835,14 +713,9 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
               child: Container(
                 margin: EdgeInsetsDirectional.symmetric(horizontal: 13),
                 decoration: BoxDecoration(
-                  borderRadius:
-                      BorderRadiusDirectional.all(Radius.circular(15)),
-                  color: appStateSettings["materialYou"]
-                      ? dynamicPastel(context,
-                          Theme.of(context).colorScheme.secondaryContainer,
-                          amount: 0.5)
-                      : getColor(context, "lightDarkAccentHeavyLight"),
-                  boxShadow: boxShadowCheck(boxShadowGeneral(context)),
+                  borderRadius: BorderRadius.circular(12),
+                  color: cores(context).surf,
+                  border: Border.all(color: cores(context).line),
                 ),
                 child: BudgetLineGraph(
                   budget: widget.budget,
@@ -867,7 +740,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
             listID: pageId,
             budgetTransactionFilters: widget.budget.budgetTransactionFilters,
             memberTransactionFilters: widget.budget.memberTransactionFilters,
-            member: selectedMember,
             onlyShowTransactionsBelongingToBudgetPk:
                 widget.budget.sharedKey != null ||
                         widget.budget.addedTransactionsOnly == true
@@ -880,8 +752,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
             categoryTintColor: Theme.of(context).colorScheme.primary,
             noResultsExtraWidget:
                 widget.budget.reoccurrence != BudgetReoccurence.custom &&
-                        isPastBudget == false &&
-                        isPastBudgetButCurrentPeriod == false
+                        !widget.openedFromHistory
                     ? Padding(
                         padding: const EdgeInsetsDirectional.only(top: 20),
                         child: ExtraInfoButton(
@@ -895,27 +766,9 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                           icon: appStateSettings["outlinedIcons"]
                               ? Icons.history_outlined
                               : Icons.history_rounded,
-                          color: dynamicPastel(
-                            context,
-                            Theme.of(context).colorScheme.secondaryContainer,
-                            amountLight:
-                                appStateSettings["materialYou"] ? 0.25 : 0.4,
-                            amountDark:
-                                appStateSettings["materialYou"] ? 0.4 : 0.55,
-                          ),
-                          buttonIconColor: dynamicPastel(
-                              context,
-                              HexColor(widget.budget.colour,
-                                  defaultColor:
-                                      Theme.of(context).colorScheme.primary),
-                              amount: 0.5),
-                          buttonIconColorIcon: dynamicPastel(
-                              context,
-                              HexColor(widget.budget.colour,
-                                  defaultColor:
-                                      Theme.of(context).colorScheme.primary),
-                              amount: 0.7,
-                              inverse: true),
+                          color: cores(context).surf,
+                          buttonIconColor: cores(context).chip,
+                          buttonIconColorIcon: cores(context).tx,
                         ),
                       )
                     : SizedBox.shrink(),
@@ -928,28 +781,6 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                 appStateSettings["appAnimations"] != AppAnimations.all.index
                     ? TransactionEntriesRenderType.sliversNotSticky
                     : TransactionEntriesRenderType.implicitlyAnimatedSlivers,
-          ),
-          SliverToBoxAdapter(
-            child: widget.budget.sharedDateUpdated == null
-                ? SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsetsDirectional.only(
-                        start: 10, end: 10, bottom: 0),
-                    child: TextFont(
-                      text: "synced".tr() +
-                          " " +
-                          getTimeAgo(
-                            widget.budget.sharedDateUpdated!,
-                          ).toLowerCase() +
-                          "\n Created by " +
-                          getMemberNickname(
-                              (widget.budget.sharedMembers ?? [""])[0]),
-                      fontSize: 13,
-                      textColor: getColor(context, "textLight"),
-                      textAlign: TextAlign.center,
-                      maxLines: 4,
-                    ),
-                  ),
           ),
           // Wipe all remaining pixels off - sometimes graphics artifacts are left behind
           SliverToBoxAdapter(
@@ -1274,162 +1105,6 @@ class _BudgetLineGraphState extends State<BudgetLineGraph> {
         return SizedBox.shrink();
       },
     );
-  }
-}
-
-class TotalSpent extends StatefulWidget {
-  const TotalSpent({
-    super.key,
-    required this.totalSpent,
-    required this.budget,
-  });
-
-  final double totalSpent;
-  final Budget budget;
-
-  @override
-  State<TotalSpent> createState() => _TotalSpentState();
-}
-
-class _TotalSpentState extends State<TotalSpent> {
-  bool showTotalSpent = appStateSettings["showTotalSpentForBudget"];
-
-  _swapTotalSpentDisplay() {
-    setState(() {
-      showTotalSpent = !showTotalSpent;
-    });
-    updateSettings("showTotalSpentForBudget", showTotalSpent,
-        pagesNeedingRefresh: [0, 2], updateGlobalState: false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double budgetAmount = budgetAmountToPrimaryCurrency(
-        Provider.of<AllWallets>(context, listen: true), widget.budget);
-
-    return GestureDetector(
-      onTap: () {
-        _swapTotalSpentDisplay();
-      },
-      onLongPress: () {
-        HapticFeedback.heavyImpact();
-        _swapTotalSpentDisplay();
-      },
-      child: AnimatedSwitcher(
-        duration: Duration(milliseconds: 200),
-        child: IntrinsicWidth(
-          child: budgetAmount - widget.totalSpent >= 0
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      child: CountNumber(
-                        count: showTotalSpent
-                            ? widget.totalSpent
-                            : budgetAmount - widget.totalSpent,
-                        duration: Duration(milliseconds: 400),
-                        initialCount: (0),
-                        textBuilder: (number) {
-                          return TextFont(
-                            text: convertToMoney(
-                                Provider.of<AllWallets>(context), number,
-                                finalNumber: showTotalSpent
-                                    ? widget.totalSpent
-                                    : budgetAmount - widget.totalSpent),
-                            fontSize: 22,
-                            textAlign: TextAlign.start,
-                            fontWeight: FontWeight.bold,
-                            textColor: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer,
-                          );
-                        },
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsetsDirectional.only(bottom: 1.5),
-                      child: TextFont(
-                        text: getBudgetSpentText(widget.budget.income) +
-                            convertToMoney(
-                                Provider.of<AllWallets>(context), budgetAmount),
-                        fontSize: 15,
-                        textAlign: TextAlign.start,
-                        textColor:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      child: CountNumber(
-                        count: showTotalSpent
-                            ? widget.totalSpent
-                            : widget.totalSpent - budgetAmount,
-                        duration: Duration(milliseconds: 400),
-                        initialCount: (0),
-                        textBuilder: (number) {
-                          return TextFont(
-                            text: convertToMoney(
-                                Provider.of<AllWallets>(context), number,
-                                finalNumber: showTotalSpent
-                                    ? widget.totalSpent
-                                    : widget.totalSpent - budgetAmount),
-                            fontSize: 22,
-                            textAlign: TextAlign.start,
-                            fontWeight: FontWeight.bold,
-                            textColor: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer,
-                          );
-                        },
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsetsDirectional.only(bottom: 1.5),
-                      child: TextFont(
-                        text: getBudgetOverSpentText(widget.budget.income) +
-                            convertToMoney(
-                                Provider.of<AllWallets>(context), budgetAmount),
-                        fontSize: 15,
-                        textAlign: TextAlign.start,
-                        textColor:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-String getBudgetSpentText(bool isIncome) {
-  if (isIncome == false) {
-    return (appStateSettings["showTotalSpentForBudget"]
-        ? " " + "spent-amount-of".tr() + " "
-        : " " + "remaining-amount-of".tr() + " ");
-  } else {
-    return (appStateSettings["showTotalSpentForBudget"]
-        ? " " + "saved-amount-of".tr() + " "
-        : " " + "remaining-amount-of".tr() + " ");
-  }
-}
-
-String getBudgetOverSpentText(bool isIncome) {
-  if (isIncome == false) {
-    return (appStateSettings["showTotalSpentForBudget"]
-        ? " " + "spent-amount-of".tr() + " "
-        : " " + "overspent-amount-of".tr() + " ");
-  } else {
-    return (appStateSettings["showTotalSpentForBudget"]
-        ? " " + "saved-amount-of".tr() + " "
-        : " " + "over-saved-amount-of".tr() + " ");
   }
 }
 

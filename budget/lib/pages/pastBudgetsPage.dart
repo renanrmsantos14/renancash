@@ -9,14 +9,14 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/budgetHistoryLineGraph.dart';
 import 'package:budget/pages/budgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/widgets/animatedCircularProgress.dart';
 import 'package:budget/widgets/budgetContainer.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/editRowEntry.dart';
 import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
-import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/openPopup.dart';
@@ -259,7 +259,6 @@ class __PastBudgetsPageContentState extends State<_PastBudgetsPageContent> {
 
   @override
   Widget build(BuildContext context) {
-    DateTimeRange budgetRange = getBudgetDate(widget.budget, DateTime.now());
     Color pageBackgroundColor =
         Theme.of(context).brightness == Brightness.dark &&
                 appStateSettings["forceFullDarkBackground"]
@@ -273,21 +272,14 @@ class __PastBudgetsPageContentState extends State<_PastBudgetsPageContent> {
 
     return PageFramework(
       backgroundColor: pageBackgroundColor,
-      appBarBackgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-      appBarBackgroundColorStart: pageBackgroundColor,
       key: budgetHistoryKey,
       title: "history".tr(),
-      subtitle: TextFont(
-        text: widget.budget.name,
-        fontSize: getCenteredTitle(context: context, backButtonEnabled: true) ==
-                    true &&
-                getCenteredTitleSmall(
-                        context: context, backButtonEnabled: true) ==
-                    false
-            ? 30
-            : 22,
-        maxLines: 5,
-        fontWeight: FontWeight.bold,
+      subtitle: Text(
+        widget.budget.name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: EdTexto.corpo(context)
+            .copyWith(fontSize: 15, color: cores(context).mu),
       ),
       actions: [
         IconButton(
@@ -319,13 +311,11 @@ class __PastBudgetsPageContentState extends State<_PastBudgetsPageContent> {
             appStateSettings["outlinedIcons"]
                 ? Icons.edit_outlined
                 : Icons.edit_rounded,
-            color: Theme.of(context).colorScheme.onSecondaryContainer,
           ),
         ),
       ],
       subtitleSize: 10,
       subtitleAlignment: AlignmentDirectional.bottomStart,
-      textColor: getColor(context, "black"),
       dragDownToDismiss: true,
       slivers: [
         SliverStickyHeader(
@@ -472,14 +462,7 @@ class __PastBudgetsPageContentState extends State<_PastBudgetsPageContent> {
                                                   ?.setTouchedBudgetIndex(
                                                       index);
                                             },
-                                            color: dynamicPastel(
-                                              context,
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary,
-                                              amountLight: 0.4,
-                                              amountDark: 0.2,
-                                            ),
+                                            color: cores(context).acc,
                                             dateRanges: dateTimeRanges,
                                             spots: [spots],
                                             horizontalLineAt: budgetAmount,
@@ -574,18 +557,6 @@ class __PastBudgetsPageContentState extends State<_PastBudgetsPageContent> {
           ),
           sliver: MultiSliver(
             children: [
-              SliverToBoxAdapter(
-                child: appStateSettings["sharedBudgets"]
-                    ? BudgetSpenderSummary(
-                        budget: widget.budget,
-                        budgetRange: budgetRange,
-                        setSelectedMember: (member) {},
-                        disableMemberSelection: true,
-                        allTime: true,
-                        isLarge: true,
-                      )
-                    : SizedBox.shrink(),
-              ),
               selectedCategoryFks.length > 0
                   ? SliverToBoxAdapter(
                       child: Padding(
@@ -734,13 +705,12 @@ class LoadMorePeriodsButton extends StatelessWidget {
         child: Tooltip(
           message: "view-more".tr(),
           child: IconButton(
-            color: Theme.of(context).colorScheme.primary,
             icon: Icon(
               appStateSettings["outlinedIcons"]
                   ? Icons.history_outlined
                   : Icons.history_rounded,
               size: 22,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              color: cores(context).mu,
             ),
             onPressed: onPressed,
           ),
@@ -804,18 +774,6 @@ class _PastBudgetContainerListState extends State<PastBudgetContainerList> {
                         duration: Duration(milliseconds: 400),
                         child: AnimatedContainer(
                           duration: Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            boxShadow: getPlatform() == PlatformOS.isIOS ||
-                                    appStateSettings["materialYou"]
-                                ? []
-                                : touchedBudgetIndex == null ||
-                                        widget.amountLoaded -
-                                                touchedBudgetIndex! -
-                                                1 ==
-                                            index
-                                    ? boxShadowCheck(boxShadowGeneral(context))
-                                    : [BoxShadow(color: Colors.transparent)],
-                          ),
                           padding: getPlatform() == PlatformOS.isIOS
                               ? EdgeInsetsDirectional.zero
                               : EdgeInsetsDirectional.only(
@@ -856,7 +814,7 @@ class _PastBudgetContainerListState extends State<PastBudgetContainerList> {
                 sliver: SliverGrid(
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 600,
-                    mainAxisExtent: 95,
+                    mainAxisExtent: 96,
                     crossAxisSpacing:
                         getPlatform() == PlatformOS.isIOS ? 0 : 10,
                   ),
@@ -876,12 +834,6 @@ class _PastBudgetContainerListState extends State<PastBudgetContainerList> {
                               ? 1
                               : 0.5,
                           child: Container(
-                            decoration: BoxDecoration(
-                              boxShadow: getPlatform() == PlatformOS.isIOS ||
-                                      appStateSettings["materialYou"]
-                                  ? []
-                                  : boxShadowCheck(boxShadowGeneral(context)),
-                            ),
                             child: AddTopAndBottomBorderIfIOS(
                               enabled: getPlatform() == PlatformOS.isIOS,
                               child: Padding(
@@ -956,22 +908,15 @@ class PastBudgetContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color progressForegroundColor = dynamicPastel(
-        context, Theme.of(context).colorScheme.primary,
-        amountLight: 0.4, amountDark: 0.2);
-    Color progressBackgroundColor =
-        Theme.of(context).colorScheme.secondaryContainer;
-    Color progressOverageColor = Theme.of(context).colorScheme.tertiary;
-    double budgetAmount = budgetAmountToPrimaryCurrency(
-        Provider.of<AllWallets>(context, listen: true), budget);
-    DateTime dateForRangeLocal =
-        dateForRange == null ? DateTime.now() : dateForRange!;
-    DateTimeRange budgetRange = getBudgetDate(budget, dateForRangeLocal);
-    var widget = StreamBuilder<List<CategoryWithTotal>>(
+    final carteiras = Provider.of<AllWallets>(context, listen: true);
+    final limite = budgetAmountToPrimaryCurrency(carteiras, budget);
+    final data = dateForRange ?? DateTime.now();
+    final periodo = getBudgetDate(budget, data);
+    return StreamBuilder<List<CategoryWithTotal>>(
       stream: database.watchTotalSpentInEachCategoryInTimeRangeFromCategories(
-        allWallets: Provider.of<AllWallets>(context),
-        start: budgetRange.start,
-        end: budgetRange.end,
+        allWallets: carteiras,
+        start: periodo.start,
+        end: periodo.end,
         categoryFks: budget.categoryFks,
         categoryFksExclude: budget.categoryFksExclude,
         budgetTransactionFilters: budget.budgetTransactionFilters,
@@ -983,258 +928,111 @@ class PastBudgetContainer extends StatelessWidget {
         budget: budget,
       ),
       builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          double totalSpent = 0;
-          snapshot.data!.forEach((category) {
-            totalSpent = totalSpent + category.total;
-          });
-          totalSpent = totalSpent * determineBudgetPolarity(budget);
-          totalSpent = absoluteZero(totalSpent);
-
-          return Padding(
-            padding:
-                EdgeInsetsDirectional.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Flexible(
-                              child: TextFont(
-                                text: getPercentBetweenDates(
-                                            budgetRange, DateTime.now()) <=
-                                        100
-                                    ? "current-period".tr()
-                                    : getWordedDateShortMore(budgetRange.start),
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                bottom: 2,
-                                start: 5,
-                              ),
-                              child: TextFont(
-                                text: budgetRange.start.year !=
-                                        DateTime.now().year
-                                    ? budgetRange.start.year.toString()
-                                    : "",
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 2),
-                        budgetAmount - totalSpent >= 0
-                            ? Row(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Container(
-                                        child: CountNumber(
-                                          count: appStateSettings[
-                                                  "showTotalSpentForBudget"]
-                                              ? totalSpent
-                                              : budgetAmount - totalSpent,
-                                          duration: Duration(milliseconds: 700),
-                                          initialCount: (0),
-                                          textBuilder: (number) {
-                                            return TextFont(
-                                              text: convertToMoney(
-                                                  Provider.of<AllWallets>(
-                                                      context),
-                                                  number,
-                                                  finalNumber: appStateSettings[
-                                                          "showTotalSpentForBudget"]
-                                                      ? totalSpent
-                                                      : budgetAmount -
-                                                          totalSpent),
-                                              fontSize: 16,
-                                              textAlign: TextAlign.start,
-                                              fontWeight: FontWeight.bold,
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding:
-                                            const EdgeInsetsDirectional.only(
-                                                bottom: 0.5),
-                                        child: Container(
-                                          child: TextFont(
-                                            text: getBudgetSpentText(
-                                                    budget.income) +
-                                                convertToMoney(
-                                                    Provider.of<AllWallets>(
-                                                        context),
-                                                    budgetAmount),
-                                            fontSize: 12,
-                                            textAlign: TextAlign.start,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Container(
-                                    child: CountNumber(
-                                      count: appStateSettings[
-                                              "showTotalSpentForBudget"]
-                                          ? totalSpent
-                                          : totalSpent - budgetAmount,
-                                      duration: Duration(milliseconds: 700),
-                                      initialCount: (0),
-                                      textBuilder: (number) {
-                                        return TextFont(
-                                          text: convertToMoney(
-                                              Provider.of<AllWallets>(context),
-                                              number,
-                                              finalNumber: appStateSettings[
-                                                      "showTotalSpentForBudget"]
-                                                  ? totalSpent
-                                                  : totalSpent - budgetAmount),
-                                          fontSize: 16,
-                                          textAlign: TextAlign.start,
-                                          fontWeight: FontWeight.bold,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsetsDirectional.only(
-                                          bottom: 0),
-                                      child: TextFont(
-                                        text: getBudgetOverSpentText(
-                                                budget.income) +
-                                            convertToMoney(
-                                                Provider.of<AllWallets>(
-                                                    context),
-                                                budgetAmount),
-                                        fontSize: 12,
-                                        textAlign: TextAlign.start,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ],
-                    ),
-                  ),
-                ),
-                SizedBox(width: 20),
-                Stack(
-                  alignment: AlignmentDirectional.center,
-                  children: [
-                    Padding(
-                      padding: EdgeInsetsDirectional.all(5 / 2),
-                      child: Container(
-                        width: 50,
-                        child: CountNumber(
-                          count: budgetAmount == 0
-                              ? 0
-                              : (totalSpent / budgetAmount * 100),
-                          duration: Duration(milliseconds: 1000),
-                          initialCount: (0),
-                          textBuilder: (value) {
-                            return TextFont(
-                              autoSizeText: true,
-                              text: convertToPercent(value,
-                                  numberDecimals: 0, useLessThanZero: true),
-                              fontSize: 16,
-                              textAlign: TextAlign.center,
-                              fontWeight: FontWeight.bold,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              maxLines: 1,
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    Container(
-                      height: 60,
-                      width: 60,
-                      child: AnimatedCircularProgress(
-                        percent: (totalSpent / budgetAmount).abs(),
-                        backgroundColor: progressBackgroundColor,
-                        foregroundColor: progressForegroundColor,
-                        overageColor: progressOverageColor,
-                        overageShadowColor: getColor(context, "white"),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        final dados = snapshot.data;
+        if (dados == null) return const SizedBox(height: 83);
+        final gasto = absoluteZero(dados.fold<double>(0, (s, c) => s + c.total) *
+            determineBudgetPolarity(budget));
+        return LinhaCicloOrcamento(
+          titulo: getPercentBetweenDates(periodo, DateTime.now()) <= 100
+              ? "current-period".tr()
+              : textoPeriodoOrcamento(periodo,
+                  ano: periodo.start.year != DateTime.now().year),
+          gasto: gasto,
+          limite: limite,
+          renda: budget.income,
+          onTap: () => pushRoute(
+            context,
+            BudgetPage(
+              budgetPk: budget.budgetPk,
+              dateForRange: data,
+              dateForRangeIndex: dateForRangeIndex,
+              openedFromHistory: true,
             ),
-          );
-        } else {
-          return Container(height: 80, width: double.infinity);
-        }
+          ),
+          onLongPress: () => pushRoute(
+            context,
+            AddBudgetPage(
+              budget: budget,
+              routesToPopAfterDelete: RoutesToPopAfterDelete.All,
+            ),
+          ),
+        );
       },
     );
-    return Container(
-      child: OpenContainerNavigation(
-        borderRadius: getPlatform() == PlatformOS.isIOS ? 0 : 18,
-        closedColor: getPlatform() == PlatformOS.isIOS
-            ? backgroundColor
-            : appStateSettings["materialYou"]
-                ? dynamicPastel(
-                    context,
-                    Theme.of(context).colorScheme.secondaryContainer,
-                    amount: 0.5,
-                  )
-                : getColor(context, "lightDarkAccentHeavyLight"),
-        button: (openContainer) {
-          return Tappable(
-            onTap: () {
-              openContainer();
-            },
-            onLongPress: () {
-              pushRoute(
-                context,
-                AddBudgetPage(
-                  budget: budget,
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.All,
-                ),
-              );
-            },
-            borderRadius: getPlatform() == PlatformOS.isIOS ? 0 : 15,
-            child: widget,
-            color: getPlatform() == PlatformOS.isIOS
-                ? backgroundColor
-                : appStateSettings["materialYou"]
-                    ? dynamicPastel(
-                        context,
-                        Theme.of(context).colorScheme.secondaryContainer,
-                        amount: 0.3,
-                      )
-                    : getColor(context, "lightDarkAccentHeavyLight"),
-          );
-        },
-        openPage: BudgetPage(
-          budgetPk: budget.budgetPk,
-          dateForRange: dateForRangeLocal,
-          dateForRangeIndex: dateForRangeIndex,
-          openedFromHistory: true,
-        ),
+  }
+}
+
+/// Um ciclo do histórico: período, percentual, medidor e "Gasto X de Y".
+/// Recebe os totais prontos (não lê o banco).
+class LinhaCicloOrcamento extends StatelessWidget {
+  const LinhaCicloOrcamento({
+    super.key,
+    required this.titulo,
+    required this.gasto,
+    required this.limite,
+    this.renda = false,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final String titulo;
+  final double gasto, limite;
+  final bool renda;
+  final VoidCallback? onTap, onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final carteiras = Provider.of<AllWallets>(context);
+    final fracao = limite <= 0 ? 0.0 : gasto / limite;
+    final passou = !renda && fracao > 1;
+    final rotulo = EdTexto.rotulo(context);
+    final cartao = Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: e.surf,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: e.line),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                convertToPercent(fracao * 100,
+                    numberDecimals: 0, useLessThanZero: true),
+                style: EdTexto.corpo(context).copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: passou ? getColor(context, "overspentAmount") : null),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          MedidorEditorial(fracao: fracao, alerta: passou),
+          const SizedBox(height: 8),
+          Text(
+            '${renda ? 'Guardado' : 'Gasto'} ${convertToMoney(carteiras, gasto)} '
+            'de ${convertToMoney(carteiras, limite)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: rotulo,
+          ),
+        ],
+      ),
+    );
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: ToqueEscala(onTap: onTap, child: cartao),
     );
   }
 }
@@ -1294,7 +1092,7 @@ class CategoryAverageSpent extends StatelessWidget {
                     children: [
                       TextFont(
                         text: category.name,
-                        fontSize: 17,
+                        fontSize: 15,
                         maxLines: 1,
                       ),
                       SizedBox(
@@ -1355,11 +1153,11 @@ class CategoryAverageSpent extends StatelessWidget {
                 initialCount: amountSpent.abs(),
                 textBuilder: (number) {
                   return TextFont(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     text: convertToMoney(
                         Provider.of<AllWallets>(context), number,
                         finalNumber: amountSpent.abs()),
-                    fontSize: 20,
+                    fontSize: 16,
                     textColor: getColor(context, "black"),
                   );
                 },

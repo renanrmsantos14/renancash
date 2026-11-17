@@ -20,6 +20,7 @@ import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:transparent_image/transparent_image.dart';
 import 'package:budget/widgets/extraInfoBoxes.dart';
 import 'package:budget/widgets/outlinedButtonStacked.dart';
@@ -45,18 +46,15 @@ class AccountsPageState extends State<AccountsPage> {
       height: 100,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: dynamicPastel(context, Theme.of(context).colorScheme.primary,
-            amount: 0.2),
+        color: cores(context).chip,
       ),
       child: Center(
         child: TextFont(
             text: googleUser?.displayName![0] ?? "",
-            fontSize: 60,
+            fontSize: 40,
             textAlign: TextAlign.center,
-            fontWeight: FontWeight.bold,
-            textColor: dynamicPastel(
-                context, Theme.of(context).colorScheme.primary,
-                amount: 0.85, inverse: false)),
+            fontWeight: FontWeight.w600,
+            textColor: cores(context).tx),
       ),
     );
     return PageFramework(
@@ -66,12 +64,6 @@ class AccountsPageState extends State<AccountsPage> {
       title: getPlatform() == PlatformOS.isIOS
           ? "backup".tr()
           : "data-backup".tr(),
-      appBarBackgroundColor: getPlatform() == PlatformOS.isIOS
-          ? null
-          : Theme.of(context).colorScheme.secondaryContainer,
-      appBarBackgroundColorStart: getPlatform() == PlatformOS.isIOS
-          ? null
-          : Theme.of(context).colorScheme.secondaryContainer,
       bottomPadding: false,
       actions: [
         // Show the tip if it was dissmissed
@@ -139,13 +131,13 @@ class AccountsPageState extends State<AccountsPage> {
                           ? Container(
                               padding: EdgeInsetsDirectional.all(20),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
+                                color: cores(context).chip,
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
                                 MoreIcons.google_drive,
-                                size: 50,
-                                color: Theme.of(context).colorScheme.onPrimary,
+                                size: 40,
+                                color: cores(context).tx,
                               ),
                             )
                           : ClipOval(
@@ -174,20 +166,23 @@ class AccountsPageState extends State<AccountsPage> {
                             ? "google-drive-backup".tr()
                             : (googleUser?.displayName ?? "").toString(),
                         textAlign: TextAlign.center,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
                       SizedBox(height: 2),
                       TextFont(
                         text: (appStateSettings["currentUserEmail"] ?? "")
                             .toString(),
                         textAlign: TextAlign.center,
-                        fontSize: 15,
+                        fontSize: 14,
+                        textColor: cores(context).mu,
                       ),
                       SizedBox(height: 15),
                       IntrinsicWidth(
                         child: Button(
                           label: "logout".tr(),
+                          color: cores(context).chip,
+                          textColor: cores(context).tx,
                           onTap: () async {
                             final result = await signOutGoogle();
                             if (result == true) {
@@ -307,11 +302,8 @@ class AccountsPageState extends State<AccountsPage> {
                               style: TextStyle(
                                 decoration: TextDecoration.underline,
                                 decorationStyle: TextDecorationStyle.solid,
-                                decorationColor:
-                                    getColor(context, "unPaidOverdue")
-                                        .withOpacity(0.8),
-                                color: getColor(context, "unPaidOverdue")
-                                    .withOpacity(0.8),
+                                decorationColor: cores(context).acc,
+                                color: cores(context).acc,
                                 fontFamily: appStateSettings["font"],
                                 fontFamilyFallback: ['Inter'],
                               ),
