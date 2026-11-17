@@ -4,6 +4,7 @@ import 'package:budget/struct/pendenciasVencidas.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/struct/mbSync/revisao.dart'
     show meuBancoRevisar, mbTotalPendencias;
+import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
 import 'package:flutter/material.dart';
 
 /// Ícone com a bolinha do total de pendências (`mbTotalPendencias`).
@@ -18,6 +19,7 @@ class SeloPendencias extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([
         meuBancoRevisar,
+        meuBancoClassificar,
         meuBancoAvisos,
         meuBancoVencidas,
         mbAjustesMudaram
