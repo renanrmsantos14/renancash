@@ -18,6 +18,9 @@ import 'package:budget/widgets/iconButtonScaled.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
 import 'package:budget/widgets/budgetContainer.dart';
+import 'package:budget/struct/mbSync/orcamentos.dart'
+    show mbWatchAVencerOrcamento;
+import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/categoryEntry.dart';
 import 'package:budget/widgets/categoryLimits.dart';
@@ -582,17 +585,27 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                       style: EdTexto.rotulo(context)),
                                   const SizedBox(height: 8),
                                 ],
-                                ResumoOrcamento(
-                                  gasto: s.totalSpent,
-                                  limite: budgetAmount,
-                                  renda: widget.budget.income,
-                                  grande: true,
-                                  mostrarGasto: mostrarGasto,
-                                  onTapValor: alternarGasto,
-                                  diasRestantes: isPastBudget
-                                      ? null
-                                      : diasRestantesOrcamento(
-                                          budgetRange, DateTime.now()),
+                                StreamBuilder<double>(
+                                  stream: mbWatchAVencerOrcamento(
+                                      widget.budget,
+                                      Provider.of<AllWallets>(context),
+                                      budgetRange),
+                                  builder: (context, aVencer) =>
+                                      ResumoOrcamento(
+                                    gasto: s.totalSpent,
+                                    limite: budgetAmount,
+                                    renda: widget.budget.income,
+                                    grande: true,
+                                    mostrarGasto: mostrarGasto,
+                                    onTapValor: alternarGasto,
+                                    diasRestantes: isPastBudget
+                                        ? null
+                                        : diasRestantesOrcamento(
+                                            budgetRange, DateTime.now()),
+                                    aVencer: aVencer.data ?? 0,
+                                    hoje: fracaoDoCiclo(budgetRange.start,
+                                        budgetRange.end, DateTime.now()),
+                                  ),
                                 ),
                               ],
                             ),

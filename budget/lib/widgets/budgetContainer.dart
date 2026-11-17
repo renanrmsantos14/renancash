@@ -4,7 +4,9 @@ import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/budgetPage.dart';
-import 'package:budget/struct/mbSync/orcamentos.dart' show mbWatchGastoOrcamento;
+import 'package:budget/struct/mbSync/orcamentos.dart'
+    show mbWatchAVencerOrcamento, mbWatchGastoOrcamento;
+import 'package:budget/struct/ritmoCiclo.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +30,36 @@ String textoPeriodoOrcamento(DateTimeRange p, {bool ano = false}) {
   return a == b ? a : '$a – $b';
 }
 
+/// Barra do orçamento (a mesma na Início, na lista e no detalhe): gasto,
+/// faixa das contas a vencer e marca de "hoje", com rótulo de leitor de tela.
+class BarraOrcamento extends StatelessWidget {
+  const BarraOrcamento({
+    super.key,
+    required this.gasto,
+    required this.limite,
+    this.aVencer = 0,
+    this.hoje,
+    this.renda = false,
+    this.alerta = false,
+  });
+
+  final double gasto, limite, aVencer;
+  final double? hoje;
+  final bool renda, alerta;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: semanticaBarraCiclo(gasto, limite, hoje, renda: renda),
+        child: MedidorEditorial(
+          fracao: gasto / limite,
+          aVencer: aVencer / limite,
+          hoje: hoje,
+          alerta: alerta,
+          altura: 6,
+        ),
+      );
+}
+
 /// Quanto resta (ou passou) do limite: rótulo, valor grande, medidor e
 /// "Gasto X de Y". Recebe os totais prontos (não lê o banco).
 class ResumoOrcamento extends StatelessWidget {
@@ -37,6 +69,8 @@ class ResumoOrcamento extends StatelessWidget {
     required this.limite,
     this.renda = false,
     this.diasRestantes,
+    this.aVencer = 0,
+    this.hoje,
     this.grande = false,
     this.mostrarGasto = false,
     this.onTapValor,
@@ -49,6 +83,12 @@ class ResumoOrcamento extends StatelessWidget {
 
   /// Dias do período a partir de hoje (contando hoje); nulo fora do período.
   final int? diasRestantes;
+
+  /// Não pago no período (faixa clara da barra).
+  final double aVencer;
+
+  /// Fração do período decorrida (marca de "hoje"); nula fora do período.
+  final double? hoje;
 
   /// Tela do orçamento: número de 40 px e ritmo diário.
   final bool grande;
@@ -81,6 +121,7 @@ class ResumoOrcamento extends StatelessWidget {
         .copyWith(color: mostrarGasto ? null : cor);
     final rotulo = EdTexto.rotulo(context);
     final dias = diasRestantes;
+    final fracaoHoje = limite > 0 ? hoje : null;
     Widget numero = ContagemValor(
       valor: mostrarGasto ? gasto : restante.abs(),
       formatar: contando,
@@ -105,9 +146,16 @@ class ResumoOrcamento extends StatelessWidget {
         SizedBox(height: grande ? 8 : 4),
         numero,
         SizedBox(height: grande ? 14 : 12),
-        MedidorEditorial(
-            fracao: limite <= 0 ? 0 : gasto / limite,
-            alerta: passou && !renda),
+        if (limite > 0)
+          BarraOrcamento(
+              gasto: gasto,
+              limite: limite,
+              aVencer: aVencer,
+              hoje: hoje,
+              renda: renda,
+              alerta: passou && !renda)
+        else
+          const MedidorEditorial(fracao: 0),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -129,6 +177,11 @@ class ResumoOrcamento extends StatelessWidget {
             ],
           ],
         ),
+        if (fracaoHoje != null) ...[
+          const SizedBox(height: 4),
+          Text(textoIdealHoje(gasto, limite, fracaoHoje, dinheiro, renda: renda),
+              maxLines: 2, style: rotulo),
+        ],
         if (grande && dias != null && restante > 0) ...[
           const SizedBox(height: 10),
           Text(
@@ -152,13 +205,16 @@ class CartaoOrcamento extends StatelessWidget {
     required this.limite,
     this.renda = false,
     this.diasRestantes,
+    this.aVencer = 0,
+    this.hoje,
     this.onTap,
     this.onLongPress,
   });
 
   final String nome, periodo;
   final Color cor;
-  final double gasto, limite;
+  final double gasto, limite, aVencer;
+  final double? hoje;
   final bool renda;
   final int? diasRestantes;
   final VoidCallback? onTap, onLongPress;
@@ -203,6 +259,8 @@ class CartaoOrcamento extends StatelessWidget {
             limite: limite,
             renda: renda,
             diasRestantes: diasRestantes,
+            aVencer: aVencer,
+            hoje: hoje,
             mostrarGasto: appStateSettings["showTotalSpentForBudget"] == true,
           ),
         ],
@@ -237,28 +295,33 @@ class BudgetContainer extends StatelessWidget {
       builder: (context, snapshot) {
         final gasto = snapshot.data;
         // Mesma altura do cartão carregado: sem salto ao chegar o total.
-        if (gasto == null) return const SizedBox(height: 132);
-        return CartaoOrcamento(
-          nome: budget.name,
-          cor: HexColor(budget.colour,
-              defaultColor: Theme.of(context).colorScheme.primary),
-          periodo: textoPeriodoOrcamento(periodo,
-              ano: budget.reoccurrence == BudgetReoccurence.yearly),
-          gasto: gasto,
-          limite: limite,
-          renda: budget.income,
-          diasRestantes: diasRestantesOrcamento(periodo, agora),
-          onTap: () => pushRoute(
-              context, BudgetPage(budgetPk: budget.budgetPk, dateForRange: agora)),
-          onLongPress: longPressToEdit
-              ? () => pushRoute(
-                    context,
-                    AddBudgetPage(
-                      budget: budget,
-                      routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-                    ),
-                  )
-              : null,
+        if (gasto == null) return const SizedBox(height: 164);
+        return StreamBuilder<double>(
+          stream: mbWatchAVencerOrcamento(budget, carteiras, periodo),
+          builder: (context, aVencer) => CartaoOrcamento(
+            nome: budget.name,
+            cor: HexColor(budget.colour,
+                defaultColor: Theme.of(context).colorScheme.primary),
+            periodo: textoPeriodoOrcamento(periodo,
+                ano: budget.reoccurrence == BudgetReoccurence.yearly),
+            gasto: gasto,
+            limite: limite,
+            renda: budget.income,
+            diasRestantes: diasRestantesOrcamento(periodo, agora),
+            aVencer: aVencer.data ?? 0,
+            hoje: fracaoDoCiclo(periodo.start, periodo.end, agora),
+            onTap: () => pushRoute(
+                context, BudgetPage(budgetPk: budget.budgetPk, dateForRange: agora)),
+            onLongPress: longPressToEdit
+                ? () => pushRoute(
+                      context,
+                      AddBudgetPage(
+                        budget: budget,
+                        routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+                      ),
+                    )
+                : null,
+          ),
         );
       },
     );

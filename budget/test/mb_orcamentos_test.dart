@@ -25,7 +25,9 @@ Future<void> _tx(String pk, double valor,
     DateTime? data,
     bool income = false,
     String categoria = 'c1',
-    String? loan}) =>
+    String? loan,
+    bool pago = true,
+    TransactionSpecialType? tipo}) =>
     database.into(database.transactions).insert(TransactionsCompanion.insert(
         transactionPk: Value(pk),
         name: pk,
@@ -35,7 +37,8 @@ Future<void> _tx(String pk, double valor,
         walletFk: Value(carteira),
         dateCreated: Value(data ?? DateTime(2026, 11, 5)),
         income: Value(income),
-        paid: const Value(true),
+        paid: Value(pago),
+        type: Value(tipo),
         objectiveLoanFk: Value(loan),
         dateTimeModified: Value(DateTime(2026, 11, 5))));
 
@@ -253,6 +256,19 @@ void main() {
       expect(r!.limite, 1300);
       expect(r.gasto, closeTo(668.96, 1e-9));
       expect(r.gasto, closeTo(await _gasto(await database.getBudgetInstance(mbOrcamentoGeralPk)), 1e-9));
+      expect(r.aVencer, 0);
+    });
+
+    test('a vencer: só o agendado não pago do ciclo, sem mudar o gasto', () async {
+      mbCicloCache = _ciclo;
+      await mbGarantirOrcamentoGeral();
+      await _tx('gasto', -700);
+      const agendada = TransactionSpecialType.upcoming;
+      await _tx('conta', -120, pago: false, tipo: agendada, data: DateTime(2026, 11, 20));
+      await _tx('fora', -80, pago: false, tipo: agendada, data: DateTime(2026, 9, 1));
+      final r = await mbLerCicloGeral(DateTime(2026, 11, 9));
+      expect(r!.gasto, closeTo(700, 1e-9));
+      expect(r.aVencer, closeTo(120, 1e-9));
     });
 
     test('sem Geral no aparelho não há número local (vale o do Worker)', () async {
@@ -260,7 +276,7 @@ void main() {
     });
 
     test('a Início usa o Geral: limite 0 vira "sem limite" e o gasto é o do orçamento', () {
-      ModeloInicio m(({double limite, double gasto})? geral) => montarModeloInicio(
+      ModeloInicio m(({double limite, double gasto, double aVencer})? geral) => montarModeloInicio(
           ciclo: {'inicio': '2026-11-06', 'fim': '2026-12-05', 'consumido': 1094.67},
           contas: const [],
           faturas: const {},
@@ -271,11 +287,14 @@ void main() {
           geral: geral);
       expect(m(null).consumido, 1094.67);
       expect(m(null).limite, isNull);
-      final com = m((limite: 1300, gasto: 668.96));
+      final com = m((limite: 1300, gasto: 668.96, aVencer: 90));
       expect(com.consumido, 668.96);
+      expect(com.aVencer, 90);
+      // 6 nov – 5 dez (30 dias); 16 nov é o 11º dia.
+      expect(com.fracaoHoje, closeTo(11 / 30, 1e-9));
       expect(com.limite, 1300);
       expect(com.percentual, closeTo(51.46, 0.01));
-      final sem = m((limite: 0, gasto: 668.96));
+      final sem = m((limite: 0, gasto: 668.96, aVencer: 0));
       expect(sem.limite, isNull);
       expect(sem.consumido, 668.96);
     });

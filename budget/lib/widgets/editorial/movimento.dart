@@ -76,37 +76,91 @@ class _ContagemValorState extends State<ContagemValor> {
   }
 }
 
+/// Barra de progresso. Nos orçamentos (como no Cashew): faixa clara das contas
+/// a vencer depois do gasto e marca vertical de "hoje" no tempo decorrido.
 class MedidorEditorial extends StatelessWidget {
   const MedidorEditorial(
-      {super.key, required this.fracao, this.alerta = false});
+      {super.key,
+      required this.fracao,
+      this.alerta = false,
+      this.aVencer = 0,
+      this.hoje,
+      this.altura = 2});
 
   final double fracao;
   final bool alerta;
+
+  /// Fração do limite ainda a vencer (não paga), desenhada após o gasto.
+  final double aVencer;
+
+  /// Fração do período decorrida; nula sem marca.
+  final double? hoje;
+  final double altura;
+
+  static const _sobra = 4.0; // a marca passa 4 px acima e abaixo da barra
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
     final alvo = fracao.clamp(0.0, 1.0);
-    Widget preenchimento(double v) => Transform(
-          alignment: Alignment.centerLeft,
-          transform: Matrix4.diagonal3Values(v, 1, 1),
-          child: ColoredBox(color: alerta ? e.warn : e.acc),
+    final fantasma = (fracao + aVencer).clamp(0.0, 1.0);
+    final raio = BorderRadius.circular(altura / 2);
+    Widget faixa(double v, Color cor) => FractionallySizedBox(
+          alignment: AlignmentDirectional.centerStart,
+          widthFactor: v,
+          child: DecoratedBox(
+              decoration: BoxDecoration(color: cor, borderRadius: raio)),
         );
+    // Gasto (dx) e gasto + a vencer (dy) animam juntos, também ao mudar.
+    Widget barra(Offset v) => ClipRRect(
+          borderRadius: raio,
+          child: ColoredBox(
+            color: e.line,
+            child: Stack(fit: StackFit.expand, children: [
+              if (v.dy > v.dx) faixa(v.dy, e.acc.withOpacity(.35)),
+              faixa(v.dx, alerta ? e.warn : e.acc),
+            ]),
+          ),
+        );
+    final animada = semMovimento(context)
+        ? barra(Offset(alvo, fantasma))
+        : TweenAnimationBuilder<Offset>(
+            tween: Tween(begin: Offset.zero, end: Offset(alvo, fantasma)),
+            duration: const Duration(milliseconds: 900),
+            curve: curvaEditorial,
+            builder: (context, v, _) => barra(v),
+          );
+    final h = hoje;
+    if (h == null) return SizedBox(height: altura, child: animada);
     return SizedBox(
-      height: 2,
-      child: ColoredBox(
-        color: e.line,
-        child: SizedBox.expand(
-          child: semMovimento(context)
-              ? preenchimento(alvo)
-              : TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: alvo),
-                  duration: const Duration(milliseconds: 900),
-                  curve: curvaEditorial,
-                  builder: (context, v, _) => preenchimento(v),
-                ),
-        ),
-      ),
+      height: altura + _sobra * 2,
+      child: LayoutBuilder(builder: (context, c) {
+        const largura = 4.0; // 2 px de marca com 1 px de recorte de cada lado
+        final fimX = c.maxWidth > largura ? c.maxWidth - largura : 0.0;
+        final x = (c.maxWidth * h - largura / 2).clamp(0.0, fimX);
+        return Stack(children: [
+          Positioned(
+              left: 0,
+              right: 0,
+              top: _sobra,
+              height: altura,
+              child: animada),
+          PositionedDirectional(
+            start: x,
+            top: 0,
+            bottom: 0,
+            width: largura,
+            child: DecoratedBox(
+              key: const Key('marca-hoje'),
+              decoration: BoxDecoration(
+                color: e.tx,
+                border: Border.symmetric(
+                    vertical: BorderSide(color: e.surf, width: 1)),
+              ),
+            ),
+          ),
+        ]);
+      }),
     );
   }
 }
