@@ -101,6 +101,8 @@ class FAB extends StatelessWidget {
       button: (openContainer) {
         return Tooltip(
           message: tooltip ?? "",
+          // O rótulo vai no ícone: o Tooltip sozinho não vira content-desc no Android.
+          excludeFromSemantics: true,
           child: Tappable(
             color: containerColor,
             onTap: () {
@@ -121,6 +123,7 @@ class FAB extends StatelessWidget {
                     child: Icon(
                       iconData,
                       color: iconColor,
+                      semanticLabel: tooltip,
                     ),
                   ),
                 );

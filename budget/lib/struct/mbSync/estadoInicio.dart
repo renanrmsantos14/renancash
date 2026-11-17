@@ -217,7 +217,9 @@ ModeloInicio montarModeloInicio({
 
   final bancos = <String>[];
   for (final c in correntes) {
-    final b = '${c['bank'] ?? c['name']}';
+    // Sem o final do número da conta ("BANCO INTER ·69-6" → "BANCO INTER"): o subtítulo cabe no celular.
+    final b = '${c['bank'] ?? c['name']}'
+        .replaceFirst(RegExp(r'\s*·\s*[\d-]+$'), '');
     if (!bancos.contains(b)) bancos.add(b);
   }
   if (poupancas.isNotEmpty) bancos.add('poupanças');
@@ -295,6 +297,22 @@ ModeloInicio montarModeloInicio({
 }
 
 Object? _decodificar(String? s) => s == null ? null : jsonDecode(s);
+
+List<Map<String, dynamic>> _contasSalvas(String? json) => [
+      for (final c in (_decodificar(json) as List? ?? const []))
+        (c as Map).cast<String, dynamic>()
+    ];
+
+/// Saldo real (o da Início) de cada carteira de conta bancária do Meu Banco (`mb:<id>`).
+/// A soma das transações da carteira não é saldo: transferências, pagamento de fatura e
+/// aplicações/resgates não viram lançamento, e não há saldo inicial.
+Map<String, double> mbSaldosReais(List<Map<String, dynamic>> contas) => {
+      for (final c in contas)
+        if (c['type'] == 'BANK') mbPkConta('${c['id']}'): _num(c['balance'])
+    };
+
+Future<Map<String, double>> mbLerSaldosReais() async =>
+    mbSaldosReais(_contasSalvas(await mbLerEstado('contas')));
 
 // Linhas mais recentes do RenanCash para a seção ÚLTIMAS (ficam em paralelo com o modelo, para abrir no editor).
 JoinedSelectStatement<HasResultSet, dynamic> _consultaUltimas() =>
@@ -423,10 +441,7 @@ typedef PatrimonioInicio = ({
 
 /// Dados dos cartões "Fatura do cartão" e "Patrimônio" da Início, lidos do que está no aparelho.
 Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
-  final contas = [
-    for (final c in (_decodificar(await mbLerEstado('contas')) as List? ?? const []))
-      (c as Map).cast<String, dynamic>()
-  ];
+  final contas = _contasSalvas(await mbLerEstado('contas'));
   final faturas = ((_decodificar(await mbLerEstado('faturas')) as Map?) ?? const {})
       .cast<String, dynamic>();
   final abertas = mbFaturasAbertas(contas: contas, faturas: faturas, agora: agora);
@@ -434,14 +449,16 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
       .where((c) => c['type'] == 'BANK' && c['subtype'] != 'SAVINGS_ACCOUNT')
       .fold<double>(0, (s, c) => s + _num(c['balance']));
   // Saldo por carteira: Investimentos entra no patrimônio; as demais aparecem só como informação.
+  // Conta bancária do Meu Banco mostra o saldo real, como na Início.
   final linhas = await database.customSelect(
       'SELECT w.wallet_pk AS pk, w.name AS nome, COALESCE(SUM(t.amount), 0) AS saldo '
       'FROM wallets w LEFT JOIN transactions t ON t.wallet_fk = w.wallet_pk '
       'GROUP BY w.wallet_pk, w.name ORDER BY w."order"').get();
+  final reais = mbSaldosReais(contas);
   var investimentos = 0.0;
   final carteiras = <CarteiraInicio>[];
   for (final l in linhas) {
-    final saldo = l.read<double>('saldo');
+    final saldo = reais[l.read<String>('pk')] ?? l.read<double>('saldo');
     if (l.read<String>('pk') == mbCarteiraInvestimentos) {
       investimentos = saldo;
     } else if (saldo != 0) {

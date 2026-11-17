@@ -232,28 +232,32 @@ class CacheCategoryIcon extends StatefulWidget {
   State<CacheCategoryIcon> createState() => _CacheCategoryIconState();
 }
 
-class _CacheCategoryIconState extends State<CacheCategoryIcon> {
-  late Image image;
+/// Ícone padrão quando a categoria não tem um válido.
+const iconePadraoCategoria = "price-tag.png";
 
-  @override
-  void initState() {
-    super.initState();
-    image = Image.asset(
-      "assets/categories/" + widget.iconName,
-      width: widget.size,
-    );
-  }
+/// "image.png" é o "sem ícone" do Cashew e das categorias criadas pelo Meu Banco:
+/// o desenho de foto parece imagem quebrada, então mostra a etiqueta.
+String arquivoIconeCategoria(String iconName) =>
+    iconName.isEmpty || iconName == "image.png" ? iconePadraoCategoria : iconName;
+
+class _CacheCategoryIconState extends State<CacheCategoryIcon> {
+  late Image image = _imagem();
+
+  Image _imagem() => Image.asset(
+        "assets/categories/" + arquivoIconeCategoria(widget.iconName),
+        width: widget.size,
+        // Nome vindo de outro aparelho que não existe neste app.
+        errorBuilder: (_, __, ___) => Image.asset(
+            "assets/categories/" + iconePadraoCategoria,
+            width: widget.size),
+      );
 
   @override
   void didUpdateWidget(covariant CacheCategoryIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
     if (widget.iconName != oldWidget.iconName ||
         widget.size != oldWidget.size) {
-      setState(() {
-        image = Image.asset(
-          "assets/categories/" + widget.iconName,
-          width: widget.size,
-        );
-      });
+      setState(() => image = _imagem());
     }
   }
 

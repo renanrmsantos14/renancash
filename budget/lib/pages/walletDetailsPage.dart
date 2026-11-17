@@ -1,4 +1,5 @@
 import 'package:budget/struct/meuBancoMapping.dart' show mbCarteiraInvestimentos;
+import 'package:budget/struct/mbSync/estadoInicio.dart' show mbLerSaldosReais;
 import 'package:budget/pages/investimentosEvolucaoPage.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
@@ -152,6 +153,9 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
 
   @override
   void initState() {
+    mbLerSaldosReais().then((r) {
+      if (mounted) setState(() => _saldosReais = r);
+    }, onError: (_) {});
     _tabController.addListener(onTabController);
     searchFilters = SearchFilters();
     if (widget.initialSearchFilters != null) {
@@ -255,6 +259,9 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
     }
   }
 
+  // Conta do Meu Banco: o saldo real (o da Início), não a soma dos lançamentos.
+  Map<String, double> _saldosReais = const {};
+
   /// Topo da conta: saldo de sempre e entradas/saídas do período escolhido.
   Widget resumoConta(List<String>? walletPks) {
     final allWallets = Provider.of<AllWallets>(context);
@@ -300,7 +307,7 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
         builder: (context, en) => StreamBuilder<TotalWithCount?>(
           stream: saidas,
           builder: (context, sa) => ResumoConta(
-            saldo: s.data?.total ?? 0,
+            saldo: _saldosReais[widget.wallet?.walletPk] ?? s.data?.total ?? 0,
             entradas: (en.data?.total ?? 0).abs(),
             saidas: (sa.data?.total ?? 0).abs(),
             formatar: (v) => convertToMoney(allWallets, v),
