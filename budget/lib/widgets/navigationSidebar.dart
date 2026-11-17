@@ -17,13 +17,16 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/colors.dart';
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show mbLarguraDesktop;
 import 'package:timer_builder/timer_builder.dart';
 
 // returns 0 if no navigation sidebar should be shown
 double getWidthNavigationSidebar(BuildContext context) {
   double screenPercent = 0.3;
   double maxWidthNavigation = 270;
-  double minScreenWidth = 700;
+  // Abaixo da largura do computador vale o layout do celular (barra inferior); a lateral antiga do
+  // Cashew aparecia em celular deitado e tablet, com textos em inglês e relógio grande.
+  double minScreenWidth = mbLarguraDesktop;
 
   if (MediaQuery.sizeOf(context).width < minScreenWidth) return 0;
   if (appStateSettings["expandedNavigationSidebar"] == false) {

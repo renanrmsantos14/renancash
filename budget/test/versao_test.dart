@@ -1,5 +1,6 @@
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/editorial/layoutDesktop.dart' show mbRotaEmpilhada;
 import 'package:budget/widgets/editorial/versaoCanto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,9 @@ void main() {
   });
 
   testWidgets('versão aparece e não bloqueia toques', (tester) async {
+    // Abaixo de 1100 px a versão fica na barra inferior; o canto aparece com página empilhada.
+    mbRotaEmpilhada.value = true;
+    addTearDown(() => mbRotaEmpilhada.value = false);
     var toques = 0;
     await tester.pumpWidget(MaterialApp(
       theme: temaEditorial(Brightness.light),

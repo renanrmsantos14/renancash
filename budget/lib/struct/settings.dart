@@ -53,8 +53,8 @@ Future<bool> initializeSettings() async {
           userSettings[key] = userPreferencesDefault[key];
         }
       });
-      // Always reset the language/locale when restoring a backup
-      userSettings["locale"] = "System";
+      // Backup restaurado volta ao português (o app é pt-BR; o idioma do aparelho pode estar em inglês).
+      userSettings["locale"] = "pt";
       userSettings["databaseJustImported"] = false;
       print("Settings were restored");
     } catch (e) {
@@ -78,6 +78,13 @@ Future<bool> initializeSettings() async {
   }
 
   appStateSettings = userSettings;
+  // Uma vez só: quem estava em "Sistema" (padrão antigo ou backup restaurado) passa a português.
+  // Escolher "Sistema" de novo depois disso continua valendo.
+  if (appStateSettings["idiomaPtMigrado"] != true) {
+    if (appStateSettings["locale"] == "System") appStateSettings["locale"] = "pt";
+    appStateSettings["idiomaPtMigrado"] = true;
+    await sharedPreferences.setString('userSettings', json.encode(appStateSettings));
+  }
   // Material You e cor de destaque livre foram substituídos pelos temas prontos.
   appStateSettings["materialYou"] = false;
   appStateSettings["accentSystemColor"] = false;
@@ -307,11 +314,12 @@ void openLanguagePicker(BuildContext context) {
 }
 
 Future<void> resetLanguageToSystem(BuildContext context) async {
-  if (appStateSettings["locale"].toString() == "System") return;
-  context.resetLocale();
+  // Após importar dados, volta ao português (padrão do app), não ao idioma do aparelho.
+  if (appStateSettings["locale"].toString() == "pt") return;
+  await context.setLocale(const Locale("pt"));
   await updateSettings(
     "locale",
-    "System",
+    "pt",
     pagesNeedingRefresh: [],
     updateGlobalState: false,
   );
