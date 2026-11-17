@@ -131,8 +131,9 @@ class BudgetsListPageState extends State<BudgetsListPage> {
             );
           },
         ),
+        // O "+" da barra fica sobre o fim da lista.
         SliverToBoxAdapter(
-          child: SizedBox(height: 50),
+          child: SizedBox(height: mbFolgaFab),
         ),
       ],
     );

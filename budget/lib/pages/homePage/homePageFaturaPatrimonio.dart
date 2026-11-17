@@ -103,7 +103,7 @@ class HomePagePatrimonio extends StatelessWidget {
       _linha('Contas correntes', brl(p.correntes), suave),
       if (p.poupancas != 0) _linha('Poupanças', brl(p.poupancas), suave),
       _linha('Investimentos', brl(p.investimentos), suave),
-      _linha('Fatura atual', '− ${brl(p.fatura)}', suave),
+      _linha('Fatura atual', '−${brl(p.fatura)}', suave),
       if (dados.carteiras.isNotEmpty) ...[
         const SizedBox(height: 10),
         TextFont(

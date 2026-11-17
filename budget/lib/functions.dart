@@ -252,7 +252,9 @@ String convertToMoney(AllWallets allWallets, double amount,
       getCurrencyString(allWallets, currencyKey: currencyKey) == "") {
     addCurrencyName = true;
   }
-  String formatOutput = formatter.format(amount).trim();
+  // Sinal de menos tipográfico (−), colado ao símbolo: "−R$ 1,00", como nas linhas.
+  String formatOutput =
+      formatter.format(amount).trim().replaceFirst(RegExp(r'^-'), '−');
   String? currencyName;
   if (addCurrencyName == true && currencyKey != null) {
     currencyName = " " + currencyKey.toUpperCase();
@@ -320,7 +322,7 @@ String formatOutputWithNewDelimiterAndDecimal({
   String negativeSign = "";
   if (amount < 0) {
     input = input.replaceRange(0, 1, "");
-    negativeSign = "-";
+    negativeSign = "−";
   }
   if (appStateSettings["numberFormatCurrencyFirst"] == false) {
     return negativeSign +

@@ -10,12 +10,14 @@ class TransactionEntryNote extends StatelessWidget {
   const TransactionEntryNote({
     required this.transaction,
     required this.iconColor,
+    this.iconSize = 22,
     this.padding =
         const EdgeInsetsDirectional.only(start: 5, end: 3, top: 10, bottom: 10),
     super.key,
   });
   final Transaction transaction;
   final Color iconColor;
+  final double iconSize;
   final EdgeInsetsDirectional padding;
 
   @override
@@ -53,14 +55,17 @@ class TransactionEntryNote extends StatelessWidget {
                 ? Duration(milliseconds: 10000)
                 : Duration(milliseconds: 100),
             message: cleanupNoteStringWithURLs(transaction.note),
-            child: Padding(
-              padding: padding,
-              child: Icon(
-                appStateSettings["outlinedIcons"]
-                    ? Icons.sticky_note_2_outlined
-                    : Icons.sticky_note_2_rounded,
-                size: 22,
-                color: iconColor,
+            child: Semantics(
+              label: 'Tem nota',
+              child: Padding(
+                padding: padding,
+                child: Icon(
+                  appStateSettings["outlinedIcons"]
+                      ? Icons.sticky_note_2_outlined
+                      : Icons.sticky_note_2_rounded,
+                  size: iconSize,
+                  color: iconColor,
+                ),
               ),
             ),
           )

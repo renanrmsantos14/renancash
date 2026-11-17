@@ -34,6 +34,10 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 - Assinaturas e Agendadas: período Mensal/Anual/Total é controle segmentado (`SlidingSelectorIncomeExpense`) e grava `selectedSubscriptionType`; valor por item "−55,90 / mês" em `mu` (sinal como antes).
 - Empréstimos: rótulo "A receber"/"A pagar" (ou "Total" quando zero), valor absoluto com a cor de crédito/dívida de antes.
 - Folha de filtros: seções "Categorias", "Valor", "Tipo", "Situação", "Contas"; chips sem borda colorida; botões "Limpar" (`chip`) e "Aplicar" (principal).
+- Textos do banco na lista (`transactionLabel.dart`): título com espaços repetidos sai com um só (`nomeSemEspacosRepetidos`, só exibição; o dado sincronizado não muda); a categoria de ajuste ("0", onde caem os investimentos `mb:inv:`) gravada com nome padrão ("Balance Correction"/"Correção de saldo") sai "Ajuste de saldo" (`nomeDaCategoria`); nome personalizado fica. Ícone de nota ao lado do valor: 16 px, cinza (`textLight` 60%), rótulo de acessibilidade "Tem nota"; toque mostra a nota. Teste: `test/textos_layout_test.dart`.
+- Editar transação: chips de conta de mesmo nome (corrente e poupança do mesmo banco) ganham o tipo ("BANCO INTER ·69-6 · Poupança") via `mbTiposDasCarteiras` + `mbRotulosPorPk`; o chip selecionado aparece inteiro ao abrir (com o botão fixo de "mais contas", >3 contas, o índice não ganha +1; alinhamento 0,06). Abas "Despesa / Receita" (chave `income` = "Receita" em pt, também nos filtros e na lista de categorias).
+- Sinal negativo: `convertToMoney` e `brl` usam "−" (U+2212) colado ao símbolo ("−R$ 0,01"), igual ao total do dia e às linhas.
+- Fim da lista do mês: `mbFolgaFab` (88) para o "+" não cobrir o valor da última linha; o mesmo no PageFramework quando a página tem `floatingActionButton`.
 - Entrada de lista (`EntradaSuave`) em Agendadas, Assinaturas e Empréstimos só nos 600 ms após abrir a página; com "reduzir movimento" nada anima (`ContagemValor` mostra o valor final).
 
 ## Evidência obrigatória

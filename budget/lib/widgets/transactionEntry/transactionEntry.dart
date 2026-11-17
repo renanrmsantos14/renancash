@@ -402,9 +402,11 @@ class TransactionEntry extends StatelessWidget {
         objectiveLoan: objectiveLoan,
         showExcludedBudgetTag: showExcludedBudgetTag,
       );
+      // Ao lado do valor: discreto (cinza e menor), não compete com a cor da categoria.
       Widget noteIcon = TransactionEntryNote(
         transaction: transaction,
-        iconColor: iconColor,
+        iconColor: getColor(context, "textLight").withOpacity(0.6),
+        iconSize: 16,
       );
       bool showNote = transaction.note.toString().trim() != "";
       Widget note = Row(
@@ -429,7 +431,8 @@ class TransactionEntry extends StatelessWidget {
       // esta só com mais de uma conta e sem a etiqueta de conta ligada.
       AllWallets allWallets = Provider.of<AllWallets>(context);
       String secondaryInfo = [
-        if (transaction.name != "") category?.name,
+        if (transaction.name != "" && category != null)
+          nomeDaCategoria(category!),
         if (allWallets.list.length > 1 &&
             appStateSettings["showAccountLabelTagInTransactionEntry"] != true)
           allWallets.indexedByPk[transaction.walletFk]?.name,

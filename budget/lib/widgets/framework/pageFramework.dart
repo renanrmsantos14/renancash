@@ -25,6 +25,9 @@ refreshPageFrameworks() async {
   callRefreshToPages.value = !callRefreshToPages.value;
 }
 
+/// Fim das listas com o "+" flutuante (56 de botão + 15 de margem + respiro).
+const double mbFolgaFab = 88;
+
 class PageFramework extends StatefulWidget {
   const PageFramework({
     Key? key,
@@ -462,6 +465,10 @@ class PageFrameworkState extends State<PageFramework>
         )
     ];
 
+    // Com o "+" flutuante, o fim da lista sobe para o último valor não ficar sob ele.
+    final double fimDaLista = MediaQuery.paddingOf(context).bottom +
+        15 +
+        (widget.floatingActionButton != null ? mbFolgaFab : 0);
     List<Widget> listWidgets = [
       widget.listWidgets != null
           ? SliverPadding(
@@ -479,15 +486,14 @@ class PageFrameworkState extends State<PageFramework>
                       child: w,
                     ),
                   widget.bottomPadding
-                      ? SizedBox(
-                          height: MediaQuery.paddingOf(context).bottom + 15)
+                      ? SizedBox(height: fimDaLista)
                       : SizedBox.shrink(),
                 ]),
               ),
             )
           : SliverToBoxAdapter(
               child: widget.bottomPadding
-                  ? SizedBox(height: MediaQuery.paddingOf(context).bottom + 15)
+                  ? SizedBox(height: fimDaLista)
                   : SizedBox.shrink(),
             ),
     ];

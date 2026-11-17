@@ -3,7 +3,23 @@ import 'package:budget/functions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/textWidgets.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+
+/// Títulos do banco vêm com espaços repetidos ("Pix enviado  - Auto Prime"): mostra com um só.
+/// Só na exibição; o dado sincronizado não muda.
+String nomeSemEspacosRepetidos(String nome) =>
+    nome.trim().replaceAll(RegExp(r'\s{2,}'), ' ');
+
+/// Nomes padrão da categoria de ajuste ("0") em versões anteriores: o banco local pode
+/// tê-la criado em inglês. Um nome personalizado pelo usuário é mantido.
+const _nomesPadraoAjuste = {'Balance Correction', 'Correção de saldo'};
+
+/// Nome da categoria para exibir: a de ajuste de saldo com nome padrão sai traduzida.
+String nomeDaCategoria(TransactionCategory categoria) =>
+    categoria.categoryPk == "0" && _nomesPadraoAjuste.contains(categoria.name)
+        ? "default-category-account-amount-balancing".tr()
+        : categoria.name;
 
 class TransactionLabel extends StatelessWidget {
   const TransactionLabel({
@@ -35,7 +51,7 @@ class TransactionTitleNameLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextFont(
-      text: transaction.name,
+      text: nomeSemEspacosRepetidos(transaction.name),
       fontSize: fontSize,
       maxLines:
           appStateSettings["fadeTransactionNameOverflows"] == false ? null : 1,
@@ -68,7 +84,7 @@ class TransactionCategoryNameLabel extends StatelessWidget {
             builder: (context, snapshot) {
               if (snapshot.hasData) {
                 return TextFont(
-                  text: snapshot.data!.name,
+                  text: nomeDaCategoria(snapshot.data!),
                   fontSize: fontSize,
                   maxLines:
                       appStateSettings["fadeTransactionNameOverflows"] == false
@@ -88,7 +104,7 @@ class TransactionCategoryNameLabel extends StatelessWidget {
             },
           )
         : TextFont(
-            text: category!.name,
+            text: nomeDaCategoria(category!),
             fontSize: fontSize,
             maxLines: appStateSettings["fadeTransactionNameOverflows"] == false
                 ? null
@@ -109,20 +125,21 @@ Future<String> getTransactionLabel(Transaction transaction,
     if (category == null) {
       TransactionCategory categorySearch =
           await database.getCategory(transaction.categoryFk).$2;
-      return categorySearch.name.capitalizeFirst;
+      return nomeDaCategoria(categorySearch).capitalizeFirst;
     } else {
-      return category.name.capitalizeFirst;
+      return nomeDaCategoria(category).capitalizeFirst;
     }
   } else {
-    return transaction.name.capitalizeFirst;
+    return nomeSemEspacosRepetidos(transaction.name).capitalizeFirst;
   }
 }
 
 String getTransactionLabelSync(
     Transaction transaction, TransactionCategory? category) {
   if (transaction.name.trim() == "") {
-    return category?.name.capitalizeFirst ?? transaction.name.capitalizeFirst;
+    return (category == null ? transaction.name : nomeDaCategoria(category))
+        .capitalizeFirst;
   } else {
-    return transaction.name.capitalizeFirst;
+    return nomeSemEspacosRepetidos(transaction.name).capitalizeFirst;
   }
 }

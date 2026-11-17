@@ -4,6 +4,8 @@ import 'package:budget/database/generatePreviewData.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
+import 'package:budget/struct/mbSync/conexoes.dart'
+    show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/pages/addObjectivePage.dart';
@@ -133,6 +135,8 @@ class AddTransactionPage extends StatefulWidget {
 
 class _AddTransactionPageState extends State<AddTransactionPage>
     with SingleTickerProviderStateMixin {
+  // Tipo das carteiras do Meu Banco (corrente, poupança): desempata chips de mesmo nome.
+  Map<String, String> _tiposCarteiras = const {};
   TransactionCategory? selectedCategory;
   TransactionCategory? selectedSubCategory;
   double? selectedAmount;
@@ -727,6 +731,9 @@ class _AddTransactionPageState extends State<AddTransactionPage>
   @override
   void initState() {
     super.initState();
+    mbTiposDasCarteiras().then((tipos) {
+      if (mounted && tipos.isNotEmpty) setState(() => _tiposCarteiras = tipos);
+    });
     if (widget.transaction != null) {
       //We are editing a transaction
       //Fill in the information from the passed in transaction
@@ -1402,6 +1409,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                       child: Padding(
                         padding: const EdgeInsetsDirectional.only(top: 5),
                         child: SelectChips(
+                          // Rótulos com o tipo mudam a largura: recria e rola de novo até o selecionado.
+                          key: ValueKey(_tiposCarteiras.isEmpty),
                           wrapped: enableDoubleColumn(context),
                           extraWidgetBeforeSticky: true,
                           allowMultipleSelected: false,
@@ -1465,8 +1474,13 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                             );
                           },
                           getLabel: (TransactionWallet wallet) {
-                            return getWalletStringName(
-                                Provider.of<AllWallets>(context), wallet);
+                            final carteiras = Provider.of<AllWallets>(context);
+                            // "BANCO INTER ·69-6" corrente e poupança: o tipo diferencia.
+                            return mbRotulosPorPk({
+                                  for (final w in carteiras.list)
+                                    w.walletPk: getWalletStringName(carteiras, w)
+                                }, _tiposCarteiras)[wallet.walletPk] ??
+                                getWalletStringName(carteiras, wallet);
                           },
                           extraWidgetAfter: SelectChipsAddButtonExtraWidget(
                             openPage: AddWalletPage(

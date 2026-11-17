@@ -105,6 +105,8 @@ void main() {
 
   test('formatadores', () {
     expect(brl(2417.16), 'R\$ 2.417,16');
+    // Menos tipográfico colado ao símbolo, como nas linhas de transação.
+    expect(brl(-550), '−R\$ 550,00');
     expect(quandoRelativo(DateTime(2026, 11, 9, 1), _agora), 'hoje');
     expect(quandoRelativo(DateTime(2026, 11, 8, 23), _agora), 'ontem');
     expect(quandoRelativo(DateTime(2026, 11, 5), _agora), '05 nov');

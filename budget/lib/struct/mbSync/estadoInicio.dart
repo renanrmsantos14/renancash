@@ -93,7 +93,8 @@ class ModeloInicio {
 }
 
 final _brl = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-String brl(double v) => _brl.format(v).replaceAll('\u00a0', ' ');
+String brl(double v) =>
+    _brl.format(v).replaceAll('\u00a0', ' ').replaceFirst(RegExp(r'^-'), '−');
 
 const _meses = [
   'jan', 'fev', 'mar', 'abr', 'mai', 'jun',

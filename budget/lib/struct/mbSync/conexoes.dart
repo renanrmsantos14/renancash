@@ -128,3 +128,12 @@ List<String> mbRotulosCarteiras(List<String> nomes, List<String?> tipos) {
   return desempatar(
       desempatar(nomes, (i) => tipos[i] ?? '${i + 1}'), (i) => '${i + 1}');
 }
+
+/// [mbRotulosCarteiras] por pk: `nomes` (pk → nome, na ordem da tela) e `tipos` (pk → tipo).
+Map<String, String> mbRotulosPorPk(
+    Map<String, String> nomes, Map<String, String> tipos) {
+  final pks = nomes.keys.toList();
+  final rotulos =
+      mbRotulosCarteiras([for (final p in pks) nomes[p]!], [for (final p in pks) tipos[p]]);
+  return {for (final (i, p) in pks.indexed) p: rotulos[i]};
+}

@@ -309,10 +309,9 @@ class TransactionsListPageState extends State<TransactionsListPage>
                                   );
                                 },
                               ),
+                              // O "+" da barra fica sobre o fim da lista.
                               SliverToBoxAdapter(
-                                child: SizedBox(
-                                  height: 40,
-                                ),
+                                child: SizedBox(height: mbFolgaFab),
                               ),
                             ],
                           ),
