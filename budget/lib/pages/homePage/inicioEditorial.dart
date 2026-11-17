@@ -457,7 +457,8 @@ class _SemLimite extends StatelessWidget {
             origem.isEmpty
                 ? 'Disponível nas contas'
                 : 'Disponível nas contas · $origem',
-            maxLines: 1,
+            // Duas linhas: com banco, poupanças e "há x min" não cabe numa só no celular.
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: EdTexto.rotulo(context)),
         const SizedBox(height: 8),
