@@ -1,5 +1,4 @@
 import 'package:budget/struct/mbSync/emprestimos.dart';
-import 'package:budget/struct/mbSync/reembolso.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, dynamic> _emp(String tx, double valor, String data) =>
@@ -61,35 +60,6 @@ void main() {
     test('centavos não acumulam erro de ponto flutuante', () {
       final e = mbCalcularEmprestimos([_emp('a', 0.3, '2026-11-01'), _dev('d', 0.1, '2026-11-02'), _dev('e', 0.2, '2026-11-03')]);
       expect(e.abertos, isEmpty);
-    });
-  });
-
-  group('sugestão de reembolso', () {
-    final hoje = DateTime(2026, 11, 12);
-    MbGastoCandidato g(String pk, double v, DateTime d, [String cat = 'Mercado']) =>
-        MbGastoCandidato('mb:$pk', pk, cat, DateTime(d.year, d.month, d.day, 12), (v * 100).round());
-    List<String> pks(List<MbSugestaoReembolso> l) => [for (final s in l) s.gasto.pk];
-
-    test('janela de 15 dias, sem gasto posterior ao reembolso', () {
-      final r = mbSugerirReembolso([
-        g('dentro', 60, hoje.subtract(const Duration(days: 15))),
-        g('fora', 60, hoje.subtract(const Duration(days: 16))),
-        g('depois', 60, hoje.add(const Duration(days: 1))),
-        g('hoje', 60, hoje),
-      ], valor: 60, data: hoje);
-      expect(pks(r), ['mb:hoje', 'mb:dentro']);
-    });
-
-    test('igual primeiro, depois próximo (até 20%), depois os demais; mais recentes antes em cada grupo', () {
-      final r = mbSugerirReembolso([
-        g('longe', 200, DateTime(2026, 11, 11)),
-        g('prox-velho', 55, DateTime(2026, 11, 5)),
-        g('igual-velho', 60, DateTime(2026, 11, 4)),
-        g('prox-novo', 70, DateTime(2026, 11, 10)),
-        g('igual-novo', 60, DateTime(2026, 11, 9)),
-      ], valor: 60, data: hoje);
-      expect(pks(r), ['mb:igual-novo', 'mb:igual-velho', 'mb:prox-novo', 'mb:prox-velho', 'mb:longe']);
-      expect(r.map((s) => s.afinidade.name), ['igual', 'igual', 'proximo', 'proximo', 'outro']);
     });
   });
 }

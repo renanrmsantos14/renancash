@@ -513,7 +513,12 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     final rev = cartao || !(noCiclo || revisoes.decisoes.containsKey(id))
         ? null
         : mbTipoDeRevisao(descricao: descricao, valor: valor, categoria: categoria);
-    final resposta = rev == null ? null : revisoes.resposta(id, rev);
+    // Reembolso ligado pelo usuário (Pendências, editar transação) vale para qualquer entrada, não só "Pix recebido".
+    final resposta = rev != null
+        ? revisoes.resposta(id, rev)
+        : valor > 0 && revisoes.decisoes[id]?['resposta'] == 'reembolso'
+            ? 'reembolso'
+            : null;
     final envioSantander = rev?.tipo == 'envio_santander';
     // Inter -> Santander só é gasto se for "ajuda"; o ajuste do painel não vale aqui (igual ao Worker).
     final gasto = envioSantander ? null : ctx.ajustes[id]?["gasto"];

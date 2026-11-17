@@ -22,6 +22,8 @@ import 'package:budget/struct/mbSync/revisao.dart' show MbItemRevisao, meuBancoR
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
+import 'package:budget/struct/mbSync/reembolso.dart';
+import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado;
 import 'package:budget/pages/homePage/painelDesktop.dart';
 import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/struct/mbSync/conexoes.dart';
@@ -311,6 +313,67 @@ void main() {
       await t.pump(const Duration(seconds: 1));
       await expectLater(find.byType(MaterialApp),
           matchesGoldenFile('../../.verificacao/prints/pendencias_ia_$modo.png'));
+    });
+    // Rachar conta: Pix recebido com o gasto em destaque (casamento forte) ou só a ação, e a lista de candidatos.
+    final rachados = mbSugerirReembolso([
+      MbGastoCandidato('mb:g1', 'RESTAURANTE DO ZE', 'Restaurante', DateTime(2026, 11, 8, 12), 12000),
+      MbGastoCandidato('mb:g2', 'MERCADO BOM PRECO', 'Mercado', DateTime(2026, 11, 9, 12), 18000, reembolsado: 6000),
+      MbGastoCandidato('mb:g3', 'UBER TRIP', 'Transporte', DateTime(2026, 11, 7, 12), 6500),
+      MbGastoCandidato('mb:g4', 'POSTO SHELL', 'Transporte', DateTime(2026, 11, 10, 12), 20000),
+      MbGastoCandidato('mb:g5', 'PADARIA', 'Alimentação', DateTime(2026, 11, 10, 12), 4000),
+    ], valor: 60, data: DateTime(2026, 11, 10), categoriasDoPagador: {'Restaurante'});
+    for (final forte in [true, false]) {
+      testWidgets('print pendências rachar ${forte ? 'forte' : 'acao'} $modo', skip: _pular, (t) async {
+        appStateSettings = _ajustesHerdados(modo);
+        mbOpcoesClassificar = MbOpcoes.montar(const [
+          CatLocal(pk: 'renda', nome: 'Renda', receita: true),
+          CatLocal(pk: 'outros', nome: 'Outras entradas', receita: true),
+        ]);
+        meuBancoClassificar.value = [
+          MbLancamentoIa(
+              pk: 'mb:r1',
+              descricao: 'PIX RECEBIDO JUNIOR SILVA',
+              valor: 60,
+              data: DateTime(2026, 11, 10, 12),
+              conta: 'Inter',
+              categoriaNome: 'Transferências'),
+        ];
+        meuBancoReembolsos.value = const [MbVinculoReembolso('mb:r0', 'mb:g0', 'JUNIOR SILVA', 5000)];
+        final original = mbBuscarCandidatosReembolso;
+        mbBuscarCandidatosReembolso = (_, __, ___, ____) async => forte
+            ? rachados
+            : [for (final s in rachados) if (s.pontos < 40) s]; // sem parte exata: só a ação
+        addTearDown(() {
+          meuBancoClassificar.value = const [];
+          meuBancoReembolsos.value = const [];
+          mbBuscarCandidatosReembolso = original;
+        });
+        t.view.physicalSize = const Size(390 * 2, 844 * 2);
+        t.view.devicePixelRatio = 2;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(_herdado(modo, const Scaffold(body: PendenciasPage(atualizar: false))));
+        await t.pump(const Duration(seconds: 1));
+        await expectLater(find.byType(MaterialApp),
+            matchesGoldenFile('../../.verificacao/prints/pendencias_rachar_${forte ? 'forte' : 'acao'}_$modo.png'));
+      });
+    }
+    testWidgets('print lista de gastos rachados $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustesHerdados(modo);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_herdado(
+          modo,
+          _botao('abrir',
+              (c) => mbEscolherGastoRachado(c, sugestoes: rachados, valor: 60, data: DateTime(2026, 11, 10)))));
+      await t.tap(find.text('abrir'));
+      for (var i = 0; i < 20; i++) {
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/pendencias_rachar_lista_$modo.png'));
+      await t.pumpWidget(const SizedBox());
+      await t.pump(const Duration(seconds: 2));
     });
     for (final pagina in ['inicio', 'pendencias', 'analise']) {
       testWidgets('print ajustes $pagina $modo', skip: _pular, (t) async {

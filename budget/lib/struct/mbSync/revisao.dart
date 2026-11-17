@@ -9,6 +9,7 @@ import 'package:budget/struct/mbSync/classificarDados.dart'
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
+import 'package:budget/struct/mbSync/reembolso.dart' show mbVinculosReembolso, meuBancoReembolsos;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:flutter/foundation.dart';
@@ -211,6 +212,7 @@ Future<void> mbAtualizarRevisar() async {
     final revisoes = MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]);
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
     meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values);
+    meuBancoReembolsos.value = mbVinculosReembolso(revisoes.decisoes.values);
   } catch (e) {
     if (kDebugMode) debugPrint('Meu Banco: falha ao ler a fila Para revisar: $e');
   }
