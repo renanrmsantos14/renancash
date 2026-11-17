@@ -16,6 +16,7 @@ import 'package:budget/widgets/selectCategoryImage.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
+import 'package:budget/widgets/mbAplicacoesDaMeta.dart' show AplicacoesDaMetaNaTela;
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -152,6 +153,13 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
                     amount: 0.92)
                 : null;
     String pageId = widget.objective.objectivePk;
+    final poupanca =
+        widget.objective.type == ObjectiveType.goal && widget.objective.income;
+    final novoDeposito = AddTransactionPage(
+      selectedObjective: widget.objective,
+      routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+      selectedIncome: widget.objective.income,
+    );
     return WillPopScope(
       onWillPop: () async {
         if ((globalSelectedID.value[pageId] ?? []).length > 0) {
@@ -172,11 +180,7 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
             floatingActionButton: AnimateFABDelayed(
               fab: AddFAB(
                 tooltip: "add-transaction".tr(),
-                openPage: AddTransactionPage(
-                  selectedObjective: widget.objective,
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.One,
-                  selectedIncome: widget.objective.income,
-                ),
+                openPage: novoDeposito,
               ),
             ),
             expandedHeight: 56,
@@ -268,6 +272,21 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
                   ),
                 ),
               ),
+              // Meta de poupança: o guardado vem das aplicações escolhidas (ou de depósitos).
+              if (poupanca)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(
+                        16 + getHorizontalPaddingConstrained(context),
+                        0,
+                        16 + getHorizontalPaddingConstrained(context),
+                        16),
+                    child: AplicacoesDaMetaNaTela(
+                      meta: widget.objective,
+                      onDepositar: () => pushRoute(context, novoDeposito),
+                    ),
+                  ),
+                ),
               TransactionEntries(
                 null,
                 null,
@@ -288,8 +307,9 @@ class _ObjectivePageContentState extends State<_ObjectivePageContent> {
                         ? "\n" + "add-record-using-plus-button".tr()
                         : ""),
                 showNoResults: widget.objective.type == ObjectiveType.loan,
+                // Parcelas só fazem sentido em meta de pagamento (não na de poupança).
                 noResultsExtraWidget:
-                    widget.objective.type == ObjectiveType.goal
+                    widget.objective.type == ObjectiveType.goal && !poupanca
                         ? ExtraInfoButton(
                             onTap: () {
                               startCreatingInstallment(

@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/analiseOrcamentos.dart';
 import 'package:budget/pages/editBudgetPage.dart';
+import 'package:budget/pages/objectivesListPage.dart' show cartaoPlano;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/budgetContainer.dart';
@@ -16,6 +17,9 @@ import 'package:flutter/material.dart'
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/sugestaoLimites.dart';
+import 'package:budget/struct/mbSync/orcamentos.dart' show mbOrcamentoGeralPk;
+import 'package:sliver_tools/sliver_tools.dart';
 
 class BudgetsListPage extends StatefulWidget {
   const BudgetsListPage({required this.enableBackButton, Key? key})
@@ -102,7 +106,8 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                       const Duration(milliseconds: 600),
                   child: BudgetContainer(budget: orcamentos[i]),
                 );
-            return SliverPadding(
+            final paraLimites = orcamentoParaSugerirLimites(orcamentos);
+            final lista = SliverPadding(
               padding:
                   const EdgeInsetsDirectional.symmetric(vertical: 4, horizontal: 13),
               sliver: enableDoubleColumn(context)
@@ -129,6 +134,17 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                       ),
                     ),
             );
+            if (paraLimites == null) return lista;
+            return MultiSliver(children: [
+              lista,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 13),
+                  child: AtalhoSugerirLimites(
+                      onTap: () => abrirSugestaoLimites(context, paraLimites)),
+                ),
+              ),
+            ]);
           },
         ),
         // O "+" da barra fica sobre o fim da lista.
@@ -136,6 +152,54 @@ class BudgetsListPageState extends State<BudgetsListPage> {
           child: SizedBox(height: mbFolgaFab),
         ),
       ],
+    );
+  }
+}
+
+/// Orçamento que recebe os limites sugeridos: o Geral; sem ele, o primeiro de gasto com "todas as transações".
+Budget? orcamentoParaSugerirLimites(List<Budget> orcamentos) {
+  final aptos = orcamentos
+      .where((b) => !b.income && !b.addedTransactionsOnly && b.sharedKey == null)
+      .toList();
+  return aptos.where((b) => b.budgetPk == mbOrcamentoGeralPk).firstOrNull ??
+      aptos.firstOrNull;
+}
+
+/// Atalho do fim da lista: abre a sugestão de limites por categoria.
+class AtalhoSugerirLimites extends StatelessWidget {
+  const AtalhoSugerirLimites({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Semantics(
+      button: true,
+      child: ToqueEscala(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 14, 12),
+          decoration: cartaoPlano(e),
+          child: Row(children: [
+            Icon(Icons.tune_rounded, size: 20, color: e.acc),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Sugerir limites por categoria',
+                      style: EdTexto.corpo(context)
+                          .copyWith(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text('Média dos últimos 3 ciclos; você revisa antes de salvar.',
+                      style: EdTexto.rotulo(context)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: e.mu),
+          ]),
+        ),
+      ),
     );
   }
 }

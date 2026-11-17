@@ -16,7 +16,11 @@ import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
+import 'package:budget/struct/mbSync/metas.dart';
+import 'package:budget/struct/mbSync/sugestaoLimites.dart';
 import 'package:budget/widgets/budgetContainer.dart';
+import 'package:budget/widgets/mbAplicacoesDaMeta.dart';
+import 'package:budget/widgets/sugestaoLimites.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -356,6 +360,120 @@ void main() {
         ),
       ));
       await _printComIcones(t, 'metas_detalhe_$modo');
+    });
+
+    // Reserva de emergência real: R$ 5.000 até 14/04/2027, sem ícone, nada ligado e 10 aplicações livres.
+    for (final (nome, ligadas) in [('vazia', false), ('aplicacoes', true)]) {
+      testWidgets('print meta reserva $nome $modo', skip: _pular, (t) async {
+        appStateSettings = _ajustes(modo);
+        _tela(t, altura: ligadas ? 760 : 560);
+        final aplicacoes = [
+          for (final (id, n, v) in [
+            ('a', 'CDB - BANCO INTER S.A', 550.03),
+            ('b', 'CDB - BANCO INTER S.A', 430.21),
+            ('c', 'CDB - BANCO INTER S.A', 107.87),
+            ('d', 'CDB - BANCO SANTANDER (BRASIL) S.A.', 133.69),
+            ('e', 'Tesouro Prefixado 2029', 7.37),
+          ])
+            MbAplicacao(mbPkAplicacao(id), n, 'BANCO INTER', v,
+                ligadas ? mbMetaReservaPk : null)
+        ];
+        final total = ligadas ? mbSaldoAplicacoes(aplicacoes) : 0.0;
+        final meta = Objective(
+          objectivePk: mbMetaReservaPk,
+          name: 'Reserva de emergência',
+          amount: 5000,
+          order: 0,
+          dateCreated: DateTime(2026, 11, 12),
+          endDate: DateTime(2027, 4, 14),
+          income: true,
+          pinned: true,
+          walletFk: '0',
+          archived: false,
+          type: ObjectiveType.goal,
+        );
+        await t.pumpWidget(_app(
+          modo,
+          Builder(
+            builder: (c) => ListView(
+              children: [
+                _titulo(c, 'Reserva de emergência'),
+                ResumoMeta(
+                  objective: meta,
+                  alvo: 5000,
+                  total: total,
+                  fracao: total / 5000,
+                  mostrarTotal: true,
+                  transacoes: ligadas ? aplicacoes.length : 0,
+                  onTrocar: () {},
+                  onIcone: () {},
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: PainelAplicacoesMeta(
+                    ligadas: ligadas ? aplicacoes : const [],
+                    livres: ligadas ? const [] : aplicacoes,
+                    onEscolher: () {},
+                    onDepositar: () {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ));
+        await _printComIcones(t, 'metas_reserva_${nome}_$modo');
+      });
+    }
+
+    testWidgets('print sugestão de limites $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustes(modo);
+      _tela(t, altura: 720);
+      TransactionCategory cat(String pk, String nome, [String? pai]) =>
+          TransactionCategory(
+              categoryPk: pk,
+              name: nome,
+              dateCreated: DateTime(2026),
+              order: 0,
+              income: false,
+              mainCategoryPk: pai);
+      final ali = cat('ali', 'Alimentação'), tra = cat('tra', 'Transporte');
+      // Médias reais dos ciclos 6/ago–5/nov (Geral).
+      final sugestoes = mbSugerirLimites([
+        [
+          CategoryWithTotal(category: ali, total: -767.27, transactionCount: 33),
+          CategoryWithTotal(category: tra, total: -592.54, transactionCount: 21),
+          CategoryWithTotal(category: cat('ube', 'Uber', 'tra'), total: -198.06, transactionCount: 11),
+          CategoryWithTotal(category: cat('alm', 'Almoço Betinhos', 'ali'), total: -192.89, transactionCount: 10),
+          CategoryWithTotal(category: cat('com', 'Combustível', 'tra'), total: -158.34, transactionCount: 5),
+          CategoryWithTotal(category: cat('mer', 'Mercado', 'ali'), total: -96.17, transactionCount: 3),
+          CategoryWithTotal(category: cat('doc', 'Doces & Besteiras', 'ali'), total: -67.01, transactionCount: 4),
+        ],
+      ]);
+      await t.pumpWidget(_app(
+        modo,
+        Builder(
+          builder: (c) => ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _titulo(c, 'Limites por categoria'),
+              SugestaoLimites(sugestoes: sugestoes, onSalvar: (_) async {}),
+            ],
+          ),
+        ),
+      ));
+      await _print(t, 'orcamentos_sugestao_limites_$modo');
+    });
+
+    testWidgets('print atalho sugerir limites $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustes(modo);
+      _tela(t, altura: 200);
+      await t.pumpWidget(_app(
+          modo,
+          Padding(
+            padding: const EdgeInsets.all(13),
+            child: AtalhoSugerirLimites(onTap: () {}),
+          )));
+      await _print(t, 'orcamentos_atalho_limites_$modo');
     });
   }
 }

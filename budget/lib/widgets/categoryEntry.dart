@@ -7,6 +7,7 @@ import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
+import 'package:budget/widgets/budgetContainer.dart' show BarraOrcamento;
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/categoryLimits.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -261,33 +262,18 @@ class CategoryEntry extends StatelessWidget {
                                         end: 13,
                                         bottom: 3,
                                       ),
-                                      child: ThinProgress(
-                                        backgroundColor:
-                                            appStateSettings["materialYou"]
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .secondaryContainer
-                                                : selected
-                                                    ? getColor(context, "white")
-                                                    : getColor(context,
-                                                        "lightDarkAccentHeavy"),
-                                        color: dynamicPastel(
-                                          context,
-                                          HexColor(
-                                            category.colour,
-                                            defaultColor: Theme.of(context)
-                                                .colorScheme
-                                                .primary,
-                                          ),
-                                          inverse: true,
-                                          amountLight: 0.1,
-                                          amountDark: 0.1,
-                                        ),
-                                        progress: percentSpent,
-                                        dotProgress: todayPercent == null
-                                            ? null
-                                            : (todayPercent ?? 0) / 100,
-                                      ),
+                                      // A mesma barra do orçamento (gasto,
+                                      // marca de hoje e alerta de estouro).
+                                      child: spendingLimit <= 0
+                                          ? const SizedBox.shrink()
+                                          : BarraOrcamento(
+                                              gasto: amountSpent,
+                                              limite: spendingLimit,
+                                              hoje: todayPercent == null
+                                                  ? null
+                                                  : todayPercent! / 100,
+                                              alerta: isOverspent,
+                                            ),
                                     )
                                   : Builder(builder: (context) {
                                       String percentString = convertToPercent(

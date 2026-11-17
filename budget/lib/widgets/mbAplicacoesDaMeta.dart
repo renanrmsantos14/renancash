@@ -1,7 +1,14 @@
 import 'package:budget/colors.dart';
+import 'package:budget/database/tables.dart';
+import 'package:budget/functions.dart' show popRoute;
+import 'package:budget/pages/objectivesListPage.dart' show cartaoPlano;
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl;
 import 'package:budget/struct/mbSync/metas.dart';
+import 'package:budget/widgets/button.dart';
+import 'package:budget/widgets/framework/popupFramework.dart';
+import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
@@ -118,6 +125,225 @@ class _MbAplicacoesDaMetaState extends State<MbAplicacoesDaMeta> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Painel da tela da meta de poupança: as aplicações que compõem o guardado e o que fazer quando não há nenhuma.
+/// Carrega as aplicações e abre a escolha; [onDepositar] registra um depósito manual na meta.
+class AplicacoesDaMetaNaTela extends StatefulWidget {
+  const AplicacoesDaMetaNaTela(
+      {required this.meta, required this.onDepositar, super.key});
+  final Objective meta;
+  final VoidCallback onDepositar;
+
+  @override
+  State<AplicacoesDaMetaNaTela> createState() => _AplicacoesDaMetaNaTelaState();
+}
+
+class _AplicacoesDaMetaNaTelaState extends State<AplicacoesDaMetaNaTela> {
+  List<MbAplicacao>? todas;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregar();
+  }
+
+  Future<void> _carregar() async {
+    final l = await mbAplicacoes();
+    if (mounted) setState(() => todas = l);
+  }
+
+  Future<void> _escolher(Set<String> atuais) async {
+    await openBottomSheet(
+      context,
+      PopupFramework(
+        title: 'Aplicações da meta',
+        child: _EscolherAplicacoes(
+          metaPk: widget.meta.objectivePk,
+          inicial: atuais,
+          onSalvar: (pks) => mbEscolherAplicacoesDaMeta(widget.meta, pks),
+        ),
+      ),
+      showScrollbar: true,
+    );
+    await _carregar();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = todas;
+    if (l == null) return const SizedBox.shrink();
+    final s = mbSepararAplicacoes(l, widget.meta.objectivePk);
+    return PainelAplicacoesMeta(
+      ligadas: s.ligadas,
+      livres: s.livres,
+      onEscolher: l.isEmpty
+          ? null
+          : () => _escolher({for (final a in s.ligadas) a.pk}),
+      onDepositar: widget.onDepositar,
+    );
+  }
+}
+
+/// Sem acesso ao banco (prints): lista das aplicações ligadas, ou o vazio que explica e leva a escolher.
+/// [onEscolher] nulo = o app não tem aplicações (sem Meu Banco ou sem investimentos): só depósito manual.
+class PainelAplicacoesMeta extends StatelessWidget {
+  const PainelAplicacoesMeta({
+    super.key,
+    required this.ligadas,
+    required this.livres,
+    required this.onEscolher,
+    required this.onDepositar,
+  });
+  final List<MbAplicacao> ligadas, livres;
+  final VoidCallback? onEscolher;
+  final VoidCallback onDepositar;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final rotulo = EdTexto.rotulo(context);
+    final forte = EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500);
+    final decoracao = cartaoPlano(e);
+    final depositar = TextButton(
+      onPressed: onDepositar,
+      style: TextButton.styleFrom(foregroundColor: e.acc),
+      child: const Text('Registrar depósito'),
+    );
+    if (ligadas.isEmpty) {
+      final String explicacao;
+      if (onEscolher == null) {
+        explicacao = 'O guardado é a soma dos depósitos que você registrar nesta meta.';
+      } else if (livres.isEmpty) {
+        explicacao =
+            'O guardado é a soma do saldo das aplicações que você escolher. Todas já estão em outras metas.';
+      } else {
+        final quantas = livres.length == 1
+            ? 'Há 1 aplicação sem meta'
+            : 'Há ${livres.length} aplicações sem meta';
+        explicacao = 'O guardado é a soma do saldo das aplicações que você escolher. '
+            '$quantas, somando ${brl(mbSaldoAplicacoes(livres))}.';
+      }
+      return Container(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 16, 16, 8),
+        decoration: decoracao,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(Icons.savings_outlined, size: 20, color: e.acc),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text(
+                      onEscolher == null
+                          ? 'Nenhum depósito ainda'
+                          : 'Nenhuma aplicação ligada a esta meta',
+                      style: forte)),
+            ]),
+            const SizedBox(height: 6),
+            Text(explicacao, style: rotulo),
+            const SizedBox(height: 14),
+            if (onEscolher != null)
+              Button(label: 'Escolher aplicações', onTap: onEscolher!),
+            depositar,
+          ],
+        ),
+      );
+    }
+    final posicoes = mbPosicoesRepetidas([for (final a in ligadas) a.nome]);
+    return Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 4),
+      decoration: decoracao,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Expanded(
+                child: Text(
+                    ligadas.length == 1
+                        ? '1 aplicação nesta meta'
+                        : '${ligadas.length} aplicações nesta meta',
+                    style: forte)),
+            if (onEscolher != null)
+              TextButton(
+                onPressed: onEscolher,
+                style: TextButton.styleFrom(foregroundColor: e.acc),
+                child: const Text('Escolher'),
+              ),
+          ]),
+          for (final (i, a) in ligadas.indexed)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 6, end: 8),
+              child: Row(children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(a.nome,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: EdTexto.corpo(context)),
+                      if (a.banco != null || posicoes[i] != null)
+                        Text([a.banco, posicoes[i]].whereType<String>().join(' · '),
+                            style: rotulo),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(brl(a.saldo), style: forte),
+              ]),
+            ),
+          const SizedBox(height: 4),
+          Align(alignment: AlignmentDirectional.centerStart, child: depositar),
+        ],
+      ),
+    );
+  }
+}
+
+class _EscolherAplicacoes extends StatefulWidget {
+  const _EscolherAplicacoes(
+      {required this.metaPk, required this.inicial, required this.onSalvar});
+  final String metaPk;
+  final Set<String> inicial;
+  final Future<void> Function(Set<String>) onSalvar;
+
+  @override
+  State<_EscolherAplicacoes> createState() => _EscolherAplicacoesState();
+}
+
+class _EscolherAplicacoesState extends State<_EscolherAplicacoes> {
+  late Set<String> selecionadas = {...widget.inicial};
+  bool salvando = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MbAplicacoesDaMeta(
+          metaPk: widget.metaPk,
+          selecionadas: selecionadas,
+          onChanged: (v) => setState(() => selecionadas = v),
+        ),
+        const SizedBox(height: 16),
+        Button(
+          label: 'Salvar',
+          disabled: salvando,
+          onTap: () async {
+            if (salvando) return;
+            setState(() => salvando = true);
+            try {
+              await widget.onSalvar(selecionadas);
+              if (context.mounted) popRoute(context);
+            } finally {
+              if (mounted) setState(() => salvando = false);
+            }
+          },
+        ),
+      ],
     );
   }
 }
