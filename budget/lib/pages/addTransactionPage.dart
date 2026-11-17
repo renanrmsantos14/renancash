@@ -1,4 +1,5 @@
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/database/generatePreviewData.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
@@ -1057,39 +1058,40 @@ class _AddTransactionPageState extends State<AddTransactionPage>
 
   @override
   Widget build(BuildContext context) {
+    Widget tituloInput = TitleInput(
+      clearWhenUnfocused: true,
+      tryToCompleteSearch: true,
+      setSelectedTitle: (title) {
+        setSelectedTitle(title, setInput: false);
+      },
+      titleInputController: _titleInputController,
+      setSelectedCategory: setSelectedCategory,
+      setSelectedSubCategory: setSelectedSubCategory,
+    );
+    Widget notasInput = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
+      child: TransactionNotesTextInput(
+        noteInputController: _noteInputController,
+        setNotesInputFocused: (isFocused) {
+          setState(() {
+            notesInputFocused = isFocused;
+          });
+        },
+        setSelectedNoteController: setSelectedNoteController,
+      ),
+    );
+    // No celular o nome vem logo após valor, tipo e categoria; as notas
+    // ficam no fim, entre os campos secundários.
     Widget transactionTextInput = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        enableDoubleColumn(context)
-            ? Container(height: 20)
-            : Container(height: 10),
-        TitleInput(
-          clearWhenUnfocused: true,
-          tryToCompleteSearch: true,
-          setSelectedTitle: (title) {
-            setSelectedTitle(title, setInput: false);
-          },
-          titleInputController: _titleInputController,
-          setSelectedCategory: setSelectedCategory,
-          setSelectedSubCategory: setSelectedSubCategory,
-        ),
-        Container(height: 14),
-        Padding(
-          padding: const EdgeInsetsDirectional.symmetric(horizontal: 22),
-          child: TransactionNotesTextInput(
-            noteInputController: _noteInputController,
-            setNotesInputFocused: (isFocused) {
-              setState(() {
-                notesInputFocused = isFocused;
-              });
-            },
-            setSelectedNoteController: setSelectedNoteController,
-          ),
-        ),
+        SizedBox(height: 20),
+        tituloInput,
+        SizedBox(height: 14),
+        notasInput,
       ],
     );
-
     Widget transactionDetailsParameters = Flexible(
       child: Container(
         constraints: BoxConstraints(maxWidth: 900),
@@ -1097,6 +1099,11 @@ class _AddTransactionPageState extends State<AddTransactionPage>
           widthFactor: enableDoubleColumn(context) == false ? 1 : 0.95,
           child: Column(
             children: [
+              if (enableDoubleColumn(context) == false) ...[
+                SizedBox(height: 16),
+                tituloInput,
+                SizedBox(height: 6),
+              ],
               Container(height: 10),
               Padding(
                 padding: const EdgeInsetsDirectional.symmetric(horizontal: 10),
@@ -1517,9 +1524,10 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                   ),
                 ),
               ),
-              enableDoubleColumn(context)
-                  ? SizedBox.shrink()
-                  : transactionTextInput,
+              if (enableDoubleColumn(context) == false) ...[
+                SizedBox(height: 14),
+                notasInput,
+              ],
               SizedBox(height: 10),
               AnimatedExpanded(
                 expand: showMoreOptions == false &&
@@ -1728,13 +1736,105 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     bool enableBalanceTransferTab = widget.transaction == null &&
         Provider.of<AllWallets>(context).indexedByPk.keys.length > 1;
 
+    final carteira = getSelectedWallet(listen: true);
+    final outraMoeda = Provider.of<AllWallets>(context).list.length > 1 &&
+        selectedWalletPk != appStateSettings["selectedWalletPk"] &&
+        carteira?.currency !=
+            Provider.of<AllWallets>(context)
+                .indexedByPk[appStateSettings["selectedWalletPk"]]
+                ?.currency;
+
+    // Hierarquia: valor (protagonista) > tipo > categoria; o resto vem depois.
     Widget transactionAmountAndCategoryHeader = Container(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: cores(context).line)),
       ),
-      padding: const EdgeInsetsDirectional.only(top: 8),
+      padding: const EdgeInsetsDirectional.only(top: 4, bottom: 4),
       child: Column(
         children: [
+          CustomContextMenu(
+            buttonItems: [
+              ContextMenuButtonItem(
+                type: ContextMenuButtonType.copy,
+                onPressed: () {
+                  ContextMenuController.removeAny();
+                  copyToClipboard(
+                    convertToMoney(
+                      Provider.of<AllWallets>(context, listen: false),
+                      currencyKey:
+                          Provider.of<AllWallets>(context, listen: false)
+                              .indexedByPk[selectedWalletPk]
+                              ?.currency,
+                      selectedAmount ?? 0,
+                      finalNumber: selectedAmount ?? 0,
+                      decimals: getSelectedWallet(listen: false)?.decimals,
+                    ),
+                  );
+                },
+              ),
+              ContextMenuButtonItem(
+                type: ContextMenuButtonType.paste,
+                onPressed: () async {
+                  ContextMenuController.removeAny();
+                  double? amount = await readAmountFromClipboard();
+                  if (amount != null) {
+                    setSelectedAmount(amount, amount.toString());
+                  }
+                },
+              ),
+            ],
+            tappableBuilder: (onLongPress) {
+              return Semantics(
+                button: true,
+                label: "Valor",
+                child: Tappable(
+                  color: Colors.transparent,
+                  onLongPress: onLongPress,
+                  onTap: selectAmountPopup,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: 20, vertical: 22),
+                    child: Column(
+                      children: [
+                        ContagemValor(
+                          valor: selectedAmount ?? 0,
+                          centavosMenores: true,
+                          estilo: EdTexto.numeroGrande(context).copyWith(
+                            color: selectedAmount == null
+                                ? cores(context).mu
+                                : cores(context).tx,
+                          ),
+                          formatar: (v) => convertToMoney(
+                            Provider.of<AllWallets>(context, listen: false),
+                            v,
+                            finalNumber: selectedAmount ?? 0,
+                            decimals: carteira?.decimals,
+                            currencyKey: carteira?.currency,
+                            addCurrencyName: outraMoeda,
+                          ),
+                        ),
+                        if (outraMoeda)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(top: 6),
+                            child: Text(
+                              convertToMoney(
+                                Provider.of<AllWallets>(context),
+                                (selectedAmount ?? 0) *
+                                    amountRatioToPrimaryCurrencyGivenPk(
+                                        Provider.of<AllWallets>(context),
+                                        selectedWalletPk),
+                              ),
+                              style: EdTexto.rotulo(context),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
             child: GestureDetector(
@@ -1829,10 +1929,15 @@ class _AddTransactionPageState extends State<AddTransactionPage>
               ),
             ),
           ),
-          Row(
-            children: [
-              Tappable(
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 16, 12),
+            child: Semantics(
+              button: true,
+              child: Tappable(
+                color: cores(context).surf,
+                borderRadius: 12,
                 onLongPress: () async {
+                  if (selectedCategory == null) return;
                   await pushRoute(
                     context,
                     AddCategoryPage(
@@ -1849,7 +1954,6 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                   }
                 },
                 onTap: () async {
-                  //resetInitializeBalanceTransfer();
                   await selectCategorySequence(
                     context,
                     selectedCategory: selectedCategory,
@@ -1860,156 +1964,68 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                     selectedIncomeInitial: selectedIncome,
                   );
                 },
-                color: Colors.transparent,
                 child: Container(
-                  height: 136,
-                  padding: const EdgeInsetsDirectional.only(start: 17, end: 20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  constraints: const BoxConstraints(minHeight: 60),
+                  padding:
+                      const EdgeInsetsDirectional.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cores(context).line),
+                  ),
+                  child: Row(
                     children: [
                       AnimatedSwitcher(
                         duration: Duration(milliseconds: 300),
-                        child: CategoryIcon(
-                          tintEnabled: false,
-                          canEditByLongPress: false,
-                          noBackground: true,
-                          key: ValueKey(selectedCategory?.categoryPk ?? ""),
-                          category: selectedCategory,
-                          size: 60,
+                        child: selectedCategory == null
+                            ? SizedBox(
+                                key: ValueKey(""),
+                                width: 42,
+                                height: 42,
+                                child: Icon(
+                                  Icons.category_outlined,
+                                  size: 22,
+                                  color: cores(context).mu,
+                                ),
+                              )
+                            : CategoryIcon(
+                                canEditByLongPress: false,
+                                key: ValueKey(selectedCategory!.categoryPk),
+                                category: selectedCategory,
+                                size: 22,
+                                sizePadding: 20,
+                                borderRadius: 12,
+                                margin: EdgeInsetsDirectional.zero,
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("Categoria", style: EdTexto.rotulo(context)),
+                            Text(
+                              selectedCategory?.name ?? "Selecione a categoria",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: EdTexto.corpo(context).copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: selectedCategory == null
+                                    ? cores(context).mu
+                                    : cores(context).tx,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 20, color: cores(context).mu),
                     ],
                   ),
                 ),
               ),
-              Expanded(
-                child: CustomContextMenu(
-                  buttonItems: [
-                    ContextMenuButtonItem(
-                      type: ContextMenuButtonType.copy,
-                      onPressed: () {
-                        ContextMenuController.removeAny();
-                        copyToClipboard(
-                          convertToMoney(
-                            Provider.of<AllWallets>(context, listen: false),
-                            currencyKey:
-                                Provider.of<AllWallets>(context, listen: false)
-                                    .indexedByPk[selectedWalletPk]
-                                    ?.currency,
-                            selectedAmount ?? 0,
-                            finalNumber: selectedAmount ?? 0,
-                            decimals:
-                                getSelectedWallet(listen: false)?.decimals,
-                          ),
-                        );
-                      },
-                    ),
-                    ContextMenuButtonItem(
-                      type: ContextMenuButtonType.paste,
-                      onPressed: () async {
-                        ContextMenuController.removeAny();
-                        double? amount = await readAmountFromClipboard();
-                        if (amount != null) {
-                          setSelectedAmount(amount, amount.toString());
-                        }
-                      },
-                    ),
-                  ],
-                  tappableBuilder: (onLongPress) {
-                    return Tappable(
-                      color: Colors.transparent,
-                      onLongPress: onLongPress,
-                      onTap: selectAmountPopup,
-                      child: Container(
-                        padding: const EdgeInsetsDirectional.only(end: 37),
-                        height: 136,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(height: 5),
-                            AnimatedSwitcher(
-                              duration: Duration(milliseconds: 350),
-                              child: Align(
-                                key: ValueKey(selectedWalletPk.toString() +
-                                    selectedAmount.toString()),
-                                alignment: AlignmentDirectional.centerEnd,
-                                child: TextFont(
-                                  textAlign: TextAlign.end,
-                                  text: convertToMoney(
-                                    Provider.of<AllWallets>(context),
-                                    selectedAmount ?? 0,
-                                    decimals: getSelectedWallet(listen: true)
-                                        ?.decimals,
-                                    currencyKey: getSelectedWallet(listen: true)
-                                        ?.currency,
-                                    addCurrencyName:
-                                        ((getSelectedWallet(listen: true)
-                                                ?.currency) !=
-                                            Provider.of<AllWallets>(context)
-                                                .indexedByPk[appStateSettings[
-                                                    "selectedWalletPk"]]
-                                                ?.currency),
-                                  ),
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  maxLines: 1,
-                                  autoSizeText: true,
-                                ),
-                              ),
-                            ),
-                            Provider.of<AllWallets>(context).list.length <= 1 ||
-                                    selectedWalletPk ==
-                                        appStateSettings["selectedWalletPk"] ||
-                                    ((getSelectedWallet(listen: true)
-                                            ?.currency) ==
-                                        Provider.of<AllWallets>(context)
-                                            .indexedByPk[appStateSettings[
-                                                "selectedWalletPk"]]
-                                            ?.currency)
-                                ? AnimatedSizeSwitcher(
-                                    switcherDuration:
-                                        Duration(milliseconds: 350),
-                                    child: Container(
-                                      key: ValueKey(
-                                          selectedCategory?.name ?? ""),
-                                      width: double.infinity,
-                                      child: TextFont(
-                                        textAlign: TextAlign.end,
-                                        fontSize: 18,
-                                        text: selectedCategory?.name ?? "",
-                                        maxLines: 2,
-                                      ),
-                                    ),
-                                  )
-                                : AnimatedSwitcher(
-                                    duration: Duration(milliseconds: 350),
-                                    child: Align(
-                                      alignment: AlignmentDirectional.centerEnd,
-                                      child: TextFont(
-                                        textAlign: TextAlign.end,
-                                        text: convertToMoney(
-                                          Provider.of<AllWallets>(context),
-                                          (selectedAmount ?? 0) *
-                                              (amountRatioToPrimaryCurrencyGivenPk(
-                                                  Provider.of<AllWallets>(
-                                                      context),
-                                                  selectedWalletPk)),
-                                        ),
-                                        fontSize: 18,
-                                        maxLines: 1,
-                                        autoSizeText: true,
-                                      ),
-                                    ),
-                                  ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
           if (selectedCategory != null)
             SelectSubcategoryChips(
@@ -2098,40 +2114,30 @@ class _AddTransactionPageState extends State<AddTransactionPage>
             child: Row(
               children: [
                 Expanded(
-                  child: selectedCategory == null
-                      ? Button(
-                          hasBottomExtraSafeArea: true,
-                          label: "select-category".tr(),
-                          onTap: () {
-                            selectCategorySequence(
-                              context,
-                              selectedCategory: selectedCategory,
-                              setSelectedCategory: setSelectedCategory,
-                              selectedSubCategory: selectedSubCategory,
-                              setSelectedSubCategory: setSelectedSubCategory,
-                              skipIfSet: false,
-                              selectedIncomeInitial: selectedIncome,
-                            );
-                          },
-                        )
-                      : selectedAmount == null
-                          ? Button(
-                              hasBottomExtraSafeArea: true,
-                              label: "enter-amount".tr(),
-                              onTap: () {
-                                selectAmountPopup();
-                              },
-                            )
-                          : Button(
-                              hasBottomExtraSafeArea: true,
-                              label: widget.transaction != null
-                                  ? "save-changes".tr()
-                                  : textAddTransaction ?? "",
-                              onTap: () async {
-                                bool result = await addTransaction();
-                                if (result) popRoute(context);
-                              },
-                            ),
+                  // Uma ação principal: "Salvar" pede o que faltar
+                  // (categoria, depois valor) antes de gravar.
+                  child: Button(
+                    hasBottomExtraSafeArea: true,
+                    label: "Salvar",
+                    onTap: () async {
+                      if (selectedCategory == null) {
+                        selectCategorySequence(
+                          context,
+                          selectedCategory: selectedCategory,
+                          setSelectedCategory: setSelectedCategory,
+                          selectedSubCategory: selectedSubCategory,
+                          setSelectedSubCategory: setSelectedSubCategory,
+                          skipIfSet: false,
+                          selectedIncomeInitial: selectedIncome,
+                        );
+                      } else if (selectedAmount == null) {
+                        selectAmountPopup();
+                      } else {
+                        bool result = await addTransaction();
+                        if (result) popRoute(context);
+                      }
+                    },
+                  ),
                 ),
                 AnimatedSizeSwitcher(
                   clipBehavior: Clip.none,

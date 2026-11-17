@@ -1,18 +1,20 @@
-import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/initializeNotifications.dart';
 import 'package:budget/struct/upcomingTransactionsFunctions.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/resumoTransacoes.dart';
+import 'package:budget/widgets/slidingSelectorIncomeExpense.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/selectedTransactionsAppBar.dart';
-import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/fab.dart';
 import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/noResults.dart';
@@ -20,7 +22,6 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/textWidgets.dart';
-import 'package:budget/widgets/transactionEntry/incomeAmountArrow.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +46,8 @@ class SubscriptionsPageState extends State<SubscriptionsPage> {
   SelectedSubscriptionsType selectedType = SelectedSubscriptionsType
       .values[appStateSettings["selectedSubscriptionType"]];
   GlobalKey<PageFrameworkState> pageState = GlobalKey();
+  // Entrada suave só logo após abrir (não ao trocar o período).
+  final DateTime _aberta = DateTime.now();
 
   void scrollToTop() {
     pageState.currentState?.scrollToTop();
@@ -127,42 +130,58 @@ class SubscriptionsPageState extends State<SubscriptionsPage> {
               if (snapshot.hasData) {
                 if (snapshot.data!.length <= 0) {
                   return SliverToBoxAdapter(
-                      child: NoResults(
-                          padding: const EdgeInsetsDirectional.only(
-                            top: 15,
-                            end: 30,
-                            start: 30,
+                    child: Column(
+                      children: [
+                        NoResults(message: "Nenhuma assinatura."),
+                        AcaoVazio(
+                          rotulo: "Adicionar assinatura",
+                          onTap: () => pushRoute(
+                            context,
+                            AddTransactionPage(
+                              selectedType: TransactionSpecialType.subscription,
+                              routesToPopAfterDelete:
+                                  RoutesToPopAfterDelete.None,
+                            ),
                           ),
-                          message: "no-subscription-transactions".tr()));
+                        ),
+                      ],
+                    ),
+                  );
                 }
                 return SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (BuildContext context, int index) {
                       Transaction transaction = snapshot.data![index];
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          HorizontalBreak(
-                              padding: EdgeInsetsDirectional.only(
-                                  top: 4, bottom: 6)),
-                          TransactionEntry(
-                            aboveWidget: UpcomingTransactionDateHeader(
-                              selectedType: selectedType,
-                              transaction: transaction,
-                            ),
-                            openPage: AddTransactionPage(
-                              transaction: transaction,
-                              routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.One,
-                            ),
-                            transaction: transaction,
-                            listID: pageId,
-                          ),
-                          if (index == (snapshot.data?.length ?? 0) - 1)
+                      return EntradaSuave(
+                        key: ValueKey(transaction.transactionPk),
+                        indice: index,
+                        animar: DateTime.now().difference(_aberta) <
+                            const Duration(milliseconds: 600),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             HorizontalBreak(
                                 padding: EdgeInsetsDirectional.only(
                                     top: 4, bottom: 6)),
-                        ],
+                            TransactionEntry(
+                              aboveWidget: UpcomingTransactionDateHeader(
+                                selectedType: selectedType,
+                                transaction: transaction,
+                              ),
+                              openPage: AddTransactionPage(
+                                transaction: transaction,
+                                routesToPopAfterDelete:
+                                    RoutesToPopAfterDelete.One,
+                              ),
+                              transaction: transaction,
+                              listID: pageId,
+                            ),
+                            if (index == (snapshot.data?.length ?? 0) - 1)
+                              HorizontalBreak(
+                                  padding: EdgeInsetsDirectional.only(
+                                      top: 4, bottom: 6)),
+                          ],
+                        ),
                       );
                     },
                     childCount: snapshot.data?.length,
@@ -211,26 +230,25 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
                   text: getWordedDateShortMore(
                     transaction.dateCreated,
                   ),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
                 daysDifference != 0
                     ? Flexible(
                         child: TextFont(
-                          fontSize: 17,
+                          fontSize: 13,
                           textColor: daysDifference > 0
-                              ? getColor(context, "unPaidOverdue")
-                              : getColor(context, "textLight"),
-                          text: " • " +
+                              ? cores(context).warn
+                              : cores(context).mu,
+                          text: " · " +
+                              (daysDifference > 0 ? "" : "em ") +
                               daysDifference.abs().toString() +
                               " " +
                               (daysDifference.abs() == 1
                                   ? "day".tr()
                                   : "days".tr()) +
-                              (daysDifference > 0
-                                  ? " " + "overdue".tr().toLowerCase()
-                                  : ""),
-                          fontWeight: FontWeight.bold,
+                              (daysDifference > 0 ? " de atraso" : ""),
+                          fontWeight: FontWeight.w500,
                         ),
                       )
                     : SizedBox(),
@@ -249,9 +267,7 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
                         appStateSettings["outlinedIcons"]
                             ? Icons.loop_outlined
                             : Icons.loop_rounded,
-                        color: dynamicPastel(
-                            context, Theme.of(context).colorScheme.primary,
-                            amount: 0.4),
+                        color: cores(context).mu,
                         size: 14,
                       ),
                       SizedBox(width: 3),
@@ -269,10 +285,8 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
                                     .toLowerCase()
                                     .tr()
                                     .toLowerCase()),
-                        fontSize: 14,
-                        textColor: dynamicPastel(
-                            context, Theme.of(context).colorScheme.primary,
-                            amount: 0.4),
+                        fontSize: 12.5,
+                        textColor: cores(context).mu,
                       ),
                     ],
                   ),
@@ -302,10 +316,8 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
                                               ? "year".tr()
                                               : "")
                                       .toLowerCase(),
-                              fontSize: 14,
-                              textColor: dynamicPastel(context,
-                                  Theme.of(context).colorScheme.primary,
-                                  amount: 0.4),
+                              fontSize: 12.5,
+                              textColor: cores(context).mu,
                             ),
                     ),
                 ],
@@ -366,129 +378,33 @@ class TotalUpcomingHeaderPeriodSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(
-          top: 30, start: 20, end: 20, bottom: 35),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          StreamBuilder<List<Transaction>>(
-            stream: transactionListStream,
-            builder: (context, snapshot) {
-              double total = getTotalSubscriptions(
-                  Provider.of<AllWallets>(context),
-                  selectedType,
-                  snapshot.data);
-              return AmountWithColorAndArrow(
-                showIncomeArrow: true,
-                totalSpent: total,
-                fontSize: 30,
-                iconSize: 30,
-                iconWidth: 20,
-                textColor: getColor(context, "black"),
-              );
-            },
-          ),
-          Padding(
-            padding: EdgeInsetsDirectional.only(top: 5),
-            child: AnimatedSizeSwitcher(
-              clipBehavior: Clip.none,
-              child: TextFont(
-                key: ValueKey(selectedType.toString()),
-                text: selectedSubtitleTranslation(selectedType),
-                fontSize: 16,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(top: 18.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                AnimatedSwitcher(
-                  duration: Duration(milliseconds: 250),
-                  child: Button(
-                    key: ValueKey(
-                        selectedType != SelectedSubscriptionsType.monthly),
-                    color: selectedType != SelectedSubscriptionsType.monthly
-                        ? dynamicPastel(context,
-                            Theme.of(context).colorScheme.secondaryContainer,
-                            amount: appStateSettings["materialYou"] ? 0.2 : 0.7)
-                        : null,
-                    textColor: selectedType != SelectedSubscriptionsType.monthly
-                        ? getColor(context, "black").withOpacity(0.5)
-                        : getColor(context, "black"),
-                    label: "monthly".tr(),
-                    onTap: () {
-                      setSelectedType(SelectedSubscriptionsType.monthly);
-                      updateSettings("selectedSubscriptionType",
-                          SelectedSubscriptionsType.monthly.index,
-                          pagesNeedingRefresh: [], updateGlobalState: false);
-                    },
-                    fontSize: 12,
-                    padding: EdgeInsetsDirectional.symmetric(
-                        horizontal: 16, vertical: 13),
-                  ),
-                ),
-                SizedBox(width: 7),
-                AnimatedSwitcher(
-                  duration: Duration(milliseconds: 250),
-                  child: Button(
-                    key: ValueKey(
-                        selectedType != SelectedSubscriptionsType.yearly),
-                    color: selectedType != SelectedSubscriptionsType.yearly
-                        ? dynamicPastel(context,
-                            Theme.of(context).colorScheme.secondaryContainer,
-                            amount: appStateSettings["materialYou"] ? 0.2 : 0.7)
-                        : null,
-                    textColor: selectedType != SelectedSubscriptionsType.yearly
-                        ? getColor(context, "black").withOpacity(0.5)
-                        : getColor(context, "black"),
-                    label: "yearly".tr(),
-                    onTap: () {
-                      setSelectedType(SelectedSubscriptionsType.yearly);
-                      updateSettings("selectedSubscriptionType",
-                          SelectedSubscriptionsType.yearly.index,
-                          pagesNeedingRefresh: [], updateGlobalState: false);
-                    },
-                    fontSize: 12,
-                    padding: EdgeInsetsDirectional.symmetric(
-                        horizontal: 16, vertical: 13),
-                  ),
-                ),
-                SizedBox(width: 7),
-                AnimatedSwitcher(
-                  duration: Duration(milliseconds: 250),
-                  child: Button(
-                    key: ValueKey(
-                        selectedType != SelectedSubscriptionsType.total),
-                    color: selectedType != SelectedSubscriptionsType.total
-                        ? dynamicPastel(context,
-                            Theme.of(context).colorScheme.secondaryContainer,
-                            amount: appStateSettings["materialYou"] ? 0.2 : 0.7)
-                        : null,
-                    textColor: selectedType != SelectedSubscriptionsType.total
-                        ? getColor(context, "black").withOpacity(0.5)
-                        : getColor(context, "black"),
-                    label: "total".tr(),
-                    onTap: () {
-                      setSelectedType(SelectedSubscriptionsType.total);
-                      updateSettings("selectedSubscriptionType",
-                          SelectedSubscriptionsType.total.index,
-                          pagesNeedingRefresh: [], updateGlobalState: false);
-                    },
-                    fontSize: 12,
-                    padding: EdgeInsetsDirectional.symmetric(
-                        horizontal: 16, vertical: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        StreamBuilder<List<Transaction>>(
+          stream: transactionListStream,
+          builder: (context, snapshot) {
+            return TotalDestaque(
+              rotulo: selectedSubtitleTranslation(selectedType),
+              valor: getTotalSubscriptions(Provider.of<AllWallets>(context),
+                  selectedType, snapshot.data),
+              legenda: snapshot.data == null
+                  ? null
+                  : contagemTransacoes(snapshot.data!.length),
+            );
+          },
+        ),
+        SlidingSelectorIncomeExpense(
+          initialIndex: selectedType.index,
+          options: ["monthly", "yearly", "total"],
+          onSelected: (int index) {
+            final tipo = SelectedSubscriptionsType.values[index - 1];
+            setSelectedType(tipo);
+            updateSettings("selectedSubscriptionType", tipo.index,
+                pagesNeedingRefresh: [], updateGlobalState: false);
+          },
+        ),
+        SizedBox(height: 12),
+      ],
     );
   }
 }

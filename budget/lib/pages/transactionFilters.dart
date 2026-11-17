@@ -10,13 +10,14 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/widgets/iconButtonScaled.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/selectCategory.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/settingsContainers.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/colors.dart';
 import 'package:provider/provider.dart';
@@ -607,7 +608,9 @@ class _TransactionFiltersSelectionState
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SettingsHeader(title: "Categorias"),
         SelectCategory(
           horizontalList: true,
           showSelectedAllCategoriesIfNoneSelected: true,
@@ -659,6 +662,7 @@ class _TransactionFiltersSelectionState
             ),
           ],
         ),
+        SettingsHeader(title: "Valor"),
         StreamBuilder<RangeValues>(
           stream: database.getHighestLowestAmount(
             SearchFilters(
@@ -693,7 +697,7 @@ class _TransactionFiltersSelectionState
             return SizedBox.shrink();
           }),
         ),
-        SizedBox(height: 10),
+        SettingsHeader(title: "Tipo"),
         SelectChips(
           items: ExpenseIncome.values,
           getLabel: (ExpenseIncome item) {
@@ -702,20 +706,6 @@ class _TransactionFiltersSelectionState
                 : item == ExpenseIncome.income
                     ? "income".tr()
                     : "";
-          },
-          getCustomBorderColor: (ExpenseIncome item) {
-            Color? customBorderColor;
-            if (item == ExpenseIncome.expense) {
-              customBorderColor = getColor(context, "expenseAmount");
-            } else if (item == ExpenseIncome.income) {
-              customBorderColor = getColor(context, "incomeAmount");
-            }
-            if (customBorderColor == null) return null;
-            return dynamicPastel(
-              context,
-              lightenPastel(customBorderColor, amount: 0.3),
-              amount: 0.4,
-            );
           },
           onSelected: (ExpenseIncome item) {
             if (selectedFilters.expenseIncome.contains(item)) {
@@ -764,6 +754,7 @@ class _TransactionFiltersSelectionState
             return selectedFilters.transactionTypes.contains(item);
           },
         ),
+        SettingsHeader(title: "Situação"),
         SelectChips(
           items: PaidStatus.values,
           getLabel: (PaidStatus item) {
@@ -814,6 +805,7 @@ class _TransactionFiltersSelectionState
             },
           ),
 
+        SettingsHeader(title: "Contas"),
         SelectChips(
           items: Provider.of<AllWallets>(context).list,
           onLongPress: (TransactionWallet? item) {
@@ -838,19 +830,6 @@ class _TransactionFiltersSelectionState
           },
           getSelected: (TransactionWallet item) {
             return selectedFilters.walletPks.contains(item.walletPk);
-          },
-          getCustomBorderColor: (TransactionWallet item) {
-            return dynamicPastel(
-              context,
-              lightenPastel(
-                HexColor(
-                  item.colour,
-                  defaultColor: Theme.of(context).colorScheme.primary,
-                ),
-                amount: 0.3,
-              ),
-              amount: 0.4,
-            );
           },
         ),
 
@@ -1232,13 +1211,13 @@ class _TransactionFiltersSelectionState
               Flexible(
                 child: Button(
                   expandedLayout: true,
-                  label: "reset".tr(),
+                  label: "Limpar",
                   onTap: () {
                     widget.clearSearchFilters();
                     popRoute(context);
                   },
-                  color: Theme.of(context).colorScheme.tertiaryContainer,
-                  textColor: Theme.of(context).colorScheme.onTertiaryContainer,
+                  color: cores(context).chip,
+                  textColor: cores(context).tx,
                 ),
               ),
               SizedBox(width: 13),
@@ -1579,16 +1558,11 @@ class AppliedFilterChips extends StatelessWidget {
                         child: Row(
                           key: ValueKey(snapshot.data.toString()),
                           children: [
-                            SizedBox(width: 5),
-                            IconButtonScaled(
-                              iconData: Icons.close_rounded,
-                              iconSize: 14,
-                              scale: 1.5,
-                              onTap: () {
-                                clearSearchFilters();
-                              },
+                            AppliedFilterChip(
+                              label: "Limpar",
+                              icon: Icons.close_rounded,
+                              openFiltersSelection: clearSearchFilters,
                             ),
-                            SizedBox(width: 2),
                             ...(snapshot.data ?? [])
                           ],
                         ),
