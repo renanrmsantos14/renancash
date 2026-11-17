@@ -11,6 +11,7 @@ import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
+import { sugerir, entender } from "./ia.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -402,7 +403,8 @@ async function entregarNotificacoes(request, env, url) {
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items"]);
+const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender"]);
+const MAX_CORPO_IA = 64 * 1024; // contexto + lote pequeno cabem com folga
 const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
@@ -430,6 +432,15 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
+  if (rota === "POST /api/ia/sugerir" || rota === "POST /api/ia/entender") {
+    const texto = await request.text();
+    if (texto.length > MAX_CORPO_IA) return json({ erro: "Pedido grande demais" }, 413);
+    let corpo = null;
+    try {
+      corpo = JSON.parse(texto);
+    } catch {}
+    return json(await (rota === "POST /api/ia/sugerir" ? sugerir : entender)(env, corpo));
+  }
   if (rota === "POST /api/pluggy/connect-token") {
     const itemId = (await request.json().catch(() => null))?.itemId ?? null;
     if (itemId !== null && !(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
