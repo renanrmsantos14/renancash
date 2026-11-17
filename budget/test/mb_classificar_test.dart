@@ -42,6 +42,8 @@ final _opcoes = MbOpcoes.montar(const [
   CatLocal(pk: 'mb:cat:d:Transporte', nome: 'Transporte', receita: false),
   CatLocal(pk: 'mb:cat:d:A classificar', nome: 'A classificar', receita: false),
   CatLocal(pk: 'sal', nome: 'Salário', receita: true),
+  CatLocal(pk: '0', nome: 'Ajuste de saldo', receita: false),
+  CatLocal(pk: 'beleza', nome: 'Beleza', receita: false),
 ], const [
   MbVinculoOpcao('mae', 'Mãe', 'emprestimo')
 ]);
@@ -75,12 +77,30 @@ void main() {
         _l('mb:revisado'),
         _l('mb:worker', categoria: 'Transporte', data: DateTime(2026, 8, 1), editado: true,
             revisao: const MbItemRevisao('w', 'pix_enviado', txId: 'worker')),
+        // Ajuste de saldo e investimento (CDB) nunca entram, mesmo novos.
+        _l('mb:ajuste', categoria: 'Balance Correction', categoriaPk: '0', valor: 28.01),
+        _l('mb:inv:cdb1', descricao: 'CDB - BANCO INTER S.A', categoria: 'Ajuste de saldo', valor: 550.03),
+        // Véspera do marco: histórico com categoria útil não entra.
+        _l('mb:vespera', categoria: 'Compras', data: DateTime(2026, 10, 31, 23)),
       ], desde: _desde, revisados: {'mb:revisado'});
       expect(fila.map((l) => l.pk), ['mb:novo', 'mb:antigoPix', 'mb:worker']);
     });
 
-    test('opções: uma categoria por nome (a do usuário), sem as inúteis, com subs', () {
-      expect(_opcoes.categorias.map((c) => c.pk), ['alim', 'transp', 'sal']);
+    test('marco dos novos: instalação nova grava agora; o antigo (−7 dias) volta ao dia da instalação', () {
+      final agora = DateTime(2026, 11, 17, 11, 53);
+      expect(mbMarcoNovos(null, agora), agora);
+      expect(mbMarcoNovos(DateTime(2026, 11, 10), agora), DateTime(2026, 11, 17));
+      // "Compra no débito - Mundo Do Cabeleireiro" de 15/11 já em Compras: com o marco antigo entrava; agora não.
+      final compra = _l('mb:cab', descricao: 'Compra no débito - Mundo Do Cabeleireiro', categoria: 'Compras',
+          categoriaPk: 'compras', data: DateTime(2026, 11, 15, 10));
+      expect(mbFilaClassificar([compra], desde: DateTime(2026, 11, 10)), hasLength(1));
+      expect(mbFilaClassificar([compra], desde: mbMarcoNovos(DateTime(2026, 11, 10), agora)), isEmpty);
+    });
+
+    test('opções: uma categoria por nome (a do usuário), sem as inúteis nem a de ajuste, com subs', () {
+      expect(_opcoes.categorias.map((c) => c.pk), ['alim', 'transp', 'sal', 'beleza']);
+      expect(_opcoes.categoria('0'), isNull);
+      expect(_opcoes.categoria('mb:cat:d:Transporte')!.pk, 'transp'); // repetida de mesmo nome
       expect(_opcoes.categoria('alim')!.subs.map((s) => s.nome), ['Delivery', 'Restaurante']);
       final ctx = _opcoes.contexto([const MbPadrao('FABIANA SILVA', 'alim', vinculoPk: 'mae')]);
       expect((ctx['categorias'] as List).first, {
@@ -141,11 +161,24 @@ void main() {
       expect(MbSugestao.daIa('lixo', _opcoes, l), isNull);
     });
 
-    test('alternativas: atual útil e mais usadas, do tipo certo, sem a sugerida', () {
-      const padroes = [MbPadrao('A', 'transp', vezes: 3), MbPadrao('B', 'alim')];
-      final alt = mbAlternativas(_l('mb:1', categoriaPk: 'alim', categoria: 'Alimentação'), 'alim', padroes, _opcoes);
-      expect(alt.map((c) => c.pk), ['transp']);
-      expect(mbAlternativas(_l('mb:2', valor: 100), null, padroes, _opcoes).map((c) => c.pk), ['sal']);
+    test('alternativas: atual, depois parecidas, depois mais usadas; do tipo certo, sem a sugerida nem ajuste', () {
+      final uso = MbUso.de([
+        for (var i = 0; i < 5; i++) (descricao: 'UBER TRIP', categoriaPk: 'mb:cat:d:Transporte'),
+        for (var i = 0; i < 3; i++) (descricao: 'PADARIA PAO', categoriaPk: 'alim'),
+        (descricao: 'Compra no débito - Studio Cabeleireiro Ana', categoriaPk: 'beleza'),
+        for (var i = 0; i < 9; i++) (descricao: 'CDB - BANCO INTER', categoriaPk: '0'),
+      ]);
+      final cabeleireiro = _l('mb:1',
+          descricao: 'Compra no débito - Mundo Do Cabeleireiro', categoria: 'Compras', categoriaPk: 'compras');
+      // Beleza (descrição parecida) antes das mais usadas; Transporte soma o uso da repetida "mb:"; nunca o ajuste.
+      expect(mbAlternativas(cabeleireiro, null, uso, _opcoes).map((c) => c.pk), ['beleza', 'transp', 'alim']);
+      expect(mbAlternativas(cabeleireiro, 'beleza', uso, _opcoes, max: 1).map((c) => c.pk), ['transp']);
+      // A atual útil vem primeiro; receita só para entrada.
+      expect(mbAlternativas(_l('mb:2', categoriaPk: 'alim', categoria: 'Alimentação'), null, uso, _opcoes).first.pk,
+          'alim');
+      expect(mbAlternativas(_l('mb:3', valor: 100), null, uso, _opcoes).map((c) => c.pk), ['sal']);
+      expect(mbAlternativas(_l('mb:4'), null, const MbUso(), _opcoes).map((c) => c.pk),
+          ['alim', 'transp', 'beleza']); // sem uso: ordem das opções
     });
 
     test('exemplos: mesmo favorecido do lote primeiro', () {
@@ -156,7 +189,10 @@ void main() {
 
   group('cartão', () {
     Future<void> abrir(WidgetTester t, List<MbLancamentoIa> fila,
-        {Map<String, MbSugestao> sugestoes = const {}, bool? iaOk, List<MbItemRevisao> revisar = const []}) async {
+        {Map<String, MbSugestao> sugestoes = const {},
+        bool? iaOk,
+        Map<String, MbEstadoIa> estado = const {},
+        List<MbItemRevisao> revisar = const []}) async {
       appStateSettings = {
         'materialYou': false,
         'accentSystemColor': false,
@@ -170,6 +206,7 @@ void main() {
       meuBancoClassificar.value = fila;
       meuBancoSugestoes.value = sugestoes;
       meuBancoIaOk.value = iaOk;
+      meuBancoIaEstado.value = estado;
       t.view.physicalSize = const Size(390 * 3, 1400 * 3);
       t.view.devicePixelRatio = 3;
       addTearDown(t.view.reset);
@@ -185,6 +222,7 @@ void main() {
       meuBancoClassificar.value = const [];
       meuBancoSugestoes.value = const {};
       meuBancoIaOk.value = null;
+      meuBancoIaEstado.value = const {};
     });
 
     testWidgets('mostra valor, sugestão da IA com pergunta e Confirmar; chip troca a escolha', (t) async {
@@ -202,6 +240,8 @@ void main() {
       expect(find.text('1 de 1'), findsOneWidget);
       expect(find.text('−R\$ 500,00'), findsOneWidget);
       expect(find.text('Sugestão da IA'), findsOneWidget);
+      expect(find.text('40% · na dúvida'), findsOneWidget);
+      expect(find.text('Título: Empréstimo Mãe'), findsOneWidget);
       expect(find.textContaining('foi empréstimo para a Mãe?'), findsOneWidget);
       expect(find.text('Alimentação'), findsOneWidget);
       expect(find.text('Empréstimo: Mãe'), findsOneWidget);
@@ -223,6 +263,26 @@ void main() {
       expect(find.text('Qual é a categoria?'), findsOneWidget);
       expect(find.text('Sem IA agora: sugestões pelos seus padrões.'), findsOneWidget);
       expect(find.text('Confirmar'), findsNothing);
+    });
+
+    testWidgets('estado da IA visível no cartão: pedindo, sem sugestão, falhou; título do banco editável', (t) async {
+      final atual = {
+        'mb:1': const MbSugestao('mb:1', 'transp', confianca: 0.5, fonte: MbFonteSugestao.atual),
+      };
+      await abrir(t, [_l('mb:1', descricao: 'Compra no débito  -  Mundo Do Cabeleireiro')],
+          sugestoes: atual, estado: {'mb:1': MbEstadoIa.pedindo});
+      expect(find.text('Categoria do banco'), findsOneWidget);
+      expect(find.text('Pedindo sugestão à IA…'), findsOneWidget);
+      expect(find.text('Título: Compra no débito - Mundo Do Cabeleireiro'), findsOneWidget);
+      expect(find.text('Manter o texto do banco'), findsNothing);
+
+      meuBancoIaEstado.value = {'mb:1': MbEstadoIa.semSugestao};
+      await t.pump();
+      expect(find.text('A IA não teve sugestão para este.'), findsOneWidget);
+
+      meuBancoIaEstado.value = {'mb:1': MbEstadoIa.falhou};
+      await t.pump();
+      expect(find.text('Sem IA agora: sugestões pelos seus padrões.'), findsOneWidget);
     });
 
     testWidgets('Pix enviado do Worker na fila de classificar aparece uma vez só', (t) async {

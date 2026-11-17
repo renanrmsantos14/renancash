@@ -6,6 +6,7 @@ import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
+import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeSemEspacosRepetidos;
 import 'package:flutter/material.dart';
 
 const _rotuloFonte = {
@@ -155,7 +156,7 @@ class _ItemClassificarState extends State<ItemClassificar> {
       context,
       PopupFramework(
         title: 'Título',
-        subtitle: 'Vazio mantém o texto do banco',
+        subtitle: 'Vazio volta ao texto do banco',
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           _Campo(controller: ctrl, dica: 'Ex.: Almoço, Uber, Empréstimo Mãe', aoEnviar: (t) => popRoute(context, t)),
           const SizedBox(height: 12),
@@ -171,15 +172,30 @@ class _ItemClassificarState extends State<ItemClassificar> {
     }
   }
 
+  /// O que aconteceu com o pedido à IA para este lançamento (null: a sugestão da IA já está na caixa).
+  ({IconData icone, String texto})? _situacaoIa() {
+    if (meuBancoSugestoes.value[_l.pk]?.fonte == MbFonteSugestao.ia) return null;
+    final estado = meuBancoIaEstado.value[_l.pk];
+    if (estado == MbEstadoIa.falhou || meuBancoIaOk.value == false) {
+      return (icone: Icons.cloud_off_rounded, texto: 'Sem IA agora: sugestões pelos seus padrões.');
+    }
+    return switch (estado) {
+      MbEstadoIa.pedindo => (icone: Icons.auto_awesome_rounded, texto: 'Pedindo sugestão à IA…'),
+      MbEstadoIa.semSugestao => (icone: Icons.auto_awesome_rounded, texto: 'A IA não teve sugestão para este.'),
+      _ => null,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([meuBancoSugestoes, meuBancoIaOk]),
+      listenable: Listenable.merge([meuBancoSugestoes, meuBancoIaOk, meuBancoIaEstado]),
       builder: (context, _) {
         final op = mbOpcoesClassificar;
         final sugestao = _escolha ?? meuBancoSugestoes.value[_l.pk];
-        final alternativas = mbAlternativas(_l, sugestao?.categoriaPk, mbPadroesClassificar, op);
+        final alternativas = mbAlternativas(_l, sugestao?.categoriaPk, mbUsoClassificar, op);
+        final situacaoIa = _situacaoIa();
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -190,6 +206,14 @@ class _ItemClassificarState extends State<ItemClassificar> {
             const SizedBox(height: 2),
             Text(_l.descricao,
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: EdTexto.corpo(context).copyWith(color: e.mu)),
+            if (situacaoIa != null) ...[
+              const SizedBox(height: 10),
+              Row(children: [
+                Icon(situacaoIa.icone, size: 14, color: e.mu),
+                const SizedBox(width: 6),
+                Expanded(child: Text(situacaoIa.texto, style: EdTexto.rotulo(context))),
+              ]),
+            ],
             const SizedBox(height: 16),
             _Sugestao(
               lancamento: _l,
@@ -232,14 +256,6 @@ class _ItemClassificarState extends State<ItemClassificar> {
             if (_aviso != null) ...[
               const SizedBox(height: 8),
               Semantics(liveRegion: true, child: Text(_aviso!, style: EdTexto.rotulo(context).copyWith(color: e.warntx))),
-            ],
-            if (meuBancoIaOk.value == false) ...[
-              const SizedBox(height: 10),
-              Row(children: [
-                Icon(Icons.cloud_off_rounded, size: 14, color: e.mu),
-                const SizedBox(width: 6),
-                Expanded(child: Text('Sem IA agora: sugestões pelos seus padrões.', style: EdTexto.rotulo(context))),
-              ]),
             ],
           ]),
         );
@@ -293,7 +309,7 @@ class _Sugestao extends StatelessWidget {
           ],
           Expanded(child: Text(_rotuloFonte[s.fonte]!, style: EdTexto.rotulo(context))),
           if (s.fonte == MbFonteSugestao.ia || s.fonte == MbFonteSugestao.padrao)
-            Text(s.confianca >= mbLimiarPergunta ? 'confiante' : 'na dúvida',
+            Text('${(s.confianca * 100).round()}% · ${s.confianca >= mbLimiarPergunta ? 'confiante' : 'na dúvida'}',
                 style: EdTexto.mono(context).copyWith(color: s.confianca >= mbLimiarPergunta ? e.acc : e.warntx)),
         ]),
         if (s.pergunta != null) ...[
@@ -327,7 +343,9 @@ class _Sugestao extends StatelessWidget {
         const SizedBox(height: 10),
         _Linha(
             icone: Icons.short_text_rounded,
-            texto: s.titulo == null ? 'Manter o texto do banco' : 'Título: ${s.titulo}',
+            texto: 'Título: ${s.titulo ?? nomeSemEspacosRepetidos(lancamento.descricao)}',
+            iconeFim: Icons.edit_outlined,
+            dica: 'Editar título',
             onTap: enviando ? null : () => aoEditarTitulo(s)),
         if (opcoes.vinculos.isNotEmpty)
           _Linha(
@@ -378,9 +396,11 @@ class _ChipSub extends StatelessWidget {
 }
 
 class _Linha extends StatelessWidget {
-  const _Linha({required this.icone, required this.texto, this.onTap});
-  final IconData icone;
+  const _Linha(
+      {required this.icone, required this.texto, this.iconeFim = Icons.chevron_right_rounded, this.dica, this.onTap});
+  final IconData icone, iconeFim;
   final String texto;
+  final String? dica; // leitor de tela: o que o toque faz
   final VoidCallback? onTap;
 
   @override
@@ -395,7 +415,7 @@ class _Linha extends StatelessWidget {
           Icon(icone, size: 16, color: e.mu),
           const SizedBox(width: 8),
           Expanded(child: Text(texto, style: EdTexto.corpo(context).copyWith(fontSize: 13))),
-          Icon(Icons.chevron_right_rounded, size: 18, color: e.mu),
+          Icon(iconeFim, size: 18, color: e.mu, semanticLabel: dica),
         ]),
       ),
     );

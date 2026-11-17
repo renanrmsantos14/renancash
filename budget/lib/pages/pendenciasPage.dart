@@ -15,6 +15,8 @@ import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
 import 'package:budget/widgets/editorial/itemClassificar.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/versaoCanto.dart'
+    show mbAlturaFaixaVersao;
 import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:budget/struct/mbSync/pluggy.dart' show mbAbrirConnect;
@@ -36,6 +38,20 @@ Future<void> mbReconectarAviso(
 
 /// Item da fila: Para revisar, Para classificar ou conta vencida (Configurações › Pendências).
 typedef _Pendencia = ({String id, String rotulo, Widget Function() conteudo});
+
+/// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
+/// A posição real do item mostrado é o lugar dele na ordem original (avança a cada "Pular" e volta a 1 na
+/// segunda volta).
+List<T> ordenarPulados<T>(
+    List<T> itens, List<String> pulados, String Function(T) id) {
+  final porId = {for (final i in itens) id(i): i};
+  return [
+    for (final i in itens)
+      if (!pulados.contains(id(i))) i,
+    for (final p in pulados)
+      if (porId[p] case final i?) i,
+  ];
+}
 
 /// Aba Pendências: bancos desconectados numa faixa fixa e a fila (Para revisar e, se ligado, contas
 /// vencidas) um item por vez. "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da
@@ -91,17 +107,6 @@ class _PendenciasPageState extends State<PendenciasPage> {
     ];
   }
 
-  /// Ordem da fila: os não pulados na ordem original, depois os pulados na ordem em que foram pulados.
-  List<_Pendencia> _ordenar(List<_Pendencia> itens) {
-    final porId = {for (final i in itens) i.id: i};
-    return [
-      for (final i in itens)
-        if (!_pulados.contains(i.id)) i,
-      for (final id in _pulados)
-        if (porId[id] case final i?) i,
-    ];
-  }
-
   void _pular(String id) => setState(() => _pulados
     ..remove(id)
     ..add(id));
@@ -124,9 +129,12 @@ class _PendenciasPageState extends State<PendenciasPage> {
           builder: (context, _) {
             final avisos =
                 AjustesInicio.bancos ? meuBancoAvisos.value : const [];
-            final fila = _ordenar(_itens());
+            final itens = _itens();
+            final fila = ordenarPulados(itens, _pulados, (i) => i.id);
             return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+              // Folga no fim: o "Pular" do último cartão nunca encosta na faixa da versão.
+              padding: const EdgeInsets.fromLTRB(
+                  20, 16, 20, 120 + mbAlturaFaixaVersao),
               children: [
                 Text('Pendências', style: EdTexto.h1(context)),
                 const SizedBox(height: 16),
@@ -141,7 +149,9 @@ class _PendenciasPageState extends State<PendenciasPage> {
                     Expanded(
                         child: Text(fila.first.rotulo,
                             style: EdTexto.rotulo(context))),
-                    Text('1 de ${fila.length}', style: EdTexto.rotulo(context)),
+                    Text(
+                        '${itens.indexOf(fila.first) + 1} de ${fila.length}',
+                        style: EdTexto.rotulo(context)),
                   ]),
                   const SizedBox(height: 10),
                   _CartaoTriagem(

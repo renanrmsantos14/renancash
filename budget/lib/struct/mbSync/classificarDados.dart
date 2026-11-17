@@ -1,5 +1,5 @@
 // Fila "Para classificar" (ver classificar.dart): leitura do Drift, sugestões da IA do Meu Banco e confirmação.
-// Estado local em mb_estado: `ia_desde` (quando a fila começou), `ia_revisados` (pks já decididos) e
+// Estado local em mb_estado: `ia_novos_desde` (quando a fila foi instalada), `ia_revisados` (pks já decididos) e
 // `ia_padroes` (confirmações por favorecido). Nada disso sobe para o servidor; a categoria confirmada sobe como ajuste.
 import 'dart:async';
 import 'dart:convert';
@@ -11,11 +11,14 @@ import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
 import 'package:budget/struct/mbSync/revisao.dart';
+import 'package:budget/struct/meuBancoMapping.dart' show mbPrefixo;
 import 'package:budget/struct/meuBancoSync.dart';
+import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeDaCategoria;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
-const String _chaveDesde = 'ia_desde';
+const String _chaveDesde = 'ia_novos_desde';
+const String _chaveDesdeAntiga = 'ia_desde'; // v5.4.41: primeira abertura − 7 dias (pegava histórico)
 const String _chaveRevisados = 'ia_revisados';
 const String _chavePadroes = 'ia_padroes';
 final DateTime _editadoDesde = DateTime.utc(2001); // igual a meuBancoSync: antes disso é "sem edição"
@@ -29,9 +32,15 @@ final ValueNotifier<Map<String, MbSugestao>> meuBancoSugestoes = ValueNotifier(c
 /// null: ainda não tentou; true: a IA respondeu; false: sem internet, sem pareamento ou IA indisponível.
 final ValueNotifier<bool?> meuBancoIaOk = ValueNotifier(null);
 
+/// Situação do pedido à IA por pk, para o cartão mostrar (sai quando chega a sugestão).
+enum MbEstadoIa { pedindo, semSugestao, falhou }
+
+final ValueNotifier<Map<String, MbEstadoIa>> meuBancoIaEstado = ValueNotifier(const {});
+
 // Lidos a cada mbAtualizarClassificar; os testes de tela preenchem direto.
 MbOpcoes mbOpcoesClassificar = const MbOpcoes();
 List<MbPadrao> mbPadroesClassificar = const [];
+MbUso mbUsoClassificar = const MbUso();
 
 Future<Set<String>> _lerRevisados() async {
   try {
@@ -42,11 +51,12 @@ Future<Set<String>> _lerRevisados() async {
   }
 }
 
+/// Marco dos "novos", gravado na primeira execução. Quem já tinha o marco antigo volta ao dia da instalação.
 Future<DateTime> _lerDesde() async {
   final salvo = DateTime.tryParse(await mbLerEstado(_chaveDesde) ?? '');
   if (salvo != null) return salvo;
-  final n = DateTime.now();
-  final desde = DateTime(n.year, n.month, n.day - mbDiasFolgaFila);
+  final antigo = DateTime.tryParse(await mbLerEstado(_chaveDesdeAntiga) ?? '');
+  final desde = mbMarcoNovos(antigo, DateTime.now());
   await mbGravarEstado({_chaveDesde: desde.toIso8601String()});
   return desde;
 }
@@ -57,7 +67,7 @@ Future<MbOpcoes> _carregarOpcoes(List<TransactionCategory> cats) async {
       .get();
   return MbOpcoes.montar([
     for (final c in cats)
-      CatLocal(pk: c.categoryPk, nome: c.name, receita: c.income, paiPk: c.mainCategoryPk)
+      CatLocal(pk: c.categoryPk, nome: nomeDaCategoria(c), receita: c.income, paiPk: c.mainCategoryPk)
   ], [
     for (final o in objetivos)
       MbVinculoOpcao(o.objectivePk, o.name, o.type == ObjectiveType.loan ? 'emprestimo' : 'meta')
@@ -76,12 +86,12 @@ Future<void> mbAtualizarClassificar() async {
     final carteiras = {
       for (final w in await database.select(database.wallets).get()) w.walletPk: w.name
     };
-    final nomes = {for (final c in cats) c.categoryPk: c.name};
-    final txs = await (database.select(database.transactions)
-          ..where((t) => t.transactionPk.like('mb:%')))
-        .get();
+    final nomes = {for (final c in cats) c.categoryPk: nomeDaCategoria(c)};
+    final txs = await database.select(database.transactions).get();
+    mbUsoClassificar = MbUso.de([for (final t in txs) (descricao: t.name, categoriaPk: t.categoryFk)]);
     final lancamentos = <MbLancamentoIa>[];
     for (final t in txs) {
+      if (!t.transactionPk.startsWith(mbPrefixo)) continue;
       final revisao = servidor[t.transactionPk];
       if (revisao != null && revisao.tipo != 'pix_enviado') continue;
       lancamentos.add(MbLancamentoIa(
@@ -128,30 +138,54 @@ Future<void> mbPedirSugestoes(List<MbLancamentoIa> proximos) async {
   ].take(mbLoteIa).toList();
   if (lote.isEmpty || mbOpcoesClassificar.categorias.isEmpty) return;
   _pedidos.addAll(lote.map((l) => l.pk));
+  _marcarIa(lote, (_) => MbEstadoIa.pedindo);
+  void falhou() {
+    // Tenta de novo na próxima vez que o cartão abrir.
+    _pedidos.removeAll(lote.map((l) => l.pk));
+    meuBancoIaOk.value = false;
+    _marcarIa(lote, (_) => MbEstadoIa.falhou);
+  }
+
   try {
     final cliente = await mbClienteConfigurado();
     if (cliente == null) {
-      meuBancoIaOk.value = false;
+      falhou();
       return;
     }
     final r = await cliente.iaSugerir({
       'contexto': mbOpcoesClassificar.contexto(mbExemplosPara(lote, mbPadroesClassificar)),
       'lancamentos': [for (final l in lote) l.toJson()],
     });
+    if (r['ia'] == false) {
+      falhou(); // Worker sem a IA ou modelo com erro
+      return;
+    }
     final porPk = {for (final l in lote) l.pk: l};
     final novas = <String, MbSugestao>{
       for (final j in (r['sugestoes'] as List? ?? const []))
         if (porPk[j is Map ? j['id'] : null] case final l?)
           if (MbSugestao.daIa(j, mbOpcoesClassificar, l) case final s?) l.pk: s
     };
-    meuBancoIaOk.value = r['ia'] != false;
+    meuBancoIaOk.value = true;
     meuBancoSugestoes.value = {...meuBancoSugestoes.value, ...novas};
+    _marcarIa(lote, (l) => novas.containsKey(l.pk) ? null : MbEstadoIa.semSugestao);
   } catch (e) {
-    // Sem internet, Worker antigo (404/405) ou erro: segue com os padrões locais e tenta de novo na próxima abertura.
-    _pedidos.removeAll(lote.map((l) => l.pk));
-    meuBancoIaOk.value = false;
+    // Sem internet, Worker antigo (404/405), token revogado (401), timeout: segue com os padrões locais.
+    falhou();
     if (kDebugMode) debugPrint('Meu Banco: IA indisponível: $e');
   }
+}
+
+void _marcarIa(List<MbLancamentoIa> lote, MbEstadoIa? Function(MbLancamentoIa) estado) {
+  final m = {...meuBancoIaEstado.value};
+  for (final l in lote) {
+    if (estado(l) case final e?) {
+      m[l.pk] = e;
+    } else {
+      m.remove(l.pk);
+    }
+  }
+  meuBancoIaEstado.value = m;
 }
 
 /// Explicação do usuário em texto livre → o que a IA entendeu (para ele confirmar). null: não entendeu ou sem IA.
