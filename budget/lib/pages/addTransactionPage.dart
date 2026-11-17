@@ -1,5 +1,6 @@
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
+import 'package:budget/widgets/editorial/reembolsoConta.dart' show VinculoReembolso;
 import 'package:budget/database/generatePreviewData.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
@@ -1495,6 +1496,8 @@ class _AddTransactionPageState extends State<AddTransactionPage>
                 selecionados: selectedOrcamentos,
                 aoMudar: (novo) => setState(() => selectedOrcamentos = novo),
               ),
+              if (widget.transaction != null)
+                VinculoReembolso(transacao: widget.transaction!),
               SelectAddedBudget(
                 selectedBudgetPk: selectedBudgetPk,
                 setSelectedBudget: setSelectedBudgetPk,

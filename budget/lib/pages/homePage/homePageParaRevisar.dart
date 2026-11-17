@@ -15,6 +15,7 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
+import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado, semGastoReembolso;
 import 'package:flutter/material.dart';
 
 const _rotulos = {
@@ -170,7 +171,7 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     }
   }
 
-  // Reembolso: o usuário confirma qual gasto dos últimos 15 dias foi reembolsado (ou nenhum). Fechar a folha não responde.
+  // Reembolso: o usuário confirma qual gasto dos últimos 30 dias foi reembolsado (ou nenhum). Fechar a folha não responde.
   Future<void> _escolherReembolso() async {
     if (_enviando || _escolhendo) return;
     _escolhendo = true;
@@ -184,15 +185,11 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
   Future<void> _escolherReembolsoSemTrava() async {
     final sugestoes = await mbSugestoesDoItem(widget.item);
     if (!mounted) return;
-    final data = DateTime.tryParse(widget.item.data ?? '');
-    final escolha = await openBottomSheet(
-      context,
-      PopupFramework(
-        title: 'Qual gasto foi reembolsado?',
-        subtitle: '${brl(widget.item.valor)}${data == null ? '' : ' · ${diaMes(data)}'}',
-        child: SugestoesReembolso(sugestoes: sugestoes),
-      ),
-    );
+    final escolha = await mbEscolherGastoRachado(context,
+        sugestoes: sugestoes,
+        valor: widget.item.valor,
+        data: DateTime.tryParse(widget.item.data ?? '') ?? DateTime.now(),
+        comNenhum: true);
     if (escolha is MbGastoCandidato) {
       await _responder('reembolso', reembolsoDe: escolha.pk.substring(mbPrefixo.length));
     } else if (escolha == semGastoReembolso) {
@@ -279,86 +276,5 @@ class BotaoEscolha extends StatelessWidget {
                     .copyWith(fontWeight: FontWeight.w500)),
           ),
         ));
-  }
-}
-
-const String semGastoReembolso = 'sem_gasto';
-
-/// Lista de gastos dos últimos 15 dias para confirmar o reembolso: valor igual ou próximo primeiro (mais recentes antes);
-/// "Ver todos" mostra também os de valor diferente.
-class SugestoesReembolso extends StatefulWidget {
-  const SugestoesReembolso({super.key, required this.sugestoes});
-  final List<MbSugestaoReembolso> sugestoes;
-
-  @override
-  State<SugestoesReembolso> createState() => _SugestoesReembolsoState();
-}
-
-class _SugestoesReembolsoState extends State<SugestoesReembolso> {
-  bool _todos = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final cor = Theme.of(context).colorScheme;
-    final parecidos = [
-      for (final s in widget.sugestoes)
-        if (s.afinidade != MbAfinidadeReembolso.outro) s
-    ];
-    final outros = widget.sugestoes.length - parecidos.length;
-    final lista = _todos ? widget.sugestoes : parecidos;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (lista.isEmpty)
-        Padding(
-          padding: const EdgeInsetsDirectional.only(bottom: 12),
-          child: TextFont(
-              text: widget.sugestoes.isEmpty
-                  ? 'Nenhum gasto nos últimos $mbJanelaReembolsoDias dias.'
-                  : 'Nenhum gasto com valor parecido nos últimos $mbJanelaReembolsoDias dias.',
-              fontSize: 14,
-              textColor: getColor(context, "textLight")),
-        ),
-      for (final s in lista)
-        InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => popRoute(context, s.gasto),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(vertical: 10, horizontal: 4),
-            child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  TextFont(text: s.gasto.nome, fontSize: 15, fontWeight: FontWeight.bold, maxLines: 1),
-                  TextFont(
-                      text: [
-                        diaMes(s.gasto.data),
-                        if (s.gasto.categoria.isNotEmpty) s.gasto.categoria,
-                        if (s.afinidade == MbAfinidadeReembolso.igual) 'mesmo valor',
-                      ].join(' · '),
-                      fontSize: 13,
-                      textColor: getColor(context, "textLight")),
-                ]),
-              ),
-              TextFont(text: brl(s.gasto.valor), fontSize: 15, fontWeight: FontWeight.bold),
-            ]),
-          ),
-        ),
-      const SizedBox(height: 8),
-      if (!_todos && outros > 0) ...[
-        Button(
-          label: 'Ver todos os gastos ($outros a mais)',
-          onTap: () => setState(() => _todos = true),
-          expandedLayout: true,
-          color: cor.secondaryContainer,
-          textColor: cor.onSecondaryContainer,
-        ),
-        const SizedBox(height: 8),
-      ],
-      Button(
-        label: 'Nenhum desses (abater em Outros)',
-        onTap: () => popRoute(context, semGastoReembolso),
-        expandedLayout: true,
-        color: cor.secondaryContainer,
-        textColor: cor.onSecondaryContainer,
-      ),
-    ]);
   }
 }

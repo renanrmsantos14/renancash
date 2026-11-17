@@ -493,6 +493,17 @@ Future<void> mbResponderRevisao(MbItemRevisao item, String resposta,
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
 }
 
+// Desliga um reembolso (ou desfaz qualquer resposta): apaga a decisão e o re-pull completo devolve a transação ao que o
+// banco diz. Item que vinha da fila do Worker volta para ela.
+Future<void> mbDesfazerRevisao(String txId, {MbCliente? clienteParaTeste}) async {
+  await mbCriarTabelas();
+  final agora = isoMs(DateTime.now());
+  await mbGravarEspelho([Espelho(Registro('revisoes', 'tx:$txId', null, agora, agora), null, true, null)]);
+  await mbGravarEstado({_chaveRepuxar: agora});
+  await mbAtualizarRevisar();
+  await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
+}
+
 // "Salário não detectado": marca a entrada escolhida como salário no servidor e sincroniza. Retorna o erro, se houver.
 Future<String?> mbMarcarSalario(String txId) async {
   try {

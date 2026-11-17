@@ -10,6 +10,7 @@ import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
+import 'package:budget/struct/mbSync/reembolso.dart' show mbItemDeEntrada;
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/meuBancoMapping.dart' show mbPrefixo;
 import 'package:budget/struct/meuBancoSync.dart';
@@ -226,12 +227,8 @@ Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha) asyn
           subPk: escolha.subPk, titulo: escolha.titulo, vinculoPk: vinculo?.pk));
   await mbGravarEstado({
     _chavePadroes: jsonEncode([for (final p in mbPadroesClassificar) p.toJson()]),
-    _chaveRevisados: jsonEncode([...await _lerRevisados(), l.pk]),
   });
-  meuBancoClassificar.value = [
-    for (final x in meuBancoClassificar.value)
-      if (x.pk != l.pk) x
-  ];
+  await _tirarDaFila(l.pk);
   final revisao = l.revisao;
   if (revisao != null) {
     // Mesma resposta da fila Para revisar: decisão e memória do destinatário (já sincroniza).
@@ -239,4 +236,20 @@ Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha) asyn
   } else {
     unawaited(sincronizarMeuBanco());
   }
+}
+
+Future<void> _tirarDaFila(String pk) async {
+  await mbGravarEstado({_chaveRevisados: jsonEncode([...await _lerRevisados(), pk])});
+  meuBancoClassificar.value = [
+    for (final x in meuBancoClassificar.value)
+      if (x.pk != pk) x
+  ];
+}
+
+/// "É a parte de uma conta que eu paguei": liga a entrada ao gasto (decisão "reembolso", sincronizada; o pull põe a
+/// entrada na categoria do gasto) e tira da fila.
+Future<void> mbConfirmarReembolso(MbLancamentoIa l, String gastoPk) async {
+  await _tirarDaFila(l.pk);
+  unawaited(mbResponderRevisao(mbItemDeEntrada(l.pk, l.valor, l.data, l.descricao), 'reembolso',
+      reembolsoDe: gastoPk.substring(mbPrefixo.length)));
 }

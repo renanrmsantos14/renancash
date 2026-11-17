@@ -4,6 +4,8 @@ import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
+import 'package:budget/struct/mbSync/reembolso.dart';
+import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado, mbNomeDoPagador;
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeSemEspacosRepetidos;
@@ -56,11 +58,15 @@ class _ItemClassificarState extends State<ItemClassificar> {
         _aviso = null;
       });
 
-  Future<void> _confirmar(MbSugestao s) async {
+  Future<void> _confirmar(MbSugestao s) => _salvar(() => mbConfirmarClassificacao(_l, s));
+
+  Future<void> _ligar(MbGastoCandidato g) => _salvar(() => mbConfirmarReembolso(_l, g.pk));
+
+  Future<void> _salvar(Future<void> Function() acao) async {
     if (_enviando) return;
     setState(() => _enviando = true);
     try {
-      await mbConfirmarClassificacao(_l, s);
+      await acao();
     } catch (_) {
       if (mounted) setState(() => _aviso = 'Não deu para salvar. Tente de novo.');
     } finally {
@@ -215,6 +221,10 @@ class _ItemClassificarState extends State<ItemClassificar> {
               ]),
             ],
             const SizedBox(height: 16),
+            if (_l.valor > 0) ...[
+              ParteDeConta(lancamento: _l, enviando: _enviando, aoLigar: _ligar),
+              const SizedBox(height: 12),
+            ],
             _Sugestao(
               lancamento: _l,
               sugestao: sugestao,
@@ -357,6 +367,84 @@ class _Sugestao extends StatelessWidget {
         const SizedBox(height: 10),
         _BotaoPrincipal(rotulo: 'Confirmar', onTap: enviando ? null : () => aoConfirmar(s)),
       ]),
+    );
+  }
+}
+
+/// Numa entrada: o gasto em destaque quando o casamento é forte (Pix = parte exata e sem empate) e, sempre, "É a parte
+/// de uma conta que eu paguei" com a lista para escolher. Nada é ligado sem o toque.
+class ParteDeConta extends StatefulWidget {
+  const ParteDeConta({super.key, required this.lancamento, required this.aoLigar, this.enviando = false});
+  final MbLancamentoIa lancamento;
+  final void Function(MbGastoCandidato) aoLigar;
+  final bool enviando;
+
+  @override
+  State<ParteDeConta> createState() => _ParteDeContaState();
+}
+
+class _ParteDeContaState extends State<ParteDeConta> {
+  MbLancamentoIa get _l => widget.lancamento;
+  late final Future<List<MbSugestaoReembolso>> _candidatos =
+      mbBuscarCandidatosReembolso(_l.pk, _l.valor, _l.data, _l.descricao);
+
+  Future<void> _escolher(List<MbSugestaoReembolso> s) async {
+    final g = await mbEscolherGastoRachado(context, sugestoes: s, valor: _l.valor, data: _l.data);
+    if (g is MbGastoCandidato) widget.aoLigar(g);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return FutureBuilder<List<MbSugestaoReembolso>>(
+      future: _candidatos,
+      builder: (context, snap) {
+        final s = snap.data ?? const <MbSugestaoReembolso>[];
+        final forte = mbReembolsoForte(s);
+        final pagador = mbChavePadrao(_l.descricao);
+        final costuma = pagador.isNotEmpty && meuBancoReembolsos.value.any((v) => v.pagador == pagador);
+        final abrir = widget.enviando || snap.connectionState != ConnectionState.done ? null : () => _escolher(s);
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Icon(Icons.call_split_rounded, size: 14, color: e.acc),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                    forte != null
+                        ? 'Parece a parte de uma conta que você pagou'
+                        : costuma
+                            ? '${mbNomeDoPagador(pagador)} já mandou a parte de outras contas'
+                            : 'Rachou uma conta?',
+                    style: EdTexto.rotulo(context)),
+              ),
+            ]),
+            if (forte != null) ...[
+              const SizedBox(height: 8),
+              Text(forte.gasto.nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+              Text(
+                  [
+                    diaMes(forte.gasto.data),
+                    if (forte.gasto.categoria.isNotEmpty) forte.gasto.categoria,
+                    '${forte.motivos.first} de ${brl(forte.gasto.valor)}',
+                  ].join(' · '),
+                  style: EdTexto.rotulo(context)),
+              const SizedBox(height: 10),
+              _BotaoPrincipal(
+                  rotulo: 'Confirmar', onTap: widget.enviando ? null : () => widget.aoLigar(forte.gasto)),
+            ],
+            _Linha(
+                icone: Icons.receipt_long_rounded,
+                texto: forte != null ? 'É de outra conta' : 'É a parte de uma conta que eu paguei',
+                onTap: abrir),
+          ]),
+        );
+      },
     );
   }
 }
