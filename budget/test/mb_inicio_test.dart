@@ -175,7 +175,8 @@ void main() {
     expect(find.text('Para gastar no ciclo'), findsOneWidget);
     expect(find.text('R\$ 3.700,00'), findsOneWidget);
     expect(find.text('Gasto R\$ 1.300,00 de R\$ 5.000,00'), findsOneWidget);
-    expect(find.text('faltam 16 dias'), findsOneWidget);
+    // Hoje conta, como no cartão do orçamento: 16 dias depois de hoje + hoje.
+    expect(find.text('faltam 17 dias'), findsOneWidget);
     // 3.700 / 17 dias (hoje conta).
     expect(find.text('Pode gastar R\$ 217,65/dia'), findsOneWidget);
     expect(find.text('Contas'), findsOneWidget);

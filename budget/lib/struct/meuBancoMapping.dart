@@ -239,7 +239,6 @@ const Map<String, String> mbMapaCategorias = {
   "d:Faculdade": "Educação",
   "d:Cursos online": "Educação",
   "d:IOF": "Tarifas",
-  "d:Família": "Santander Pai",
   "r:Juros cobrados": "Investimentos",
   "r:Rendimentos e dividendos": "Investimentos",
 };
