@@ -1,4 +1,5 @@
 import 'package:budget/pages/meuBancoPage.dart';
+import 'package:budget/pages/arrumarDadosPage.dart';
 import 'package:budget/colors.dart';
 import 'package:budget/pages/aparenciaPage.dart';
 import 'package:budget/struct/editorial.dart';
@@ -296,6 +297,12 @@ List<Widget> configuracoesItens(BuildContext context) {
       isOutlinedButton: false,
       forceButtonName: "Backup no Google Drive",
       description: "Cópia dos seus dados na sua conta Google",
+    ),
+    SettingsContainerOpenPage(
+      openPage: const ArrumarDadosPage(),
+      title: "Arrumar dados",
+      description: "Repetidos, categorias e carteiras antigas",
+      icon: contorno ? Icons.cleaning_services_outlined : Icons.cleaning_services_rounded,
     ),
     ExportDB(),
     ImportDB(),

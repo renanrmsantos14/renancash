@@ -2,6 +2,7 @@
 // Espelha public/regras.js do painel do Meu Banco (CATEGORIAS, traduzir, naoEhGasto, valorGasto).
 
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
+import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 
 const String mbPrefixo = "mb:";
@@ -198,6 +199,88 @@ final Map<String, String> _categoriaPropriaPorPluggy = {
 String mbCategoriaPropria(String? pluggy) =>
     _categoriaPropriaPorPluggy[pluggy] ?? mbCategoriaOutros;
 
+// Mapa permanente das categorias do Meu Banco para as do usuário ("Pai › Sub"). Vale para os lançamentos já
+// importados ("Arrumar dados") e para os próximos pulls. Chave: "d:" (despesa) ou "r:" (receita) + nome da
+// categoria do Meu Banco (tradução da Pluggy ou categoria própria). O que não está aqui fica como vem.
+const Map<String, String> mbMapaCategorias = {
+  "d:Táxi e aplicativos": "Transporte › Uber",
+  "d:Transporte público": "Transporte › Ônibus",
+  "d:Combustível": "Transporte › Combustível",
+  "d:Estacionamento": "Transporte › Estacionamento",
+  "d:Pedágio e tag": "Transporte › Pedágio",
+  "d:Automotivo": "Transporte › Manutenção",
+  "d:Manutenção do veículo": "Transporte › Manutenção",
+  "d:Transporte": "Transporte",
+  "d:Delivery": "Alimentação › Delivery",
+  "d:Restaurantes": "Alimentação › Restaurante",
+  "d:Alimentação": "Alimentação",
+  "d:Alimentação fora": "Alimentação",
+  "d:Supermercado": "Moradia › Mercado",
+  "d:Mercado": "Moradia › Mercado",
+  "d:Casa": "Moradia",
+  "d:Moradia": "Moradia",
+  "d:Aluguel": "Moradia › Aluguel",
+  "d:Energia": "Moradia › Energia",
+  "d:Água": "Moradia › Água",
+  "d:Gás": "Moradia › Gás",
+  "d:Internet": "Moradia › Internet",
+  "d:Telecomunicações": "Moradia › Internet",
+  "d:Streaming de vídeo": "Assinaturas",
+  "d:Streaming de música": "Assinaturas",
+  "d:Serviços digitais": "Assinaturas",
+  "d:Farmácia": "Saúde",
+  "d:Hospitais, clínicas e exames": "Saúde",
+  "d:Dentista": "Saúde",
+  "d:Ótica": "Saúde",
+  "d:Lazer": "Lazer",
+  "d:Eletrônicos": "Compras",
+  "d:Compras online": "Compras",
+  "d:Roupas": "Compras",
+  "d:Faculdade": "Educação",
+  "d:Cursos online": "Educação",
+  "d:IOF": "Tarifas",
+  "d:Família": "Santander Pai",
+  "r:Juros cobrados": "Investimentos",
+  "r:Rendimentos e dividendos": "Investimentos",
+};
+
+String mbChaveDestino(bool receita, String nome) => "${receita ? "r" : "d"}:$nome";
+
+class MbDestino {
+  final String pk, nome;
+  final String? subPk, subNome;
+  const MbDestino(this.pk, this.nome, [this.subPk, this.subNome]);
+  String get rotulo => subNome == null ? nome : "$nome › $subNome";
+}
+
+// Resolve o mapa nas categorias locais pelo nome (sem caixa): pai do mesmo tipo, preferindo a do usuário à `mb:`;
+// sub pelo nome dentro do pai (sem ela, só o pai). Pai inexistente: a entrada fica de fora.
+Map<String, MbDestino> mbResolverDestinos(Iterable<CatLocal> categorias,
+    {Map<String, String> mapa = mbMapaCategorias}) {
+  final out = <String, MbDestino>{};
+  for (final e in mapa.entries) {
+    final receita = e.key.startsWith("r:");
+    final partes = e.value.split(" › ");
+    CatLocal? pai;
+    for (final c in categorias) {
+      if (c.paiPk != null ||
+          c.receita != receita ||
+          c.nome.toLowerCase() != partes[0].toLowerCase()) continue;
+      if (pai == null || pai.pk.startsWith(mbPrefixo)) pai = c;
+    }
+    if (pai == null) continue;
+    final paiPk = pai.pk;
+    final sub = partes.length < 2
+        ? null
+        : categorias
+            .where((c) =>
+                c.paiPk == paiPk && c.nome.toLowerCase() == partes[1].toLowerCase())
+            .firstOrNull;
+    out[e.key] = MbDestino(paiPk, pai.nome, sub?.pk, sub?.nome);
+  }
+  return out;
+}
+
 String mbTraduzirCategoria(String? c) {
   if (c == null || c.isEmpty) return "Sem categoria";
   return mbCategorias[c] ?? c;
@@ -296,6 +379,8 @@ class MbTransacao {
   final String carteiraPk;
   final String categoriaNome;
   final String categoriaPk;
+  // Só vale na primeira importação: depois a subcategoria é do usuário.
+  final String? subcategoriaPk;
   final bool pendente;
   // Estorno e cashback entram como valor positivo numa categoria de despesa, para abater o gasto.
   MbTransacao abatendo(String categoriaNome, String categoriaPk) => MbTransacao(
@@ -313,6 +398,7 @@ class MbTransacao {
     required this.carteiraPk,
     required this.categoriaNome,
     required this.categoriaPk,
+    this.subcategoriaPk,
     required this.pendente,
   });
 }
@@ -380,7 +466,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         pkCategoria,
     List<MbCompra> compras = const [],
     List<MbCompra> abatimentos = const [],
-    MbRevisoes revisoes = const MbRevisoes()}) {
+    MbRevisoes revisoes = const MbRevisoes(),
+    Map<String, MbDestino> destinos = const {}}) {
   final contas = <MbConta>[];
   final brutas = <Map<String, dynamic>>[];
   final cartoes = <String, bool>{};
@@ -474,6 +561,15 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         categoriaId = revisoes.categoriaId(id, rev!);
       }
     }
+    // Mapa do usuário (mbMapaCategorias): só para categoria automática (sem ajuste, regra, Pluggy do painel nem
+    // resposta da fila). Vale primeiro a categoria do banco; a do envio ao Santander é a de ajuda.
+    final especial = envioSantander || rev?.tipo == 'pix_enviado';
+    final peloMapa = (ef.fonte == 'nome' || ef.fonte == 'banco') &&
+        !(especial && categoriaId != null);
+    final destino = !peloMapa
+        ? null
+        : (especial ? null : destinos[mbChaveDestino(receita, mbTraduzirCategoria(categoria))]) ??
+            destinos[mbChaveDestino(receita, nomeCategoria)];
     final pendente = t["status"] == "PENDING";
     final nome = descricao.trim().isEmpty ? "Sem descrição" : descricao.trim();
     // Reembolso e renda decididos na fila não são estorno automático (reembolso abate abaixo, renda é receita).
@@ -490,8 +586,9 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
       nota: pendente ? "Pendente" : "",
       data: _parseData(t["date"] as String?),
       carteiraPk: mbPkConta(contaId),
-      categoriaNome: nomeCategoria,
-      categoriaPk: pkCategoria(categoriaId, nomeCategoria, receita),
+      categoriaNome: destino?.nome ?? nomeCategoria,
+      categoriaPk: destino?.pk ?? pkCategoria(categoriaId, nomeCategoria, receita),
+      subcategoriaPk: destino?.subPk,
       pendente: pendente,
     );
     // Reembolso abate o gasto como estorno, não entra como renda: o gasto confirmado pelo usuário (se houver)
@@ -534,7 +631,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         mbCategoriaOutros,
         mbCategoriaAClassificar
       ])
-        n: pkCategoria(null, n, false)
+        if (!destinos.containsKey(mbChaveDestino(false, n)))
+          n: pkCategoria(null, n, false)
     },
     investimentos: json["investimentos"] is List
         ? [

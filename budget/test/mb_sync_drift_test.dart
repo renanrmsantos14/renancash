@@ -720,4 +720,39 @@ void main() {
       expect(await mbOrcamentosDaTransacao('l8'), isNull);
     });
   });
+
+  test('mapa de categorias: importação vai para Pai › Sub e o pull não desfaz título nem escolha local', () async {
+    await _categoria('4', 'Transporte');
+    await database.into(database.categories).insert(CategoriesCompanion.insert(
+        categoryPk: const Value('uber'),
+        name: 'Uber',
+        order: 0,
+        mainCategoryPk: const Value('4')));
+    await _categoria('c1', 'Trabalho');
+    cliente.extra = {
+      'contas': [
+        {'id': 'a1', 'type': 'BANK', 'name': 'Conta'}
+      ],
+      'transacoes': [
+        {'id': 't1', 'account_id': 'a1', 'date': '2025-01-10', 'description': 'UBER TRIP', 'amount': -18.0, 'category': 'Taxi and ride-hailing', 'status': 'POSTED'}
+      ],
+    };
+    await sync();
+    var t = (await _txs()).single;
+    expect([t.categoryFk, t.subCategoryFk, t.name], ['4', 'uber', 'UBER TRIP']);
+
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('mb:t1')))
+        .write(TransactionsCompanion(
+            name: const Value('Uber para o cliente'),
+            categoryFk: const Value('c1'),
+            subCategoryFk: const Value(null),
+            dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.singleWhere((r) => r.tabela == 'ajustes').dados!['categoria_id'], 'cashew:c1');
+    await sync();
+    t = (await _txs()).single;
+    expect([t.categoryFk, t.subCategoryFk, t.name], ['c1', null, 'Uber para o cliente']);
+  });
 }

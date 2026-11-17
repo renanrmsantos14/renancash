@@ -593,6 +593,18 @@ class WalletWithDetails {
   });
 }
 
+// Carteiras arquivadas ("Arrumar dados"): somem das listas, dos seletores e dos totais sem filtro de carteira.
+// Nada é apagado; o detalhe filtrado pela própria carteira continua mostrando os lançamentos.
+Set<String> carteirasArquivadas() =>
+    {...((appStateSettings["carteirasArquivadas"] as List?) ?? const []).cast<String>()};
+
+List<TransactionWallet> _semArquivadas(List<TransactionWallet> lista) {
+  final arquivadas = carteirasArquivadas();
+  return arquivadas.isEmpty
+      ? lista
+      : lista.where((w) => !arquivadas.contains(w.walletPk)).toList();
+}
+
 class AllWallets {
   final List<TransactionWallet> list;
   final Map<String, TransactionWallet> indexedByPk;
@@ -2388,7 +2400,7 @@ class FinanceDatabase extends _$FinanceDatabase {
         for (TransactionWallet wallet in wallets) wallet.walletPk: wallet,
       };
       return AllWallets(
-        list: wallets,
+        list: _semArquivadas(wallets),
         indexedByPk: indexedByPk,
       );
     });
@@ -2402,7 +2414,8 @@ class FinanceDatabase extends _$FinanceDatabase {
               : w.name.collate(Collate.noCase).like("%" + (searchFor) + "%")))
           ..orderBy([(w) => OrderingTerm.asc(w.order)])
           ..limit(limit ?? DEFAULT_LIMIT, offset: offset ?? DEFAULT_OFFSET))
-        .watch();
+        .watch()
+        .map(_semArquivadas);
   }
 
   Stream<List<WalletWithDetails>> watchAllWalletsWithDetails(
@@ -2440,13 +2453,18 @@ class FinanceDatabase extends _$FinanceDatabase {
       ..groupBy(mergeLikeCurrencies ? [wallets.currency] : [wallets.walletPk])
       ..addColumns([totalCount, totalSpent]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return WalletWithDetails(
-            wallet: row.readTable(wallets),
-            numberTransactions: row.read(totalCount),
-            totalSpent: row.read(totalSpent),
-          );
-        }).toList());
+    return query.watch().map((rows) {
+      final arquivadas = carteirasArquivadas();
+      return [
+        for (final row in rows)
+          if (!arquivadas.contains(row.readTable(wallets).walletPk))
+            WalletWithDetails(
+              wallet: row.readTable(wallets),
+              numberTransactions: row.read(totalCount),
+              totalSpent: row.read(totalSpent),
+            )
+      ];
+    });
   }
 
   Stream<List<ScannerTemplate>> watchAllScannerTemplates(
@@ -6340,9 +6358,11 @@ class FinanceDatabase extends _$FinanceDatabase {
 
   Expression<bool> onlyShowBasedOnWalletFks(
       $TransactionsTable tbl, List<String>? walletFks) {
-    return (walletFks != null && walletFks.length > 0
-        ? tbl.walletFk.isIn(walletFks)
-        : Constant(true));
+    if (walletFks != null && walletFks.length > 0) {
+      return tbl.walletFk.isIn(walletFks);
+    }
+    final arquivadas = carteirasArquivadas();
+    return arquivadas.isEmpty ? Constant(true) : tbl.walletFk.isNotIn(arquivadas);
   }
 
   Expression<bool> onlyShowBasedOnMethodAdded(
@@ -7271,7 +7291,10 @@ class FinanceDatabase extends _$FinanceDatabase {
                 onlyShowIfCertainBudget(
                     tbl, onlyShowTransactionsBelongingToBudgetPk) &
                 onlyShowBasedOnWalletFks(tbl, walletPks) &
-                onlyShowBasedOnWalletFks(tbl, budget?.walletFks) &
+                // Sem orçamento, o filtro acima já basta (e mantém a carteira arquivada pedida em walletPks).
+                (budget == null
+                    ? Constant(true)
+                    : onlyShowBasedOnWalletFks(tbl, budget.walletFks)) &
                 onlyShowBasedOnIncome(tbl, isIncome);
           })
           ..orderBy([(t) => OrderingTerm.desc(t.dateCreated)]))
