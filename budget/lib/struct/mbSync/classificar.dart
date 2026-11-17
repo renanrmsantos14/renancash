@@ -48,6 +48,9 @@ const int mbLoteIa = 8; // igual a MAX_LANCAMENTOS do Worker
 final RegExp _prefixoBanco = RegExp(
     r'^(?:PIX (?:ENVIAD[OA]|ENVIO|RECEBID[OA]|RECEBIMENTO)|(?:TED|DOC|TRANSFERENCIA)(?: (?:ENVIAD[OA]|RECEBID[OA]))?|PAGAMENTO(?: DE)?|PAG|COMPRA(?: NO)?(?: (?:DEBITO|CREDITO))?)\b ?');
 
+/// Texto que o banco escreve ("PIX ENVIADO - …", "COMPRA NO DEBITO - …"), não um título dado pelo usuário.
+bool mbTextoDoBanco(String descricao) => _prefixoBanco.hasMatch(mbNormalizarRevisao(descricao));
+
 /// Favorecido/estabelecimento normalizado: sem acento, número, pontuação e prefixo do banco ("PIX ENVIADO", "COMPRA"),
 /// até 4 palavras. "PIX ENVIADO - Fabiana Silva 123" e "Pix enviado Fabiana Silva" viram "FABIANA SILVA".
 String mbChavePadrao(String descricao) => mbNormalizarRevisao(descricao)
@@ -244,7 +247,7 @@ List<MbPadrao> mbExemplosPara(Iterable<MbLancamentoIa> lote, List<MbPadrao> padr
   ].take(mbMaxExemplos).toList();
 }
 
-enum MbFonteSugestao { ia, padrao, atual, usuario }
+enum MbFonteSugestao { ia, padrao, atual, usuario, mesPassado }
 
 /// Sugestão para um lançamento (da IA, de um padrão ou a categoria atual) e também a escolha final do usuário.
 class MbSugestao {

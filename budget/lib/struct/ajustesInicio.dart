@@ -20,6 +20,8 @@ abstract final class AjustesInicio {
   static bool get ritmoDiario => appStateSettings['inicioRitmoDiario'] != false;
   static bool get saldoContas => appStateSettings['inicioSaldoContas'] != false;
   static bool get atalhos => appStateSettings['inicioAtalhos'] != false;
+  static bool get lancamentoRapido =>
+      appStateSettings['inicioLancamentoRapido'] != false;
   static bool get poupancasJuntas =>
       appStateSettings['inicioPoupancasJuntas'] != false;
 

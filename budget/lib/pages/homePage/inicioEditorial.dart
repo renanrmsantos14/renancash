@@ -14,6 +14,7 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart' show MbAtalhoRapido;
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
@@ -23,6 +24,7 @@ import 'package:budget/struct/ritmoCiclo.dart' show textoIdealHoje;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/budgetContainer.dart' show BarraOrcamento;
+import 'package:budget/widgets/editorial/lancamentoRapido.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart' show abrirTransacao;
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -136,6 +138,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
               onDefinirLimite:
                   _real ? () => mbAbrirOrcamentoCiclo(context, editar: true) : null,
             ),
+          if (_real) const LancamentoRapidoInicio(),
           if (_real) const AtalhosInicio(),
           if (_real) const MetasEmprestimosInicio(),
           if (m.contas.isNotEmpty)
@@ -289,6 +292,112 @@ class AtalhosInicio extends StatelessWidget {
           );
         },
       );
+}
+
+/// Os gastos que mais se repetem nos últimos 90 dias (título, categoria e valor mais comum), até 6, em grade de 3:
+/// um toque abre o teclado de valor já preenchido e "Lançar" grava. Some sem atalhos ou com Configurações › Início ›
+/// Mostrar lançamento rápido desligado.
+class LancamentoRapidoInicio extends StatefulWidget {
+  const LancamentoRapidoInicio({super.key, this.atalhos});
+  final List<MbAtalhoRapido>? atalhos; // prints: sem banco
+
+  @override
+  State<LancamentoRapidoInicio> createState() => _LancamentoRapidoInicioState();
+}
+
+class _LancamentoRapidoInicioState extends State<LancamentoRapidoInicio> {
+  late List<MbAtalhoRapido> _atalhos = widget.atalhos ?? const [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.atalhos != null) return;
+    _carregar();
+    meuBancoUltimaSync.addListener(_carregar);
+  }
+
+  @override
+  void dispose() {
+    meuBancoUltimaSync.removeListener(_carregar);
+    super.dispose();
+  }
+
+  Future<void> _carregar() async {
+    try {
+      final a = await mbCarregarAtalhosRapidos();
+      if (mounted) setState(() => _atalhos = a);
+    } catch (_) {} // sem atalhos: a seção some
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: mbAjustesMudaram,
+        builder: (context, _) {
+          if (!AjustesInicio.lancamentoRapido || _atalhos.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return _Secao(
+            titulo: 'Lançar rápido',
+            divisores: false,
+            filhos: [
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: LayoutBuilder(
+                  builder: (context, c) => Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final a in _atalhos)
+                      SizedBox(
+                        width: (c.maxWidth - 16) / 3,
+                        child: _AtalhoRapido(
+                            atalho: a,
+                            onTap: () async {
+                              if (await mbLancarRapido(context, a)) _carregar();
+                            }),
+                      ),
+                  ]),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+}
+
+class _AtalhoRapido extends StatelessWidget {
+  const _AtalhoRapido({required this.atalho, required this.onTap});
+  final MbAtalhoRapido atalho;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final titulo = mbTituloAtalho(atalho.titulo);
+    return Semantics(
+      button: true,
+      label: 'Lançar $titulo, ${brl(atalho.valor)}',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: ToqueEscala(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(color: e.chip, borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(titulo,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500, height: 1.2)),
+              const SizedBox(height: 4),
+              Text(brl(atalho.valor), style: EdTexto.mono(context).copyWith(color: e.mu)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Atalho extends StatelessWidget {

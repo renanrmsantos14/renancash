@@ -1,6 +1,7 @@
 import 'package:budget/functions.dart' show popRoute;
 import 'package:budget/pages/homePage/homePageParaRevisar.dart' show BotaoEscolha;
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart';
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
@@ -16,6 +17,7 @@ const _rotuloFonte = {
   MbFonteSugestao.padrao: 'Como você já respondeu',
   MbFonteSugestao.atual: 'Categoria do banco',
   MbFonteSugestao.usuario: 'Sua escolha',
+  MbFonteSugestao.mesPassado: 'Como no mês passado',
 };
 
 /// Um lançamento da fila Para classificar: dados do banco, a sugestão em destaque com "Confirmar", alternativas em
@@ -61,6 +63,28 @@ class _ItemClassificarState extends State<ItemClassificar> {
   Future<void> _confirmar(MbSugestao s) => _salvar(() => mbConfirmarClassificacao(_l, s));
 
   Future<void> _ligar(MbGastoCandidato g) => _salvar(() => mbConfirmarReembolso(_l, g.pk));
+
+  /// Mostra a lista dos iguais antes; um toque em "Confirmar N" aplica a mesma escolha a todos.
+  Future<void> _aplicarIguais(MbSugestao s, List<MbLancamentoIa> iguais) async {
+    final cat = mbOpcoesClassificar.categoria(s.categoriaPk);
+    final sub = cat?.subs.where((x) => x.pk == s.subPk).firstOrNull;
+    final ok = await openBottomSheet(
+      context,
+      PopupFramework(
+        title: 'Aplicar a ${iguais.length} iguais',
+        subtitle: [
+          if (cat != null) sub == null ? cat.nome : '${cat.nome} › ${sub.nome}',
+          if (s.titulo != null) s.titulo!,
+        ].join(' · '),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (final x in iguais) _LinhaLancamento(lancamento: x),
+          const SizedBox(height: 12),
+          _BotaoPrincipal(rotulo: 'Confirmar ${iguais.length}', onTap: () => popRoute(context, true)),
+        ]),
+      ),
+    );
+    if (ok == true) await _salvar(() => mbConfirmarVarios(iguais, s));
+  }
 
   Future<void> _salvar(Future<void> Function() acao) async {
     if (_enviando) return;
@@ -180,7 +204,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
 
   /// O que aconteceu com o pedido à IA para este lançamento (null: a sugestão da IA já está na caixa).
   ({IconData icone, String texto})? _situacaoIa() {
-    if (meuBancoSugestoes.value[_l.pk]?.fonte == MbFonteSugestao.ia) return null;
+    final fonte = meuBancoSugestoes.value[_l.pk]?.fonte;
+    if (fonte == MbFonteSugestao.ia || fonte == MbFonteSugestao.mesPassado) return null;
     final estado = meuBancoIaEstado.value[_l.pk];
     if (estado == MbEstadoIa.falhou || meuBancoIaOk.value == false) {
       return (icone: Icons.cloud_off_rounded, texto: 'Sem IA agora: sugestões pelos seus padrões.');
@@ -202,6 +227,11 @@ class _ItemClassificarState extends State<ItemClassificar> {
         final sugestao = _escolha ?? meuBancoSugestoes.value[_l.pk];
         final alternativas = mbAlternativas(_l, sugestao?.categoriaPk, mbUsoClassificar, op);
         final situacaoIa = _situacaoIa();
+        final iguais = mbIguaisNaFila(meuBancoClassificar.value, _l);
+        // Salário e rendimento já vêm com a categoria do mês passado: sem "Rachou uma conta?" na frente.
+        final parteDeConta = _l.valor > 0 &&
+            !mbEhJurosPoupanca(_l) &&
+            meuBancoSugestoes.value[_l.pk]?.fonte != MbFonteSugestao.mesPassado;
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -221,7 +251,7 @@ class _ItemClassificarState extends State<ItemClassificar> {
               ]),
             ],
             const SizedBox(height: 16),
-            if (_l.valor > 0) ...[
+            if (parteDeConta) ...[
               ParteDeConta(lancamento: _l, enviando: _enviando, aoLigar: _ligar),
               const SizedBox(height: 12),
             ],
@@ -234,6 +264,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
               aoMudar: _mudar,
               aoVincular: _escolherVinculo,
               aoEditarTitulo: _editarTitulo,
+              iguais: iguais.length,
+              aoAplicarIguais: (s) => _aplicarIguais(s, iguais),
             ),
             const SizedBox(height: 16),
             Text(sugestao == null ? 'Qual é a categoria?' : 'Ou escolha outra', style: EdTexto.h2(context)),
@@ -286,12 +318,15 @@ class _Sugestao extends StatelessWidget {
     required this.aoMudar,
     required this.aoVincular,
     required this.aoEditarTitulo,
+    required this.iguais,
+    required this.aoAplicarIguais,
   });
   final MbLancamentoIa lancamento;
   final MbSugestao? sugestao;
   final MbOpcoes opcoes;
   final bool enviando;
-  final void Function(MbSugestao) aoConfirmar, aoMudar, aoVincular, aoEditarTitulo;
+  final int iguais; // este e os outros da fila com o mesmo favorecido
+  final void Function(MbSugestao) aoConfirmar, aoMudar, aoVincular, aoEditarTitulo, aoAplicarIguais;
 
   @override
   Widget build(BuildContext context) {
@@ -313,11 +348,15 @@ class _Sugestao extends StatelessWidget {
       decoration: caixa,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          if (s.fonte == MbFonteSugestao.ia) ...[
-            Icon(Icons.auto_awesome_rounded, size: 14, color: e.acc),
+          if (s.fonte == MbFonteSugestao.ia || s.fonte == MbFonteSugestao.mesPassado) ...[
+            Icon(s.fonte == MbFonteSugestao.ia ? Icons.auto_awesome_rounded : Icons.history_rounded,
+                size: 14, color: e.acc),
             const SizedBox(width: 6),
           ],
-          Expanded(child: Text(_rotuloFonte[s.fonte]!, style: EdTexto.rotulo(context))),
+          Expanded(
+              child: Text(_rotuloFonte[s.fonte]!,
+                  style: EdTexto.rotulo(context)
+                      .copyWith(color: s.fonte == MbFonteSugestao.mesPassado ? e.acc : null))),
           if (s.fonte == MbFonteSugestao.ia || s.fonte == MbFonteSugestao.padrao)
             Text('${(s.confianca * 100).round()}% · ${s.confianca >= mbLimiarPergunta ? 'confiante' : 'na dúvida'}',
                 style: EdTexto.mono(context).copyWith(color: s.confianca >= mbLimiarPergunta ? e.acc : e.warntx)),
@@ -366,13 +405,21 @@ class _Sugestao extends StatelessWidget {
               onTap: enviando ? null : () => aoVincular(s)),
         const SizedBox(height: 10),
         _BotaoPrincipal(rotulo: 'Confirmar', onTap: enviando ? null : () => aoConfirmar(s)),
+        if (iguais > 1) ...[
+          const SizedBox(height: 8),
+          _BotaoPrincipal(
+              rotulo: 'Aplicar a todos os $iguais iguais',
+              secundario: true,
+              onTap: enviando ? null : () => aoAplicarIguais(s)),
+        ],
       ]),
     );
   }
 }
 
-/// Numa entrada: o gasto em destaque quando o casamento é forte (Pix = parte exata e sem empate) e, sempre, "É a parte
-/// de uma conta que eu paguei" com a lista para escolher. Nada é ligado sem o toque.
+/// Numa entrada: o gasto em destaque quando o casamento é forte (Pix = parte exata e sem empate; com quem já rachou 2
+/// contas ou mais, basta valor parecido) e, sempre, "É a parte de uma conta que eu paguei" com a lista para escolher.
+/// Num estorno: a compra de mesmo valor com "Abater da compra" (o mesmo vínculo do reembolso). Nada é ligado sem o toque.
 class ParteDeConta extends StatefulWidget {
   const ParteDeConta({super.key, required this.lancamento, required this.aoLigar, this.enviando = false});
   final MbLancamentoIa lancamento;
@@ -400,51 +447,179 @@ class _ParteDeContaState extends State<ParteDeConta> {
       future: _candidatos,
       builder: (context, snap) {
         final s = snap.data ?? const <MbSugestaoReembolso>[];
-        final forte = mbReembolsoForte(s);
         final pagador = mbChavePadrao(_l.descricao);
-        final costuma = pagador.isNotEmpty && meuBancoReembolsos.value.any((v) => v.pagador == pagador);
+        final vezes = mbVezesQueRachou(meuBancoReembolsos.value, pagador);
+        final estorno = mbEhEstorno(_l);
+        final compra = estorno ? mbCompraDoEstorno([for (final x in s) x.gasto], _l) : null;
+        final forte = estorno ? null : mbReembolsoForte(s, recorrente: vezes >= 2);
+        final destaque = compra ?? forte?.gasto;
+        final motivo = forte?.motivos.first;
+        final nome = mbNomeDoPagador(pagador);
+        final cabecalho = switch ((estorno, forte != null, vezes)) {
+          (true, _, _) => 'Estorno de uma compra',
+          (_, true, >= 2) => '$nome já mandou a parte de $vezes contas',
+          (_, true, _) => 'Parece a parte de uma conta que você pagou',
+          (_, _, > 0) => '$nome já mandou a parte de outras contas',
+          _ => 'Rachou uma conta?',
+        };
+        final outra = switch ((estorno, destaque != null)) {
+          (true, true) => 'É de outra compra',
+          (true, false) => 'Escolher a compra estornada',
+          (false, true) => 'É de outra conta',
+          (false, false) => 'É a parte de uma conta que eu paguei',
+        };
         final abrir = widget.enviando || snap.connectionState != ConnectionState.done ? null : () => _escolher(s);
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
-              Icon(Icons.call_split_rounded, size: 14, color: e.acc),
+              Icon(estorno ? Icons.undo_rounded : Icons.call_split_rounded, size: 14, color: e.acc),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                    forte != null
-                        ? 'Parece a parte de uma conta que você pagou'
-                        : costuma
-                            ? '${mbNomeDoPagador(pagador)} já mandou a parte de outras contas'
-                            : 'Rachou uma conta?',
-                    style: EdTexto.rotulo(context)),
-              ),
+              Expanded(child: Text(cabecalho, style: EdTexto.rotulo(context))),
             ]),
-            if (forte != null) ...[
+            if (destaque != null) ...[
               const SizedBox(height: 8),
-              Text(forte.gasto.nome,
+              Text(destaque.nome,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
               Text(
                   [
-                    diaMes(forte.gasto.data),
-                    if (forte.gasto.categoria.isNotEmpty) forte.gasto.categoria,
-                    '${forte.motivos.first} de ${brl(forte.gasto.valor)}',
+                    diaMes(destaque.data),
+                    if (destaque.categoria.isNotEmpty) destaque.categoria,
+                    switch (motivo) {
+                      null => brl(destaque.valor),
+                      'como das outras vezes' => '${brl(destaque.valor)} · $motivo',
+                      _ => '$motivo de ${brl(destaque.valor)}',
+                    },
                   ].join(' · '),
                   style: EdTexto.rotulo(context)),
               const SizedBox(height: 10),
               _BotaoPrincipal(
-                  rotulo: 'Confirmar', onTap: widget.enviando ? null : () => widget.aoLigar(forte.gasto)),
+                  rotulo: estorno ? 'Abater da compra' : 'Confirmar',
+                  onTap: widget.enviando ? null : () => widget.aoLigar(destaque)),
             ],
-            _Linha(
-                icone: Icons.receipt_long_rounded,
-                texto: forte != null ? 'É de outra conta' : 'É a parte de uma conta que eu paguei',
-                onTap: abrir),
+            _Linha(icone: Icons.receipt_long_rounded, texto: outra, onTap: abrir),
           ]),
         );
       },
+    );
+  }
+}
+
+/// Vários rendimentos de poupança (juros de centavos) num cartão só: a categoria sugerida (a do mês passado, um padrão
+/// ou a IA) e "Confirmar todos". Nada é aplicado sem o toque.
+class RendimentosPoupanca extends StatefulWidget {
+  const RendimentosPoupanca({super.key, required this.itens});
+  final List<MbLancamentoIa> itens;
+
+  @override
+  State<RendimentosPoupanca> createState() => _RendimentosPoupancaState();
+}
+
+class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
+  String? _categoriaPk; // escolhida num chip; null = a sugerida
+  bool _enviando = false;
+  String? _aviso;
+
+  Future<void> _confirmar(MbSugestao escolha) async {
+    setState(() {
+      _enviando = true;
+      _aviso = null;
+    });
+    try {
+      await mbConfirmarVarios(widget.itens, escolha);
+    } catch (_) {
+      if (mounted) setState(() => _aviso = 'Não deu para salvar. Tente de novo.');
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final itens = widget.itens;
+    return ValueListenableBuilder<Map<String, MbSugestao>>(
+      valueListenable: meuBancoSugestoes,
+      builder: (context, sugestoes, _) {
+        final op = mbOpcoesClassificar;
+        final sugerida = itens.map((l) => sugestoes[l.pk]).nonNulls.firstOrNull;
+        final escolha = _categoriaPk == null || _categoriaPk == sugerida?.categoriaPk
+            ? sugerida
+            : MbSugestao(itens.first.pk, _categoriaPk!);
+        final cat = op.categoria(escolha?.categoriaPk);
+        final total = itens.fold<double>(0, (t, l) => t + l.valor);
+        final contas = {
+          for (final l in itens)
+            if (l.conta.isNotEmpty) l.conta
+        };
+        return Opacity(
+          opacity: _enviando ? .5 : 1,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(brl(total), style: EdTexto.numeroGrande(context).copyWith(fontSize: 32, color: e.pos)),
+            const SizedBox(height: 6),
+            Text(['${itens.length} rendimentos de poupança', ...contas].join(' · '), style: EdTexto.rotulo(context)),
+            const SizedBox(height: 2),
+            Text('${diaMes(itens.last.data)} a ${diaMes(itens.first.data)} · ${itens.first.descricao}',
+                maxLines: 2, overflow: TextOverflow.ellipsis, style: EdTexto.corpo(context).copyWith(color: e.mu)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),
+              child: escolha == null || cat == null
+                  ? Text('Escolha a categoria abaixo.', style: EdTexto.rotulo(context))
+                  : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Text(_rotuloFonte[escolha.fonte]!, style: EdTexto.rotulo(context)),
+                      const SizedBox(height: 8),
+                      Text(cat.nome,
+                          style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      _BotaoPrincipal(
+                          rotulo: 'Confirmar todos', onTap: _enviando ? null : () => _confirmar(escolha)),
+                    ]),
+            ),
+            const SizedBox(height: 16),
+            Text('Ou escolha outra', style: EdTexto.h2(context)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final c in mbAlternativas(itens.first, cat?.pk, mbUsoClassificar, op))
+                BotaoEscolha(rotulo: c.nome, onTap: _enviando ? null : () => setState(() => _categoriaPk = c.pk)),
+            ]),
+            if (_aviso != null) ...[
+              const SizedBox(height: 8),
+              Semantics(
+                  liveRegion: true, child: Text(_aviso!, style: EdTexto.rotulo(context).copyWith(color: e.warntx))),
+            ],
+          ]),
+        );
+      },
+    );
+  }
+}
+
+/// Uma linha da lista "Aplicar a N iguais": descrição, data e conta, valor.
+class _LinhaLancamento extends StatelessWidget {
+  const _LinhaLancamento({required this.lancamento});
+  final MbLancamentoIa lancamento;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = lancamento;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(nomeSemEspacosRepetidos(l.descricao),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: EdTexto.corpo(context)),
+            Text([diaMes(l.data), if (l.conta.isNotEmpty) l.conta].join(' · '), style: EdTexto.rotulo(context)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        Text(brl(l.valor), style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
+      ]),
     );
   }
 }
@@ -511,9 +686,10 @@ class _Linha extends StatelessWidget {
 }
 
 class _BotaoPrincipal extends StatelessWidget {
-  const _BotaoPrincipal({required this.rotulo, this.onTap});
+  const _BotaoPrincipal({required this.rotulo, this.onTap, this.secundario = false});
   final String rotulo;
   final VoidCallback? onTap;
+  final bool secundario; // contorno em vez de preenchido (ação ao lado da principal)
 
   @override
   Widget build(BuildContext context) {
@@ -522,8 +698,9 @@ class _BotaoPrincipal extends StatelessWidget {
       height: 44,
       child: FilledButton(
         style: FilledButton.styleFrom(
-            backgroundColor: e.tx,
-            foregroundColor: e.bg,
+            backgroundColor: secundario ? e.bg : e.tx,
+            foregroundColor: secundario ? e.tx : e.bg,
+            side: secundario ? BorderSide(color: e.line) : null,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
         onPressed: onTap,
         child: Text(rotulo, style: const TextStyle(fontWeight: FontWeight.w600)),

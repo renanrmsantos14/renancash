@@ -12,6 +12,7 @@ import 'package:budget/widgets/openPopup.dart' show RoutesToPopAfterDelete;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart' show mbRendimentosJuntos;
 import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
 import 'package:budget/widgets/editorial/itemClassificar.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
@@ -81,6 +82,7 @@ class _PendenciasPageState extends State<PendenciasPage> {
     final classificar = meuBancoClassificar.value;
     // Pix enviado do Worker que já está em Para classificar aparece só lá (com a sugestão da IA).
     final viaIa = {for (final l in classificar) l.revisao?.id};
+    final rendimentos = mbRendimentosJuntos(classificar);
     return [
       for (final i in meuBancoRevisar.value)
         if (!viaIa.contains(i.id))
@@ -90,11 +92,19 @@ class _PendenciasPageState extends State<PendenciasPage> {
             conteudo: () => ItemParaRevisar(item: i)
           ),
       for (final l in classificar)
-        (
-          id: 'cls:${l.pk}',
-          rotulo: 'Para classificar',
-          conteudo: () => ItemClassificar(lancamento: l, pedirSugestoes: widget.atualizar)
-        ),
+        if (!rendimentos.contains(l))
+          (
+            id: 'cls:${l.pk}',
+            rotulo: 'Para classificar',
+            conteudo: () => ItemClassificar(lancamento: l, pedirSugestoes: widget.atualizar)
+          )
+        else if (l == rendimentos.first)
+          // Juros de centavos da poupança: um cartão só, no lugar do primeiro.
+          (
+            id: 'cls:rendimentos',
+            rotulo: 'Para classificar',
+            conteudo: () => RendimentosPoupanca(itens: rendimentos)
+          ),
       if (AjustesInicio.vencidas)
         // Só contas a pagar: receitas pendentes não são "conta vencida".
         for (final t in meuBancoVencidas.value)

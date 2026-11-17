@@ -15,7 +15,7 @@ List<Widget> ajustesInicioEntradas() => const [
       SettingsContainerOpenPage(
         openPage: AjustesInicioPage(),
         title: 'Início',
-        description: 'Atalhos, cartão de saldo, metas e contas',
+        description: 'Atalhos, lançar rápido, cartão de saldo, metas e contas',
         icon: Icons.home_outlined,
       ),
       SettingsContainerOpenPage(
@@ -57,6 +57,11 @@ class AjustesInicioPage extends StatelessWidget {
               titulo: 'Mostrar atalhos sem banco',
               descricao:
                   'Nova transação, Contas, Orçamentos e Metas enquanto o banco não estiver conectado'),
+          const SettingsHeader(title: 'Lançar rápido'),
+          _chave('inicioLancamentoRapido', AjustesInicio.lancamentoRapido,
+              titulo: 'Mostrar lançamento rápido',
+              descricao:
+                  'Os gastos que você mais repete (últimos 90 dias) para lançar com um toque'),
           const SettingsHeader(title: 'Cartão de saldo'),
           _chave('inicioRitmoDiario', AjustesInicio.ritmoDiario,
               titulo: 'Mostrar ritmo diário',

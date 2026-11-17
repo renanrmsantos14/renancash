@@ -2,6 +2,7 @@ import 'package:budget/colors.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/movimento.dart' show ToqueEscala;
+import 'package:budget/struct/mbSync/classificar.dart' show MbLancamentoIa, mbChavePadrao;
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/struct/mbSync/reembolso.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
@@ -15,6 +16,7 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
+import 'package:budget/widgets/editorial/itemClassificar.dart' show ParteDeConta;
 import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado, semGastoReembolso;
 import 'package:flutter/material.dart';
 
@@ -220,6 +222,10 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     final detalhe = i.ehSalario
         ? 'Há ${i.dias} dias sem salário no Inter. Qual entrada é o salário?'
         : '${brl(i.valor)}${data == null ? '' : ' · ${diaMes(data)}'}';
+    // Quem já mandou a parte de 2 contas ou mais: o gasto provável já vem no topo, com Confirmar.
+    final recorrente = i.tipo == 'pix_recebido' &&
+        i.txId != null &&
+        mbVezesQueRachou(meuBancoReembolsos.value, mbChavePadrao(i.descricao ?? '')) >= 2;
     return Opacity(
       opacity: _enviando ? 0.5 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -231,6 +237,14 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
         const SizedBox(height: 2),
         Text(detalhe, style: EdTexto.rotulo(context)),
         const SizedBox(height: 14),
+        if (recorrente && data != null) ...[
+          ParteDeConta(
+              lancamento: MbLancamentoIa(
+                  pk: '$mbPrefixo${i.txId}', descricao: i.descricao ?? '', valor: i.valor, data: data),
+              enviando: _enviando,
+              aoLigar: (g) => _responder('reembolso', reembolsoDe: g.pk.substring(mbPrefixo.length))),
+          const SizedBox(height: 12),
+        ],
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (i.tipo == 'pix_enviado')
             _botao('Escolher categoria', _escolherCategoria),
