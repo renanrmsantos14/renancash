@@ -623,7 +623,9 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                   // genérico, que indica onde tocar para escolher um.
                   child: IconPreview(
                     selectedImage: selectedImage ??
-                        (selectedEmoji == null ? "image.png" : null),
+                        (selectedEmoji == null
+                            ? iconeMetaPadrao(objectiveType)
+                            : null),
                     selectedEmoji: selectedEmoji,
                     selectedColor: selectedColor,
                   ),

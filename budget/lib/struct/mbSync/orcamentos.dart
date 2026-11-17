@@ -40,6 +40,16 @@ Expression<bool> mbPertenceAoOrcamento($TransactionsTable tbl, Budget? b) {
       recebePadrao ? '($propria OR $semEscolha)' : propria);
 }
 
+/// Carteiras que o orçamento conta: as escolhidas menos as arquivadas pelo "Arrumar dados" (os lançamentos delas
+/// repetem os do banco). Sem escolha = todas as não arquivadas (`onlyShowBasedOnWalletFks`). Se só sobrarem
+/// arquivadas, mantém a escolha: lista vazia viraria "todas as carteiras".
+/// A carteira principal "0" nunca é arquivada: guarda assinaturas, empréstimos e o que o banco não importa.
+List<String>? mbCarteirasDoOrcamento(List<String>? escolhidas, Set<String> arquivadas) {
+  if (escolhidas == null || escolhidas.isEmpty || arquivadas.isEmpty) return escolhidas;
+  final vivas = [for (final w in escolhidas) if (!arquivadas.contains(w)) w];
+  return vivas.isEmpty ? escolhidas : vivas;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Período = ciclo do salário
 

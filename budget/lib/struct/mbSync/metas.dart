@@ -112,6 +112,23 @@ class MbAplicacao {
   String get id => mbIdAplicacao(pk);
 }
 
+/// Aplicações da meta [metaPk] e as livres (sem meta nenhuma): o painel da tela da meta.
+({List<MbAplicacao> ligadas, List<MbAplicacao> livres}) mbSepararAplicacoes(
+        List<MbAplicacao> todas, String metaPk) =>
+    (
+      ligadas: [for (final a in todas) if (a.metaPk == metaPk) a],
+      livres: [for (final a in todas) if (a.metaPk == null) a],
+    );
+
+double mbSaldoAplicacoes(Iterable<MbAplicacao> l) => l.fold(0.0, (s, a) => s + a.saldo);
+
+/// Escolha feita na tela da meta. Toca a meta antes (data de edição nova: o sync leva as aplicações por LWW);
+/// depois grava os vínculos, que também passam a meta para poupança (`income`).
+Future<void> mbEscolherAplicacoesDaMeta(Objective meta, Set<String> aplicacaoPks) async {
+  await database.createOrUpdateObjective(meta);
+  await mbDefinirAplicacoesDaMeta(meta.objectivePk, aplicacaoPks);
+}
+
 /// Aplicações da carteira Investimentos, com a meta a que pertencem (ou null).
 Future<List<MbAplicacao>> mbAplicacoes() async {
   final vinculos = await mbVinculosMetas();

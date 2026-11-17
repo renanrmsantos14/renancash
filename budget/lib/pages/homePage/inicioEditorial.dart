@@ -103,8 +103,12 @@ class _InicioEditorialState extends State<InicioEditorial> {
   // aparece na linha fina do topo (meuBancoSincronizando).
   Future<void> _puxar() async {
     if (enableSwipeDownToRefresh(context)) runAllCloudFunctions(context);
-    unawaited(meuBancoAtualizar()
-        .then((msg) => openSnackbar(SnackbarMessage(title: msg))));
+    // O aviso é sobre a Início: se o usuário já abriu outra tela (ex.: uma meta), não cobre o título dela.
+    unawaited(meuBancoAtualizar().then((msg) {
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) {
+        openSnackbar(SnackbarMessage(title: msg));
+      }
+    }));
   }
 
   @override

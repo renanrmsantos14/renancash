@@ -411,6 +411,10 @@ String detalheMeta(BuildContext context, Objective objective,
 
 String textoTransacoes(int n) => n == 1 ? '1 transação' : '$n transações';
 
+/// Ícone de quem ainda não escolheu um (ex.: Reserva criada pelo Meu Banco): o quadrado nunca fica vazio.
+String iconeMetaPadrao(ObjectiveType tipo) =>
+    tipo == ObjectiveType.goal ? 'piggy-bank.png' : 'image.png';
+
 Widget iconeMeta(Objective objective,
         {double size = 18, double sizePadding = 14, VoidCallback? onTap}) =>
     CategoryIcon(
@@ -422,7 +426,10 @@ Widget iconeMeta(Objective objective,
         dateTimeModified: null,
         order: 0,
         income: false,
-        iconName: objective.iconName,
+        iconName: objective.iconName ??
+            (objective.emojiIconName == null
+                ? iconeMetaPadrao(objective.type)
+                : null),
         colour: objective.colour,
         emojiIconName: objective.emojiIconName,
       ),

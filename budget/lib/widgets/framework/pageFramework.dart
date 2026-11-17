@@ -938,6 +938,8 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
                 (expandedHeightCalculated - collapsedHeight);
         if (collapsedHeight == expandedHeightCalculated) percent = 1;
         String titleString = capitalizeTitle ? title.capitalizeFirst : title;
+        final longo =
+            getIsFullScreen(context) == false && titleString.length > 20;
         return FlexibleSpaceBar(
           centerTitle: centeredTitleWithDefault,
           titlePadding:
@@ -962,23 +964,30 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
                 scale: percent * 0.15 + 1,
                 child: titleWidget ??
                     AnimatedSizeSwitcher(
-                      child: TextFont(
+                      // Título longo no celular: inteiro, numa linha, encolhendo a fonte (antes virava só a
+                      // primeira palavra: "Reserva" para "Reserva de emergência"). A folga do fim afasta o título
+                      // dos botões da barra, que ficam por cima dele.
+                      child: Padding(
                         key: ValueKey(titleString),
-                        text: getIsFullScreen(context) == false &&
-                                titleString.length > 20
-                            ? titleString.split(" ")[0]
-                            : titleString,
-                        fontSize: centeredTitleSmallWithDefault
-                            ? (enableDoubleColumn(context) ? 19 : 16)
-                            : 20,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.4,
-                        textColor: textColor == null
-                            ? Theme.of(context).colorScheme.onSecondaryContainer
-                            : textColor,
-                        textAlign: centeredTitleWithDefault
-                            ? TextAlign.center
-                            : TextAlign.start,
+                        padding: EdgeInsetsDirectional.only(
+                            end: longo && (actions?.isNotEmpty ?? false) ? 56 : 0),
+                        child: TextFont(
+                          text: titleString,
+                          maxLines: longo ? 1 : null,
+                          autoSizeText: longo,
+                          minFontSize: 13,
+                          fontSize: centeredTitleSmallWithDefault
+                              ? (enableDoubleColumn(context) ? 19 : 16)
+                              : 20,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.4,
+                          textColor: textColor == null
+                              ? Theme.of(context).colorScheme.onSecondaryContainer
+                              : textColor,
+                          textAlign: centeredTitleWithDefault
+                              ? TextAlign.center
+                              : TextAlign.start,
+                        ),
                       ),
                     ),
               ),

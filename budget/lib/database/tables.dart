@@ -25,7 +25,8 @@ import 'package:budget/pages/activityPage.dart';
 
 import 'package:flutter/material.dart' show RangeValues;
 import 'package:budget/struct/mbSync/armazem.dart' show mbDdlOrcamentoTx;
-import 'package:budget/struct/mbSync/orcamentos.dart' show mbPertenceAoOrcamento;
+import 'package:budget/struct/mbSync/orcamentos.dart'
+    show mbCarteirasDoOrcamento, mbPertenceAoOrcamento;
 part 'tables.g.dart';
 
 int schemaVersionGlobal = 46;
@@ -5706,9 +5707,11 @@ class FinanceDatabase extends _$FinanceDatabase {
       query = selectOnly(transactions)
         ..addColumns([totalAmt])
         ..where(
+          // Meta soma pelo objective_fk (antes lia o campo de empréstimo nos dois casos: a meta dava sempre 0
+          // e o lançamento recorrente nunca via "meta alcançada").
           (objectiveType == ObjectiveType.loan
                   ? transactions.objectiveLoanFk.equals(objectivePk)
-                  : transactions.objectiveLoanFk.equals(objectivePk)) &
+                  : transactions.objectiveFk.equals(objectivePk)) &
               transactions.walletFk.equals(wallet.walletPk),
         );
 
@@ -5773,7 +5776,7 @@ class FinanceDatabase extends _$FinanceDatabase {
                   // (allCashFlow
                   //     ? transactions.income.isIn([true, false])
                   //     : transactions.income.equals(false)) &
-                  onlyShowBasedOnWalletFks(transactions, budget?.walletFks) &
+                  onlyShowBasedOnBudgetWalletFks(transactions, budget) &
                   onlyShowIfNotExcludedFromBudget(
                       transactions, budget?.budgetPk) &
                   onlyShowIfCertainBudget(
@@ -6365,6 +6368,12 @@ class FinanceDatabase extends _$FinanceDatabase {
     return arquivadas.isEmpty ? Constant(true) : tbl.walletFk.isNotIn(arquivadas);
   }
 
+  /// Carteiras do orçamento sem as arquivadas (mbCarteirasDoOrcamento).
+  Expression<bool> onlyShowBasedOnBudgetWalletFks(
+          $TransactionsTable tbl, Budget? budget) =>
+      onlyShowBasedOnWalletFks(tbl,
+          mbCarteirasDoOrcamento(budget?.walletFks, carteirasArquivadas()));
+
   Expression<bool> onlyShowBasedOnMethodAdded(
       $TransactionsTable tbl, List<MethodAdded?>? methodAdded) {
     return (methodAdded != null && methodAdded.length > 0
@@ -6538,7 +6547,7 @@ class FinanceDatabase extends _$FinanceDatabase {
             onlyShowBasedOnTimeRange(transactions, startDate, endDate, budget,
                 allTime: allTime) &
             isInCategory(transactions, categoryFks, categoryFksExclude) &
-            onlyShowBasedOnWalletFks(transactions, budget?.walletFks) &
+            onlyShowBasedOnBudgetWalletFks(transactions, budget) &
             onlyShowIfNotBalanceCorrection(transactions, isIncome) &
             onlyShowIfFollowCustomPeriodCycle(
               transactions,
@@ -6628,7 +6637,7 @@ class FinanceDatabase extends _$FinanceDatabase {
               onlyShowBasedOnTimeRange(transactions, startDate, endDate, budget,
                   allTime: allTime) &
               isInCategory(tbl, categoryFks, categoryFksExclude) &
-              onlyShowBasedOnWalletFks(tbl, budget?.walletFks) &
+              onlyShowBasedOnBudgetWalletFks(tbl, budget) &
               onlyShowIfNotBalanceCorrection(transactions, isIncome) &
               onlyShowIfFollowCustomPeriodCycle(
                 transactions,
@@ -7294,7 +7303,7 @@ class FinanceDatabase extends _$FinanceDatabase {
                 // Sem orçamento, o filtro acima já basta (e mantém a carteira arquivada pedida em walletPks).
                 (budget == null
                     ? Constant(true)
-                    : onlyShowBasedOnWalletFks(tbl, budget.walletFks)) &
+                    : onlyShowBasedOnBudgetWalletFks(tbl, budget)) &
                 onlyShowBasedOnIncome(tbl, isIncome);
           })
           ..orderBy([(t) => OrderingTerm.desc(t.dateCreated)]))

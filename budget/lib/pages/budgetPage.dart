@@ -21,6 +21,7 @@ import 'package:budget/widgets/budgetContainer.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
     show mbWatchAVencerOrcamento;
 import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
+import 'package:budget/widgets/sugestaoLimites.dart' show abrirSugestaoLimites;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/categoryEntry.dart';
 import 'package:budget/widgets/categoryLimits.dart';
@@ -236,11 +237,9 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                 true
             ? true
             : false;
-    final double todayPercent = getPercentBetweenDates(
-      budgetRange,
-      //dateForRange,
-      DateTime.now(),
-    );
+    // Marca de hoje (0..1) nas barras; nula fora do período (ciclo do histórico).
+    final double? hoje =
+        fracaoDoCiclo(budgetRange.start, budgetRange.end, DateTime.now());
     String startDateString = getWordedDateShort(budgetRange.start);
     String endDateString = getWordedDateShort(budgetRange.end);
     String timeRangeString = startDateString == endDateString
@@ -310,23 +309,33 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                     );
                   },
                 ),
-              // DropdownItemMenu(
-              //   id: "spending-goals",
-              //   label: widget.budget.income == true
-              //    ? "saving-goals".tr()
-              //    : "spending-goals".tr(),
-              //   icon: appStateSettings["outlinedIcons"]
-              //       ? Icons.fact_check_outlined
-              //       : Icons.fact_check_rounded,
-              //   action: () {
-              //     pushRoute(
-              //       context,
-              //       EditBudgetLimitsPage(
-              //         budget: widget.budget,
-              //       ),
-              //     );
-              //   },
-              // ),
+              // Sem gasto no ciclo a pizza (e o "editar limites" dela) não aparece: o menu é o caminho fixo.
+              DropdownItemMenu(
+                id: "spending-goals",
+                label: 'Limites por categoria',
+                icon: appStateSettings["outlinedIcons"]
+                    ? Icons.fact_check_outlined
+                    : Icons.fact_check_rounded,
+                action: () {
+                  pushRoute(
+                    context,
+                    EditBudgetLimitsPage(
+                      budget: widget.budget,
+                    ),
+                  );
+                },
+              ),
+              if (!widget.budget.income &&
+                  !widget.budget.addedTransactionsOnly &&
+                  widget.budget.sharedKey == null)
+                DropdownItemMenu(
+                  id: "sugerir-limites",
+                  label: 'Sugerir limites por categoria',
+                  icon: appStateSettings["outlinedIcons"]
+                      ? Icons.tune_outlined
+                      : Icons.tune_rounded,
+                  action: () => abrirSugestaoLimites(context, widget.budget),
+                ),
             ],
           ),
         ],
@@ -431,7 +440,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                     selectedCategory?.mainCategoryPk,
                             subcategoriesWithTotalMap:
                                 s.subCategorySpendingIndexedByMainCategoryPk,
-                            todayPercent: todayPercent,
+                            todayPercent: hoje == null ? null : hoje * 100,
                             overSpentColor: category.total > 0
                                 ? getColor(context, "incomeAmount")
                                 : getColor(context, "expenseAmount"),
@@ -603,8 +612,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                         : diasRestantesOrcamento(
                                             budgetRange, DateTime.now()),
                                     aVencer: aVencer.data ?? 0,
-                                    hoje: fracaoDoCiclo(budgetRange.start,
-                                        budgetRange.end, DateTime.now()),
+                                    hoje: hoje,
                                   ),
                                 ),
                               ],
