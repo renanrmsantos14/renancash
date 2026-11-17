@@ -338,6 +338,9 @@ void main() {
       [_cat('beleza', 'Beleza'), _cat('viagem', 'Viagem')],
     );
     var backups = 0, aplicados = 0;
+    t.view.physicalSize = const Size(390 * 2, 1400 * 2);
+    t.view.devicePixelRatio = 2;
+    addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
       theme: temaFlutter(temaPorId('padrao-claro')),
       home: Scaffold(
@@ -364,6 +367,7 @@ void main() {
     expect(find.text('Arquivar 1 carteiras'), findsOneWidget);
     expect(find.text('Beleza, Viagem'), findsOneWidget);
 
+    await t.ensureVisible(find.text('Aplicar'));
     await t.tap(find.text('Aplicar'));
     await t.pumpAndSettle();
     expect(find.text('Aplicar mudanças?'), findsOneWidget);
