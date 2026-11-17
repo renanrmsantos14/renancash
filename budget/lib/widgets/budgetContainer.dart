@@ -4,7 +4,7 @@ import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/budgetPage.dart';
-import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/orcamentos.dart' show mbWatchGastoOrcamento;
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:flutter/material.dart';
@@ -232,27 +232,12 @@ class BudgetContainer extends StatelessWidget {
     final limite = budgetAmountToPrimaryCurrency(carteiras, budget);
     final agora = DateTime.now();
     final periodo = getBudgetDate(budget, agora);
-    return StreamBuilder<List<CategoryWithTotal>>(
-      stream: database.watchTotalSpentInEachCategoryInTimeRangeFromCategories(
-        allWallets: carteiras,
-        start: periodo.start,
-        end: periodo.end,
-        categoryFks: budget.categoryFks,
-        categoryFksExclude: budget.categoryFksExclude,
-        budgetTransactionFilters: budget.budgetTransactionFilters,
-        memberTransactionFilters: budget.memberTransactionFilters,
-        onlyShowTransactionsBelongingToBudgetPk:
-            budget.sharedKey != null || budget.addedTransactionsOnly == true
-                ? budget.budgetPk
-                : null,
-        budget: budget,
-      ),
+    return StreamBuilder<double>(
+      stream: mbWatchGastoOrcamento(budget, carteiras, periodo),
       builder: (context, snapshot) {
-        final dados = snapshot.data;
+        final gasto = snapshot.data;
         // Mesma altura do cartão carregado: sem salto ao chegar o total.
-        if (dados == null) return const SizedBox(height: 132);
-        final gasto = dados.fold<double>(0, (s, c) => s + c.total) *
-            determineBudgetPolarity(budget);
+        if (gasto == null) return const SizedBox(height: 132);
         return CartaoOrcamento(
           nome: budget.name,
           cor: HexColor(budget.colour,
