@@ -4088,10 +4088,10 @@ class SelectCategoryWithIncomeExpenseSelector extends StatefulWidget {
 
 class _SelectCategoryWithIncomeExpenseSelectorState
     extends State<SelectCategoryWithIncomeExpenseSelector> {
-  late bool? selectedIncome =
-      appStateSettings["showAllCategoriesWhenSelecting"] == true
-          ? null
-          : widget.selectedIncomeInitial;
+  // Abre só as categorias do tipo escolhido (Despesa/Receita): misturar as duas
+  // mostrava "Trabalho" numa despesa e pares de mesmo nome. "Mostrar todas as
+  // categorias" segue no menu do seletor.
+  late bool? selectedIncome = widget.selectedIncomeInitial;
 
   void setSelectedIncome(bool? value) {
     if (widget.setSelectedIncome != null) widget.setSelectedIncome!(value);
@@ -4129,17 +4129,9 @@ class _SelectCategoryWithIncomeExpenseSelectorState
                     icon: appStateSettings["outlinedIcons"]
                         ? Icons.grid_on_outlined
                         : Icons.grid_on_rounded,
-                    action: () {
-                      if (selectedIncome == null) {
-                        setSelectedIncome(widget.selectedIncomeInitial);
-                        updateSettings("showAllCategoriesWhenSelecting", false,
-                            updateGlobalState: false);
-                      } else {
-                        setSelectedIncome(null);
-                        updateSettings("showAllCategoriesWhenSelecting", true,
-                            updateGlobalState: false);
-                      }
-                    },
+                    action: () => setSelectedIncome(selectedIncome == null
+                        ? widget.selectedIncomeInitial
+                        : null),
                   ),
                 if (widget.allowReorder)
                   DropdownItemMenu(
