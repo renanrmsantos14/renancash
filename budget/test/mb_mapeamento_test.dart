@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
+import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
@@ -108,6 +109,23 @@ void main() {
     expect(d['valor'], 39.9);
     expect(projetarAssinatura(assinaturaDeDados('cashew:s1', d, categoriaPadrao: 'x')!), d);
     expect(assinaturaDeDados('s1', {...d, 'status': 'ignorada'}, categoriaPadrao: 'x'), null);
+  });
+
+  test('assinatura sem título vai com nome e padrão aceitos pelo Worker', () {
+    // O Worker rejeita texto vazio ou acima de 200 caracteres ("dados inválidos").
+    bool textoValido(Object? v) => v is String && v.isNotEmpty && v.length <= 200;
+    for (final nome in ['', '   ', 'a' * 300]) {
+      final d = completarNovo(
+          'assinaturas',
+          projetarAssinatura(AssinLocal(
+              pk: 's', nome: nome, valor: -10, dia: 1, categoriaPk: 'c')));
+      expect(textoValido(d['nome']), isTrue, reason: 'nome de "$nome"');
+      expect(textoValido(d['padrao']), isTrue, reason: 'padrao de "$nome"');
+    }
+    expect(
+        projetarAssinatura(AssinLocal(
+            pk: 's', nome: '', valor: 1, dia: 1, categoriaPk: 'c'))['nome'],
+        'Sem nome');
   });
 
   test('ida e volta: regra e preservação de DROGASIL*', () {
