@@ -524,7 +524,7 @@ void discardChangesPopup(context,
         popRoute(context);
         popRoute(context);
       },
-      onCancelLabel: "cancel".tr(),
+      onCancelLabel: "Continuar editando",
       onCancel: () {
         popRoute(context);
       },
