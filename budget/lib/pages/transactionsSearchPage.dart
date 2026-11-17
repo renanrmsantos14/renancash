@@ -204,7 +204,8 @@ class TransactionsSearchPageState extends State<TransactionsSearchPage>
                     Expanded(
                       child: TextInput(
                         controller: searchInputController,
-                        autoFocus: true,
+                        // Teclado só pela lupa; aberta com filtros prontos (uma conta, uma categoria), não.
+                        autoFocus: widget.initialFilters == null,
                         labelText: "search-placeholder".tr(),
                         icon: appStateSettings["outlinedIcons"]
                             ? Icons.search_outlined

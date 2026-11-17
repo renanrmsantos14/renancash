@@ -10,6 +10,8 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/conexoes.dart'
+    show mbRotulosCarteiras, mbTiposDasCarteiras;
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/selectAmount.dart';
@@ -1398,12 +1400,18 @@ class AppliedFilterChips extends StatelessWidget {
         openFiltersSelection: openFiltersSelection,
       ));
     }
-    // Wallets
-    for (String walletPk in searchFilters.walletPks) {
+    // Carteiras: um chip por pk; nomes iguais (corrente e poupança do mesmo banco) ganham o tipo.
+    final walletPks = searchFilters.walletPks.toSet().toList();
+    final tiposMb = walletPks.isEmpty ? const <String, String>{} : await mbTiposDasCarteiras();
+    final rotulos = mbRotulosCarteiras([
+      for (final pk in walletPks)
+        getWalletStringName(allWallets, allWallets.indexedByPk[pk])
+    ], [
+      for (final pk in walletPks) tiposMb[pk]
+    ]);
+    for (final (i, walletPk) in walletPks.indexed) {
       out.add(AppliedFilterChip(
-        label: getWalletStringName(
-            Provider.of<AllWallets>(context, listen: false),
-            allWallets.indexedByPk[walletPk]),
+        label: rotulos[i],
         customBorderColor: HexColor(
           allWallets.indexedByPk[walletPk]?.colour,
           defaultColor: Theme.of(context).colorScheme.primary,

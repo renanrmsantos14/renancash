@@ -4,6 +4,7 @@ import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/ajustesInicio.dart' show mbAjustesMudaram;
 import 'package:budget/struct/meuBancoSync.dart'
     show meuBancoPareado, meuBancoPareadoConferido;
+import 'package:budget/struct/meuBancoMapping.dart' show mbPkConta;
 import 'package:budget/struct/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,6 +54,8 @@ void main() {
     expect(m.contas.last.tipo, '2 contas');
     expect(m.contas.last.saldo, 600.0);
     expect(m.origemDisponivel, 'Inter e poupanças · há 12 min');
+    // Pelo id da conta, não pelo nome: corrente e poupança do mesmo banco podem ter o mesmo nome.
+    expect(m.contas.map((c) => c.carteiras), [mbPkConta('a'), '${mbPkConta('b')}|${mbPkConta('c')}']);
   });
 
   test('poupanças separadas: uma linha por conta, com o banco no tipo', () {
@@ -70,6 +73,7 @@ void main() {
         agruparPoupancas: false);
     expect(m.contas.map((c) => c.nome), ['Poup 1', 'Poup 2']);
     expect(m.contas.map((c) => c.tipo), ['Poupança · Inter', 'Poupança · Santander']);
+    expect(m.contas.map((c) => c.carteiras), [mbPkConta('b'), mbPkConta('c')]);
   });
 
   test('cartão: dias para fechar, vencimento, final e percentual', () {
