@@ -16,7 +16,8 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
-import 'package:budget/struct/mbSync/orcamentos.dart' show mbOrcamentoGeralPk;
+import 'package:budget/struct/mbSync/orcamentos.dart'
+    show mbMudouGeral, mbOrcamentoGeralPk;
 import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
@@ -48,7 +49,7 @@ class InicioEditorial extends StatefulWidget {
 
 class _InicioEditorialState extends State<InicioEditorial> {
   ModeloInicio? _modelo;
-  StreamSubscription<void>? _assinatura;
+  final _assinaturas = <StreamSubscription<void>>[];
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
   bool get _real => widget._modelo == null;
 
@@ -63,7 +64,11 @@ class _InicioEditorialState extends State<InicioEditorial> {
       mbAjustesMudaram.addListener(_aoMudarAjustes);
       if (AjustesInicio.vencidas) mbVigiarVencidas();
       // O 1º evento do stream já faz a carga inicial (sem corrida com uma gravação entre duas leituras).
-      _assinatura = mbMudouUltimas().listen((_) => _recarga.pedir());
+      // O limite do ciclo vem do Geral: editar o Geral também recarrega.
+      _assinaturas.addAll([
+        mbMudouUltimas().listen((_) => _recarga.pedir()),
+        mbMudouGeral().listen((_) => _recarga.pedir()),
+      ]);
     }
   }
 
@@ -78,7 +83,9 @@ class _InicioEditorialState extends State<InicioEditorial> {
   void dispose() {
     meuBancoUltimaSync.removeListener(_recarga.pedir);
     mbAjustesMudaram.removeListener(_aoMudarAjustes);
-    _assinatura?.cancel();
+    for (final a in _assinaturas) {
+      a.cancel();
+    }
     _recarga.fechar();
     super.dispose();
   }

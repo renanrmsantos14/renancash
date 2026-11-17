@@ -24,6 +24,7 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 5. Nova transação (celular): toque no "+" da barra; confira de cima para baixo valor grande centralizado (cinza "R$ 0,00" sem valor), Despesa/Renda (e Transferir com 2+ contas), linha "Categoria / Selecione a categoria" com ›, depois Nome, data, contas, tipo, orçamentos/metas, notas e "Mais opções"; um só botão "Salvar" no rodapé.
 
 ## Casos de borda
+- Ajuste de saldo (categoria `"0"` paga, ex.: "CDB - BANCO INTER S.A" da carteira Investimentos): fica fora do total do dia e do resumo de propósito (é o valor do investimento, não dinheiro que entrou). Na lista aparece sem sinal, com "ajuste · fora do total" sob o valor (`ehAjusteDeSaldo` em `transactionEntryAmount.dart`). Caso real: "Ontem" = −R$ 0,01 com +550,03/+28,01/+430,21 em verde.
 - "Salvar" sem categoria abre a escolha de categoria (que encadeia o valor e grava); com categoria e sem valor abre o valor; com os dois grava e fecha. Edição também mostra "Salvar"; transações especiais (agendada, assinatura, empréstimo) mantêm o segundo botão de ação (Pagar, Pular etc.).
 - Valor em outra moeda: aparece o nome da moeda no número grande e o valor convertido em `rotulo` logo abaixo (só com 2+ contas e conta diferente da principal com moeda diferente).
 - Toque longo no valor: copiar/colar; toque longo na categoria (só com categoria escolhida) abre a edição da categoria.

@@ -21,6 +21,7 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 5. Com dados (app pareado ou modo demonstração do onboarding): abrir um orçamento, tocar no valor (alterna Resta ↔ Gasto e salva `showTotalSpentForBudget`), menu ⋮ › "Histórico do orçamento", tocar num ciclo (abre com seletor ‹ período › no topo e sem o item de histórico no menu).
 
 ## Casos de borda
+- Gasto do orçamento tem uma fonte só: `mbWatchGastoOrcamento` (`struct/mbSync/orcamentos.dart`), usada pelo cartão da lista (`BudgetContainer`) e pelo ciclo da Início (`mbLerCicloGeral`). Mudou o filtro do gasto? Mude ali. Teste: `mb_orcamentos_test.dart` grupo 'ciclo da Início = orçamento Geral'.
 - Orçamento de despesa: "Resta" → passou do limite vira "Acima do limite" com valor em `overspentAmount` e medidor em alerta. Poupança (`income`): "Falta guardar" → "Acima da meta" em verde, sem alerta.
 - "faltam N dias" conta hoje; no último dia mostra "último dia". O cartão da lista mostra o texto inteiro ("faltam 19 dias", nunca só "faltam 19") na largura do celular: `test/textos_layout_test.dart`.
 - Análise › pizza sem lançamentos no período: uma linha compacta ("Sem entradas no período" / "Sem saídas no período" + "Escolher período", sem caixa alta por palavra) no lugar da pizza vazia; a seta de troca fica à direita. Patrimônio: "Fatura atual −R$ 569,25" (− colado). Fim das listas de Orçamentos e Metas com `mbFolgaFab`. Fora do período (ciclo passado do histórico) não mostra dias nem ritmo. Ritmo "Pode gastar R$ X/dia" (ou "Guarde") só no detalhe e só com saldo positivo.

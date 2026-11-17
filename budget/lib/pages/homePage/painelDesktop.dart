@@ -5,6 +5,7 @@ import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/orcamentos.dart' show mbMudouGeral;
 import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
@@ -44,7 +45,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
   ModeloInicio? _modelo;
   List<TransacaoInicio> _transacoes = const [];
   bool _atualizando = false;
-  StreamSubscription<void>? _assinatura;
+  final _assinaturas = <StreamSubscription<void>>[];
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
 
   @override
@@ -60,7 +61,11 @@ class _PainelDesktopState extends State<PainelDesktop> {
       mbAjustesMudaram.addListener(_aoMudarAjustes);
       if (AjustesInicio.vencidas) mbVigiarVencidas();
       // O 1º evento do stream já faz a carga inicial (sem corrida com uma gravação entre duas leituras).
-      _assinatura = mbMudouUltimas().listen((_) => _recarga.pedir());
+      // O limite do ciclo vem do Geral: editar o Geral também recarrega.
+      _assinaturas.addAll([
+        mbMudouUltimas().listen((_) => _recarga.pedir()),
+        mbMudouGeral().listen((_) => _recarga.pedir()),
+      ]);
     }
   }
 
@@ -75,7 +80,9 @@ class _PainelDesktopState extends State<PainelDesktop> {
   void dispose() {
     meuBancoUltimaSync.removeListener(_recarga.pedir);
     mbAjustesMudaram.removeListener(_aoMudarAjustes);
-    _assinatura?.cancel();
+    for (final a in _assinaturas) {
+      a.cancel();
+    }
     _recarga.fechar();
     mbListaVisivel.value = const [];
     super.dispose();

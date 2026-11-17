@@ -21,8 +21,12 @@ enum LineGraphDisplay {
 }
 
 class HomePageLineGraph extends StatelessWidget {
-  const HomePageLineGraph({super.key, required this.selectedSlidingSelector});
+  const HomePageLineGraph(
+      {super.key, required this.selectedSlidingSelector, this.ancoraFinal});
   final int selectedSlidingSelector;
+
+  /// Patrimônio real de hoje: a curva acumulada termina nele (ver [ancorarNoFim]).
+  final double? ancoraFinal;
   @override
   Widget build(BuildContext context) {
     SearchFilters searchFilters = SearchFilters(
@@ -59,6 +63,7 @@ class HomePageLineGraph extends StatelessWidget {
               ? PastSpendingGraph(
                   isIncome: null,
                   searchFilters: searchFilters,
+                  ancoraFinal: ancoraFinal,
                 )
               : appStateSettings["lineGraphDisplayType"] ==
                       LineGraphDisplay.AllTime.index
@@ -66,6 +71,7 @@ class HomePageLineGraph extends StatelessWidget {
                       isIncome: null,
                       searchFilters: searchFilters,
                       allTimeUpToFirstTransaction: true,
+                      ancoraFinal: ancoraFinal,
                     )
                   : appStateSettings["lineGraphDisplayType"] ==
                           LineGraphDisplay.CustomStartDate.index
@@ -74,6 +80,7 @@ class HomePageLineGraph extends StatelessWidget {
                           searchFilters: searchFilters,
                           customStartDate: DateTime.parse(
                               appStateSettings["lineGraphStartDate"]),
+                          ancoraFinal: ancoraFinal,
                         )
                       : StreamBuilder<Budget>(
                           stream: database.getBudget(
@@ -118,6 +125,7 @@ class PastSpendingGraph extends StatelessWidget {
     this.hideIfOnlyOneEntry = false,
     this.builder,
     this.allTimeUpToFirstTransaction = false,
+    this.ancoraFinal,
   });
   final bool? isIncome;
   final int monthsToLoad;
@@ -132,6 +140,7 @@ class PastSpendingGraph extends StatelessWidget {
   final bool hideIfOnlyOneEntry;
   final Widget Function(Widget)? builder;
   final bool allTimeUpToFirstTransaction;
+  final double? ancoraFinal;
 
   Widget buildLineChart(BuildContext context,
       {DateTime? earliestTransactionDate, DateTime? latestTransactionDate}) {
@@ -217,7 +226,11 @@ class PastSpendingGraph extends StatelessWidget {
                     if (snapshotPoints.hasData == false) {
                       lineChartWidget = IndeterminateProgressBar();
                     } else {
-                      List<Pair> points = snapshotPoints.data ?? [];
+                      final ancorado = ancoraFinal != null &&
+                              appStateSettings["showCumulativeSpending"] != false
+                          ? ancorarNoFim(snapshotPoints.data ?? [], ancoraFinal!)
+                          : (pontos: snapshotPoints.data ?? <Pair>[], delta: 0.0);
+                      List<Pair> points = ancorado.pontos;
                       if (points.length <= 1 && hideIfOnlyOneEntry == true) {
                         return SizedBox.shrink();
                       }
@@ -225,7 +238,7 @@ class PastSpendingGraph extends StatelessWidget {
                         points: [points],
                         isCurved: true,
                         extraLeftPaddingIfSmall: extraLeftPaddingIfSmall,
-                        amountBefore: totalSpentBefore,
+                        amountBefore: totalSpentBefore + ancorado.delta,
                         endDate: customEndDateChecked,
                       );
                     }
@@ -264,6 +277,19 @@ class PastSpendingGraph extends StatelessWidget {
     }
     return buildLineChart(context);
   }
+}
+
+/// Desloca a curva acumulada para que o ponto mais recente valha [ancora] (o patrimônio real).
+/// A soma local das carteiras não é patrimônio (contas do Meu Banco não têm saldo inicial nem
+/// transferências); o formato da curva (o movimento dos lançamentos) é mantido.
+({List<Pair> pontos, double delta}) ancorarNoFim(List<Pair> pontos, double ancora) {
+  if (pontos.isEmpty) return (pontos: pontos, delta: 0.0);
+  final fim = pontos.reduce((a, b) => b.x > a.x ? b : a);
+  final delta = ancora - fim.y;
+  return (
+    pontos: [for (final p in pontos) Pair(p.x, p.y + delta, dateTime: p.dateTime)],
+    delta: delta,
+  );
 }
 
 class CalculatePointsParams {
