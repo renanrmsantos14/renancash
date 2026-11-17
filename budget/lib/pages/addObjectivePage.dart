@@ -619,8 +619,11 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                     );
                   },
                   color: Colors.transparent,
+                  // Meta sem ícone (ex.: vinda do Meu Banco): mostra o ícone
+                  // genérico, que indica onde tocar para escolher um.
                   child: IconPreview(
-                    selectedImage: selectedImage,
+                    selectedImage: selectedImage ??
+                        (selectedEmoji == null ? "image.png" : null),
                     selectedEmoji: selectedEmoji,
                     selectedColor: selectedColor,
                   ),
@@ -639,10 +642,12 @@ class _AddObjectivePageState extends State<AddObjectivePage>
                           setSelectedTitle(text);
                         },
                         padding: EdgeInsetsDirectional.zero,
-                        fontSize: getIsFullScreen(context) ? 34 : 27,
+                        fontSize: getIsFullScreen(context) ? 34 : 24,
                         fontWeight: FontWeight.w600,
                         topContentPadding: 40,
                         initialValue: selectedTitle,
+                        // Nome longo quebra em até 2 linhas em vez de sumir na borda.
+                        maxLines: 2,
                       ),
                     ),
                   ),

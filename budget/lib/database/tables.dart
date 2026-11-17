@@ -7004,7 +7004,32 @@ class FinanceDatabase extends _$FinanceDatabase {
     // selectedTab == 1 : long-term
     // Only apply selectedTab when searching
     required int? selectedTab,
+    // Empréstimos: quem pagou a mais não abate o que os outros devem.
+    bool semExcessoPorEmprestimo = false,
   }) {
+    final Expression<bool> filtro = objectives.archived.equals(false) &
+        objectives.type.equals(ObjectiveType.loan.index) &
+        getIsDifferenceOnlyLoanFromTable(objectives).equals(false) &
+        (selectedTab == 0 && searchString != null
+            ? Constant(false)
+            : Constant(true)) &
+        (selectedTab == 0 ||
+                selectedTab == null ||
+                searchString == null ||
+                searchString == ""
+            ? Constant(true)
+            // Only apply this tab specific total when searching
+            : (objectives.name
+                .collate(Collate.noCase)
+                .like("%" + (searchString ?? "") + "%"))) &
+        (isCredit == null
+            ? Constant(true)
+            : isCredit
+                ? objectives.income.equals(true)
+                : objectives.income.equals(false));
+    if (semExcessoPorEmprestimo) {
+      return _offsetEmprestimosSemExcesso(allWallets, filtro);
+    }
     List<Stream<TotalWithCount?>> mergedStreams = [];
     for (TransactionWallet wallet in allWallets.list) {
       // Add the total offsets of objective amounts
@@ -7012,27 +7037,7 @@ class FinanceDatabase extends _$FinanceDatabase {
       Expression<bool> objectiveIncome = objectives.income;
       final queryTotalObjectiveAmountOffset = selectOnly(objectives)
         ..addColumns([totalAmtObjective, objectiveIncome])
-        ..where(objectives.archived.equals(false) &
-            objectives.type.equals(ObjectiveType.loan.index) &
-            objectives.walletFk.equals(wallet.walletPk) &
-            getIsDifferenceOnlyLoanFromTable(objectives).equals(false) &
-            (selectedTab == 0 && searchString != null
-                ? Constant(false)
-                : Constant(true)) &
-            (selectedTab == 0 ||
-                    selectedTab == null ||
-                    searchString == null ||
-                    searchString == ""
-                ? Constant(true)
-                // Only apply this tab specific total when searching
-                : (objectives.name
-                    .collate(Collate.noCase)
-                    .like("%" + (searchString ?? "") + "%"))) &
-            (isCredit == null
-                ? Constant(true)
-                : isCredit
-                    ? objectives.income.equals(true)
-                    : objectives.income.equals(false)));
+        ..where(filtro & objectives.walletFk.equals(wallet.walletPk));
       mergedStreams.add(queryTotalObjectiveAmountOffset.map((row) {
         // print(row.rawData.data);
         return TotalWithCount(
@@ -7043,6 +7048,55 @@ class FinanceDatabase extends _$FinanceDatabase {
       }).watchSingle());
     }
     return totalTotalWithCountStream(mergedStreams);
+  }
+
+  /// Offset por empréstimo: saldo limitado a zero menos as transações dele, para
+  /// que somado às transações (watchTotalWithCountOfCreditDebt) dê a soma dos
+  /// saldos de cada pessoa sem o excesso de quem pagou a mais.
+  Stream<TotalWithCount?> _offsetEmprestimosSemExcesso(
+      AllWallets allWallets, Expression<bool> filtro) {
+    final soma = transactions.amount.sum();
+    final query = selectOnly(objectives)
+      ..join([
+        leftOuterJoin(
+            transactions,
+            transactions.objectiveLoanFk.equalsExp(objectives.objectivePk) &
+                transactions.paid.equals(true)),
+      ])
+      ..addColumns([
+        objectives.objectivePk,
+        objectives.amount,
+        objectives.income,
+        objectives.walletFk,
+        transactions.walletFk,
+        soma,
+      ])
+      ..where(filtro)
+      ..groupBy([objectives.objectivePk, transactions.walletFk]);
+    double taxa(String? walletPk) => amountRatioToPrimaryCurrency(
+        allWallets, allWallets.indexedByPk[walletPk]?.currency);
+    return query.watch().map((linhas) {
+      final valor = <String, double>{};
+      final pago = <String, double>{};
+      final receita = <String, bool>{};
+      for (final l in linhas) {
+        final pk = l.read(objectives.objectivePk)!;
+        final ehReceita = l.read(objectives.income) ?? true;
+        receita[pk] = ehReceita;
+        valor[pk] = (l.read(objectives.amount) ?? 0).abs() *
+            (ehReceita ? -1 : 1) *
+            taxa(l.read(objectives.walletFk));
+        pago[pk] = (pago[pk] ?? 0) +
+            (l.read(soma) ?? 0) * taxa(l.read(transactions.walletFk));
+      }
+      double total = 0;
+      for (final pk in valor.keys) {
+        total += saldoEmprestimoSemExcesso(valor[pk]! + pago[pk]!,
+                receita: receita[pk]!) -
+            pago[pk]!;
+      }
+      return TotalWithCount(total: total, count: 0);
+    });
   }
 
   Stream<List<Transaction>> watchAllCreditDebtTransactions(
@@ -7633,6 +7687,11 @@ class FinanceDatabase extends _$FinanceDatabase {
     return transactionsToUpdate.length;
   }
 }
+
+/// Saldo de um empréstimo (negativo = a receber, positivo = a pagar) sem o que
+/// foi pago a mais: emprestado e quitado com sobra conta zero, não abate os outros.
+double saldoEmprestimoSemExcesso(double saldo, {required bool receita}) =>
+    receita ? (saldo < 0 ? saldo : 0.0) : (saldo > 0 ? saldo : 0.0);
 
 class TotalWithCount {
   final double total;

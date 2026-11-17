@@ -177,12 +177,9 @@ class MorePages extends StatelessWidget {
                 ? null
                 : "Aparência, transações e backup",
           ),
+          // Backup no Google Drive fica só em Configurações > Dados e backup.
           if (notificationsGlobalEnabled)
             pagina("notifications", NotificationsPage()),
-          GoogleAccountLoginButton(
-            key: settingsGoogleAccountLoginButtonKey,
-            isOutlinedButton: false,
-          ),
           SettingsContainerOpenPage(
             openPage: AboutPage(),
             title: "about-app".tr(namedArgs: {"app": globalAppName}),
@@ -299,6 +296,7 @@ List<Widget> configuracoesItens(BuildContext context) {
     GoogleAccountLoginButton(
       isOutlinedButton: false,
       forceButtonName: "Backup no Google Drive",
+      description: "Cópia dos seus dados na sua conta Google",
     ),
     SettingsContainerOpenPage(
       openPage: const ArrumarDadosPage(),

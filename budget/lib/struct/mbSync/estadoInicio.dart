@@ -5,6 +5,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
+import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
 import 'package:budget/struct/meuBancoMapping.dart'
     show mbCarteiraInvestimentos, mbPkConta, mbPrefixo;
 import 'package:drift/drift.dart';
@@ -42,6 +43,10 @@ class ModeloInicio {
   final String ciclo, saudacao, origemDisponivel;
   final double disponivel, consumido;
   final double? limite, percentual;
+
+  /// Não pago no ciclo (faixa clara da barra) e fração do ciclo decorrida até hoje (marca).
+  final double aVencer;
+  final double? fracaoHoje;
   final int diasRestantes, indiceHoje;
   final List<double> porDia;
   final List<ContaInicio> contas;
@@ -64,6 +69,8 @@ class ModeloInicio {
       consumido == o.consumido &&
       limite == o.limite &&
       percentual == o.percentual &&
+      aVencer == o.aVencer &&
+      fracaoHoje == o.fracaoHoje &&
       diasRestantes == o.diasRestantes &&
       indiceHoje == o.indiceHoje &&
       listEquals(porDia, o.porDia) &&
@@ -83,6 +90,8 @@ class ModeloInicio {
     required this.consumido,
     required this.limite,
     required this.percentual,
+    this.aVencer = 0,
+    this.fracaoHoje,
     required this.diasRestantes,
     required this.porDia,
     required this.indiceHoje,
@@ -113,7 +122,7 @@ String quandoRelativo(DateTime d, DateTime agora) {
 
 String haQuanto(DateTime d, DateTime agora) {
   final min = agora.difference(d).inMinutes;
-  if (min < 1) return 'agora há pouco';
+  if (min < 1) return 'agora';
   if (min < 60) return 'há $min min';
   if (min < 1440) return 'há ${min ~/ 60} h';
   return 'há ${min ~/ 1440} d';
@@ -175,7 +184,7 @@ ModeloInicio montarModeloInicio({
   bool agruparPoupancas = true,
   // Orçamento Geral (o que "Definir limite do ciclo" edita): limite e gasto vêm dele, pela mesma
   // consulta da tela do orçamento. Sem Geral no aparelho, valem os números do Worker.
-  ({double limite, double gasto})? geral,
+  ({double limite, double gasto, double aVencer})? geral,
 }) {
   final ini = DateTime.tryParse('${ciclo['inicio']}');
   final fim = DateTime.tryParse('${ciclo['fim']}');
@@ -292,6 +301,8 @@ ModeloInicio montarModeloInicio({
         : limiteCiclo == null
             ? null
             : gastoCiclo / limiteCiclo * 100,
+    aVencer: geral?.aVencer ?? 0,
+    fracaoHoje: ini == null || fim == null ? null : fracaoDoCiclo(ini, fim, agora),
     diasRestantes: (ciclo['diasRestantes'] as num?)?.toInt() ??
         (fim == null ? 0 : _soDia(fim).difference(_soDia(agora)).inDays),
     porDia: dias,

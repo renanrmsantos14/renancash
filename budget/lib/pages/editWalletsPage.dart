@@ -1,4 +1,6 @@
 import 'package:budget/colors.dart';
+import 'package:budget/struct/mbSync/conexoes.dart'
+    show mbOrigemCarteira, mbTiposDasCarteiras;
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
@@ -55,12 +57,17 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
   Map<String, double> _saldosReais = const {};
   double _saldoDe(WalletWithDetails w) =>
       _saldosReais[w.wallet.walletPk] ?? w.totalSpent ?? 0;
+  // Tipo das contas do Meu Banco para o subtítulo (nomes repetidos se distinguem).
+  Map<String, String> _tiposMb = const {};
 
   @override
   void initState() {
     mbLerSaldosReais().then((r) {
       if (mounted) setState(() => _saldosReais = r);
     }, onError: (_) {});
+    mbTiposDasCarteiras().then((t) {
+      if (mounted) setState(() => _tiposMb = t);
+    });
     Future.delayed(Duration.zero, () {
       if (widget.runWhenOpen != null) {
         widget.runWhenOpen!();
@@ -252,6 +259,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                             nome: wallet.name,
                             detalhe: [
                               if (principal) "Principal",
+                              mbOrigemCarteira(wallet.walletPk, _tiposMb),
                               n == 1 ? "1 transação" : "$n transações",
                             ].join(" · "),
                             saldo: comSinal(
@@ -259,7 +267,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                 (v) => convertToMoney(allWallets, v,
                                     currencyKey: wallet.currency,
                                     decimals: wallet.decimals,
-                                    addCurrencyName: true)),
+                                    addCurrencyName:
+                                        !allWallets.allContainSameCurrency())),
                           ),
                           openPage: AddWalletPage(
                               wallet: wallet,

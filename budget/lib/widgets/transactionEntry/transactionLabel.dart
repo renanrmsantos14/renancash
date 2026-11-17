@@ -34,13 +34,21 @@ class TransactionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return transaction.name != ""
-        ? TransactionTitleNameLabel(
-            transaction: transaction, fontSize: fontSize)
-        : TransactionCategoryNameLabel(
-            transaction: transaction, fontSize: fontSize);
+    if (transaction.name != "")
+      return TransactionTitleNameLabel(
+          transaction: transaction, fontSize: fontSize);
+    // Sem título, a subcategoria ("Spotify") diz mais que a categoria.
+    return TransactionCategoryNameLabel(
+        transaction: transaction,
+        categoryPk: categoriaDoTitulo(transaction),
+        category: transaction.subCategoryFk == null ? category : null,
+        fontSize: fontSize);
   }
 }
+
+/// Sem título, a linha mostra a subcategoria ("Spotify") e, sem ela, a categoria.
+String categoriaDoTitulo(Transaction transaction) =>
+    transaction.subCategoryFk ?? transaction.categoryFk;
 
 class TransactionTitleNameLabel extends StatelessWidget {
   const TransactionTitleNameLabel(
@@ -69,18 +77,23 @@ class TransactionCategoryNameLabel extends StatelessWidget {
   const TransactionCategoryNameLabel({
     required this.transaction,
     this.category,
+    this.categoryPk,
     required this.fontSize,
     super.key,
   });
   final Transaction transaction;
   final TransactionCategory? category;
+
+  /// Categoria a buscar quando [category] é nulo (padrão: a da transação).
+  final String? categoryPk;
   final double fontSize;
 
   @override
   Widget build(BuildContext context) {
     return category == null
         ? StreamBuilder<TransactionCategory>(
-            stream: database.getCategory(transaction.categoryFk).$1,
+            stream:
+                database.getCategory(categoryPk ?? transaction.categoryFk).$1,
             builder: (context, snapshot) {
               if (snapshot.hasData) {
                 return TextFont(

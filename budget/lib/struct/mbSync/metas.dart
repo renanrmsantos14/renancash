@@ -119,7 +119,11 @@ Future<List<MbAplicacao>> mbAplicacoes() async {
         ..where((t) =>
             t.walletFk.equals(mbCarteiraInvestimentos) &
             t.transactionPk.like('$_prefixoAplicacao%'))
-        ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+        // Nomes repetidos (4 "CDB - BANCO INTER"): maior saldo primeiro, ordem estável.
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.name),
+          (t) => OrderingTerm.desc(t.amount)
+        ]))
       .get();
   return [
     for (final t in txs)

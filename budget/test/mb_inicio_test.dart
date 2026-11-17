@@ -58,6 +58,27 @@ void main() {
     expect(m.contas.map((c) => c.carteiras), [mbPkConta('a'), '${mbPkConta('b')}|${mbPkConta('c')}']);
   });
 
+  test('correntes de bancos diferentes: uma linha cada; poupança com o saldo do Meu Banco', () {
+    // No aparelho, a carteira da poupança soma só os juros (R$ 0,06); o saldo real é R$ 1,06.
+    final contas = [
+      {'id': 'i', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'BANCO INTER ·69-6', 'balance': 927.28},
+      {'id': 'n', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Nubank ·12-3', 'balance': 50.0},
+      {'id': 'p', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Santander ·24-1', 'balance': 1.06},
+    ];
+    final m = montarModeloInicio(
+        ciclo: {},
+        contas: contas,
+        faturas: {},
+        sincronizadoEm: null,
+        ultimas: [],
+        nome: '',
+        agora: _agora);
+    expect(m.contas.map((c) => c.nome), ['BANCO INTER ·69-6', 'Nubank ·12-3', 'Santander ·24-1']);
+    expect(m.contas.map((c) => c.saldo), [927.28, 50.0, 1.06]);
+    expect(m.origemDisponivel, 'BANCO INTER, Nubank e poupanças');
+    expect(mbSaldosReais(contas)[mbPkConta('p')], 1.06);
+  });
+
   test('poupanças separadas: uma linha por conta, com o banco no tipo', () {
     final m = montarModeloInicio(
         ciclo: {},

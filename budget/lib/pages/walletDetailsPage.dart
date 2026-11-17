@@ -62,6 +62,17 @@ import 'package:budget/widgets/editorial/movimento.dart';
 
 // Also known as the all spending page
 
+const _mesesCurtos = [
+  'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+  'jul', 'ago', 'set', 'out', 'nov', 'dez'
+];
+
+/// Ciclo do Histórico: "6 out – 5 nov".
+String intervaloDoCiclo(DateTimeRange r) {
+  String dia(DateTime d) => '${d.day} ${_mesesCurtos[d.month - 1]}';
+  return '${dia(r.start)} – ${dia(r.end)}';
+}
+
 DateTimeRange? createSafeDateTimeRange({DateTime? start, DateTime? end}) {
   if (start == null || end == null) {
     return null;
@@ -88,6 +99,10 @@ DateTimeRange? getDateTimeRangeForPassedSearchFilters(
         DateTime.now().justDay(yearOffset: 100),
   );
 }
+
+/// Aviso da aba Histórico de Todos os gastos: por que as saídas do ciclo passam do gasto do Geral.
+const rotuloHistoricoTodosGastos =
+    'Saídas de todas as contas, com empréstimos e o que fica fora do orçamento Geral.';
 
 class WatchedWalletDetailsPage extends StatelessWidget {
   const WatchedWalletDetailsPage({required this.walletPk, super.key});
@@ -348,6 +363,13 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
     // }
 
     List<Widget> historyTabPage = [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(30, 0, 30, 10),
+          child: Text(rotuloHistoricoTodosGastos,
+              style: EdTexto.rotulo(context)),
+        ),
+      ),
       AllSpendingPastSpendingGraph(
         appStateSettingsNetAllSpendingTotal:
             appStateSettingsNetAllSpendingTotal,
@@ -1467,6 +1489,32 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
   }
 }
 
+/// Item da legenda do gráfico do Histórico: traço na cor da linha + nome.
+class _ItemLegenda extends StatelessWidget {
+  const _ItemLegenda({required this.nome, required this.cor});
+  final String nome;
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 12,
+            height: 3,
+            decoration: BoxDecoration(
+                color: cor, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(width: 6),
+          TextFont(
+            text: nome,
+            fontSize: 12,
+            textColor: getColor(context, "textLight"),
+          ),
+        ],
+      );
+}
+
 class DisabledButton extends StatelessWidget {
   const DisabledButton(
       {required this.child, required this.disabled, super.key});
@@ -2173,10 +2221,11 @@ class _AllSpendingPastSpendingGraphState
     required int index,
     required Color containerColor,
     required DateTimeRange budgetRange,
-    required double netSpending,
     required double incomeSpending,
     required double expenseSpending,
   }) {
+    // Entradas − saídas do ciclo (ou acumulado), o mesmo par mostrado à direita.
+    final saldo = incomeSpending.abs() - expenseSpending.abs();
     return FadeIn(
       duration: Duration(milliseconds: 400),
       child: Container(
@@ -2242,8 +2291,7 @@ class _AllSpendingPastSpendingGraphState
                                                   DateTime.now()) <=
                                               100
                                           ? "current-period".tr()
-                                          : getWordedDateShortMore(
-                                              budgetRange.start),
+                                          : intervaloDoCiclo(budgetRange),
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -2264,25 +2312,40 @@ class _AllSpendingPastSpendingGraphState
                                 ],
                               ),
                               SizedBox(height: 2),
-                              TextFont(
-                                text: convertToMoney(
-                                  Provider.of<AllWallets>(context),
-                                  netSpending,
-                                ),
-                                fontSize: 16,
-                                textAlign: TextAlign.start,
-                                fontWeight: FontWeight.bold,
-                                textColor:
-                                    appStateSettings["netTotalsColorful"] ==
-                                            true
-                                        ? (netSpending == 0
-                                            ? getColor(context, "black")
-                                            : netSpending > 0
-                                                ? getColor(
-                                                    context, "incomeAmount")
-                                                : getColor(
-                                                    context, "expenseAmount"))
-                                        : getColor(context, "black"),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  TextFont(
+                                    text: widget
+                                            .appStateSettingsNetAllSpendingTotal
+                                        ? "Saldo acumulado "
+                                        : "Saldo ",
+                                    fontSize: 13,
+                                    textColor: getColor(context, "textLight"),
+                                  ),
+                                  Flexible(
+                                    child: TextFont(
+                                      text: convertToMoney(
+                                        Provider.of<AllWallets>(context),
+                                        saldo,
+                                      ),
+                                      fontSize: 16,
+                                      textAlign: TextAlign.start,
+                                      fontWeight: FontWeight.bold,
+                                      textColor: appStateSettings[
+                                                  "netTotalsColorful"] ==
+                                              true
+                                          ? (saldo == 0
+                                              ? getColor(context, "black")
+                                              : saldo > 0
+                                                  ? getColor(
+                                                      context, "incomeAmount")
+                                                  : getColor(context,
+                                                      "expenseAmount"))
+                                          : getColor(context, "black"),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -2431,6 +2494,8 @@ class _AllSpendingPastSpendingGraphState
         required totalNetBefore}) {
       double minimumYValue = 0.00000000001;
       List<List<FlSpot>> allSpots = [];
+      // Nome de cada linha de allSpots, na mesma ordem, para a legenda.
+      final List<String> series = [];
       if (widget.appStateSettingsNetAllSpendingTotal) {
         List<FlSpot> spots = [];
         double total = totalNetBefore;
@@ -2446,6 +2511,7 @@ class _AllSpendingPastSpendingGraphState
           ));
         }
         allSpots.add(spots);
+        series.add("Saldo acumulado");
       } else {
         List<FlSpot> spots = [];
 
@@ -2464,6 +2530,7 @@ class _AllSpendingPastSpendingGraphState
               ));
             }
             allSpots.add(spots);
+            series.add("Saídas");
           }
         }
 
@@ -2480,9 +2547,22 @@ class _AllSpendingPastSpendingGraphState
             ));
           }
           allSpots.add(spots);
+          series.add("Entradas");
         }
       }
 
+      final corUnica = dynamicPastel(
+        context,
+        Theme.of(context).colorScheme.primary,
+        amountLight: 0.4,
+        amountDark: 0.2,
+      );
+      final coresLinhas = allSpots.length > 1
+          ? [
+              getColor(context, "expenseAmount"),
+              getColor(context, "incomeAmount"),
+            ]
+          : null;
       return SliverStickyHeader(
         header: Transform.translate(
           offset: Offset(0, -1),
@@ -2506,19 +2586,9 @@ class _AllSpendingPastSpendingGraphState
                                       : 0,
                               showDateOnHover: true,
                               onTouchedIndex: (index) {},
-                              color: dynamicPastel(
-                                context,
-                                Theme.of(context).colorScheme.primary,
-                                amountLight: 0.4,
-                                amountDark: 0.2,
-                              ),
+                              color: corUnica,
                               dateRanges: dateTimeRanges,
-                              lineColors: allSpots.length > 1
-                                  ? [
-                                      getColor(context, "expenseAmount"),
-                                      getColor(context, "incomeAmount"),
-                                    ]
-                                  : null,
+                              lineColors: coresLinhas,
                               spots: allSpots,
                               horizontalLineAt: null,
                               budget: getCustomCycleTempBudget(""),
@@ -2551,6 +2621,18 @@ class _AllSpendingPastSpendingGraphState
                     ],
                   ),
               ),
+              if (series.isNotEmpty)
+                Container(
+                  color: Theme.of(context).colorScheme.background,
+                  padding: const EdgeInsetsDirectional.only(
+                      start: 20, end: 20, bottom: 2),
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Wrap(spacing: 16, runSpacing: 4, children: [
+                    for (final (i, nome) in series.indexed)
+                      _ItemLegenda(
+                          nome: nome, cor: coresLinhas?[i] ?? corUnica),
+                  ]),
+                ),
               Transform.translate(
                 offset: Offset(0, -1),
                 child: Container(
@@ -2577,11 +2659,8 @@ class _AllSpendingPastSpendingGraphState
         sliver: MultiSliver(
           children: [
             Builder(builder: (context) {
-              double currentTotalNetSpending =
-                  totalExpenseBefore + totalIncomeBefore;
               double currentTotalNetIncome = totalIncomeBefore;
               double currentTotalNetExpense = totalExpenseBefore;
-              List<double> totalNetPoints = [];
               List<double> totalIncomePoints = [];
               List<double> totalExpensePoints = [];
               for (int i = amountLoaded - 1; i >= 0; i--) {
@@ -2593,21 +2672,14 @@ class _AllSpendingPastSpendingGraphState
                         TotalWithCount(total: 0, count: 0))
                     .total;
 
-                double netSpending = (nullIfIndexOutOfRange(netData, i) ??
-                        TotalWithCount(total: 0, count: 0))
-                    .total;
-
                 if (widget.appStateSettingsNetAllSpendingTotal) {
-                  currentTotalNetSpending += netSpending;
                   currentTotalNetIncome += incomeSpending;
                   currentTotalNetExpense += expenseSpending;
                 } else {
-                  currentTotalNetSpending = netSpending;
                   currentTotalNetIncome = incomeSpending;
                   currentTotalNetExpense = expenseSpending;
                 }
 
-                totalNetPoints.add(currentTotalNetSpending);
                 totalIncomePoints.add(currentTotalNetIncome);
                 totalExpensePoints.add(currentTotalNetExpense);
               }
@@ -2632,8 +2704,6 @@ class _AllSpendingPastSpendingGraphState
                       index: index,
                       containerColor: containerColor,
                       budgetRange: budgetRange,
-                      netSpending:
-                          totalNetPoints[totalNetPoints.length - 1 - index],
                       incomeSpending: totalIncomePoints[
                           totalIncomePoints.length - 1 - index],
                       expenseSpending: totalExpensePoints[

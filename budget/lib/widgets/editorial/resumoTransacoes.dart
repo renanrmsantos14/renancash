@@ -134,6 +134,13 @@ class TotalDestaque extends StatelessWidget {
 /// "1 transação" / "3 transações".
 String contagemTransacoes(int n) => n == 1 ? '1 transação' : '$n transações';
 
+/// "1 assinatura" / "3 assinaturas".
+String contagemAssinaturas(int n) =>
+    n == 1 ? '1 assinatura' : '$n assinaturas';
+
+/// "1 agendada" / "3 agendadas".
+String contagemAgendadas(int n) => n == 1 ? '1 agendada' : '$n agendadas';
+
 /// Ação única de um estado vazio: botão compacto em `chip`, 44 px de toque.
 class AcaoVazio extends StatelessWidget {
   const AcaoVazio({super.key, required this.rotulo, required this.onTap});

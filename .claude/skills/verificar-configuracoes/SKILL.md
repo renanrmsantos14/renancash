@@ -31,6 +31,9 @@ description: "Verifica Configurações e telas do 'resto' (Etapa 5 da revisão d
 - Histórico de alterações: sem botão de nova transação; vazio explica o que aparece; apagadas tocáveis para restaurar.
 - `increase-text-contrast`: descrição em `mu` (desligado) ou `tx` (ligado), nunca na cor de acento.
 - Tema antigo/locale: o título "Tema e cor" mostra o nome do tema salvo.
+- Mais (celular) não tem mais "Conecte-se": login/backup do Google fica só em Configurações > Dados e backup > "Backup no Google Drive", com o subtítulo "Cópia dos seus dados na sua conta Google". Fechar o seletor de contas do Google não mostra "Erro de login" (`signInGoogle`: conta nula no login manual ou `sign_in_canceled`); falha real continua com o snackbar.
+- Idioma: "Português (Brasil)" / "Português (Portugal)" (`assets/static/language-names.json`; o title case por palavra não mexe no parêntese).
+- Diálogo de sair com alteração (`discardChangesPopup`): título "Descartar alterações?", botões "Continuar editando" e "Descartar".
 
 ## Evidência
 - Tail do analyze e dos testes, PNGs `config_*` e prints do navegador em `.verificacao/<data>-<branch>/`.

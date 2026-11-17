@@ -251,19 +251,28 @@ class _CartaoConexao extends StatelessWidget {
               Padding(
                 padding:
                     const EdgeInsetsDirectional.only(start: 48, end: 4, top: 4),
-                child: Row(children: [
-                  Expanded(
-                    child: Text('${conta.nome} · ${conta.tipo}',
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.rotulo(context)),
-                  ),
-                  if (conta.saldo != null)
-                    Text(
-                        conta.cartao
-                            ? 'Fatura ${brl(conta.saldo!)}'
-                            : brl(conta.saldo!),
-                        style: EdTexto.corpo(context).copyWith(fontSize: 13)),
-                ]),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                          child: Text('${conta.nome} · ${conta.tipo}',
+                              overflow: TextOverflow.ellipsis,
+                              style: EdTexto.rotulo(context)),
+                        ),
+                        if (conta.saldo != null)
+                          Text(
+                              conta.cartao
+                                  ? 'Fatura ${brl(conta.saldo!)}'
+                                  : brl(conta.saldo!),
+                              style: EdTexto.corpo(context)
+                                  .copyWith(fontSize: 13)),
+                      ]),
+                      if (conta.foraDoApp)
+                        Text('Fora do app · usada por outra pessoa',
+                            style: EdTexto.rotulo(context)
+                                .copyWith(fontSize: 11.5)),
+                    ]),
               ),
             const SizedBox(height: 6),
             Row(
