@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart' show getBudgetDate;
+import 'package:budget/pages/transactionFilters.dart' show SearchFilters;
 import 'package:budget/struct/currencyFunctions.dart' show budgetAmountToPrimaryCurrency;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
@@ -210,17 +211,44 @@ Stream<double> mbWatchGastoOrcamento(
         .map((l) =>
             l.fold<double>(0, (s, c) => s + c.total) * (b.income ? 1 : -1));
 
-/// Limite (0 = sem valor) e gasto do Geral no ciclo atual: o que a Início mostra no cartão do ciclo.
-/// `null` quando o Geral não existe (aparelho ainda sem Meu Banco).
-Future<({double limite, double gasto})?> mbLerCicloGeral(DateTime agora) async {
+/// Transações não pagas do período (a vencer), com os mesmos filtros do gasto: a faixa clara da
+/// barra do orçamento, como no Cashew. Nunca negativo.
+Stream<double> mbWatchAVencerOrcamento(
+        Budget b, AllWallets carteiras, DateTimeRange periodo) =>
+    database
+        .watchTotalOfBudget(
+          allWallets: carteiras,
+          start: periodo.start,
+          end: periodo.end,
+          categoryFks: b.categoryFks,
+          categoryFksExclude: b.categoryFksExclude,
+          budgetTransactionFilters: b.budgetTransactionFilters,
+          memberTransactionFilters: b.memberTransactionFilters,
+          onlyShowTransactionsBelongingToBudgetPk:
+              b.sharedKey != null || b.addedTransactionsOnly ? b.budgetPk : null,
+          budget: b,
+          searchFilters: SearchFilters(paidStatus: [PaidStatus.notPaid]),
+          paidOnly: false,
+        )
+        .map((v) {
+          final total = (v ?? 0) * (b.income ? 1 : -1);
+          return total < 0 ? 0.0 : total;
+        });
+
+/// Limite (0 = sem valor), gasto e a vencer do Geral no ciclo atual: o que a Início mostra no
+/// cartão do ciclo. `null` quando o Geral não existe (aparelho ainda sem Meu Banco).
+Future<({double limite, double gasto, double aVencer})?> mbLerCicloGeral(
+    DateTime agora) async {
   final b = await (database.select(database.budgets)
         ..where((x) => x.budgetPk.equals(mbOrcamentoGeralPk)))
       .getSingleOrNull();
   if (b == null) return null;
   final carteiras = await database.watchAllWalletsIndexed().first;
+  final periodo = getBudgetDate(b, agora);
   return (
     limite: budgetAmountToPrimaryCurrency(carteiras, b),
-    gasto: await mbWatchGastoOrcamento(b, carteiras, getBudgetDate(b, agora)).first,
+    gasto: await mbWatchGastoOrcamento(b, carteiras, periodo).first,
+    aVencer: await mbWatchAVencerOrcamento(b, carteiras, periodo).first,
   );
 }
 

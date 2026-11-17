@@ -97,6 +97,8 @@ void main() {
                 gasto: 12345.67,
                 limite: 30000,
                 diasRestantes: 19,
+                aVencer: 2500,
+                hoje: 1 / 19,
               ),
             ],
           ),
@@ -106,6 +108,7 @@ void main() {
     await t.pump(const Duration(seconds: 2));
     final dias = find.text('faltam 19 dias');
     expect(dias, findsOneWidget);
+    expect(find.textContaining('Ideal até hoje'), findsOneWidget);
     expect(t.getRect(dias).right,
         lessThanOrEqualTo(t.getRect(find.byType(CartaoOrcamento)).right));
     expect(t.takeException(), isNull);

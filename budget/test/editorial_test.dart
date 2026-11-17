@@ -136,11 +136,32 @@ void main() {
     await t.pumpWidget(_app(const MedidorEditorial(fracao: 1.4)));
     await t.pump(const Duration(milliseconds: 900));
     final m = t
-        .widgetList<Transform>(find.descendant(
+        .widgetList<FractionallySizedBox>(find.descendant(
             of: find.byType(MedidorEditorial),
-            matching: find.byType(Transform)))
-        .first;
-    expect(m.transform.storage[0], 1.0);
+            matching: find.byType(FractionallySizedBox)))
+        .single;
+    expect(m.widthFactor, 1.0);
+    expect(find.byKey(const Key('marca-hoje')), findsNothing);
+  });
+
+  testWidgets('MedidorEditorial: faixa a vencer após o gasto e marca de hoje no tempo', (t) async {
+    await t.pumpWidget(_app(const Center(
+        child: SizedBox(
+            width: 300,
+            child: MedidorEditorial(
+                fracao: .5, aVencer: .2, hoje: .4, altura: 6)))));
+    await t.pump(const Duration(milliseconds: 900));
+    final faixas = t
+        .widgetList<FractionallySizedBox>(find.descendant(
+            of: find.byType(MedidorEditorial),
+            matching: find.byType(FractionallySizedBox)))
+        .map((f) => f.widthFactor)
+        .toList();
+    expect(faixas, [closeTo(.7, 1e-9), closeTo(.5, 1e-9)]);
+    final marca = t.getRect(find.byKey(const Key('marca-hoje')));
+    final barra = t.getRect(find.byType(MedidorEditorial));
+    expect(marca.center.dx - barra.left, closeTo(120, .01));
+    expect(marca.height, 6 + 8);
   });
 
   test('tema editorial dá contraste legível nos papéis de container usados pelo RenanCash', () {

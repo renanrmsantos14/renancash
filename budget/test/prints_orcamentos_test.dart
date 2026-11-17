@@ -148,6 +148,8 @@ void main() {
                 gasto: 2871.15,
                 limite: 4630,
                 diasRestantes: 22,
+                aVencer: 420,
+                hoje: 9 / 30,
               ),
               const SizedBox(height: 12),
               const CartaoOrcamento(
@@ -157,6 +159,7 @@ void main() {
                 gasto: 1312.4,
                 limite: 1200,
                 diasRestantes: 18,
+                hoje: 13 / 30,
               ),
               const SizedBox(height: 12),
               const CartaoOrcamento(
@@ -167,6 +170,7 @@ void main() {
                 limite: 1000,
                 renda: true,
                 diasRestantes: 18,
+                hoje: 13 / 30,
               ),
             ],
           ),
@@ -217,6 +221,8 @@ void main() {
                         grande: true,
                         mostrarGasto: mostrarGasto,
                         diasRestantes: 22,
+                        aVencer: 420,
+                        hoje: 9 / 30,
                         onTapValor: () {},
                       ),
                     ],

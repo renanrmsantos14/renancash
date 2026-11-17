@@ -19,8 +19,10 @@ import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
     show mbMudouGeral, mbOrcamentoGeralPk;
 import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
+import 'package:budget/struct/ritmoCiclo.dart' show textoIdealHoje;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/budgetContainer.dart' show BarraOrcamento;
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart' show abrirTransacao;
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -416,7 +418,12 @@ class _Restante extends StatelessWidget {
             estilo: EdTexto.numeroGrande(context)
                 .copyWith(color: estourou ? e.warn : null)),
         const SizedBox(height: 14),
-        MedidorEditorial(fracao: modelo.consumido / limite, alerta: estourou),
+        BarraOrcamento(
+            gasto: modelo.consumido,
+            limite: limite,
+            aVencer: modelo.aVencer,
+            hoje: modelo.fracaoHoje,
+            alerta: estourou),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -430,6 +437,11 @@ class _Restante extends StatelessWidget {
             Text(quando, style: EdTexto.rotulo(context)),
           ],
         ),
+        if (modelo.fracaoHoje case final fracao?) ...[
+          const SizedBox(height: 4),
+          Text(textoIdealHoje(modelo.consumido, limite, fracao, brl),
+              maxLines: 2, style: EdTexto.rotulo(context)),
+        ],
         if (!estourou && AjustesInicio.ritmoDiario) ...[
           const SizedBox(height: 10),
           Text('Pode gastar ${brl(restante / (dias + 1))}/dia',
