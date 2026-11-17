@@ -77,21 +77,21 @@ class _SelectChipsState<T> extends State<SelectChips<T>> {
           }
           currentIndex++;
         }
-        // Extra widget at beginning
+        // O widget extra só entra na lista quando não é fixo; fixo, ele fica fora
+        // e somar 1 rolava até o chip seguinte, cortando o selecionado à esquerda.
         if (widget.extraWidgetBefore != null &&
+            widget.extraWidgetBeforeSticky == false &&
             scrollToIndex != null &&
             scrollToIndex > 0) {
           scrollToIndex = scrollToIndex + 1;
         }
         if (scrollToIndex != null && scrollToIndex != 0) {
+          // Perto do início: um rótulo longo cabe inteiro (a 40% ele cortava à direita).
           itemScrollController.scrollTo(
             index: scrollToIndex,
             duration: Duration(milliseconds: 500),
             curve: Curves.easeInOutCubicEmphasized,
-            alignment: widget.extraWidgetBeforeSticky &&
-                    widget.extraWidgetBefore != null
-                ? 0.4
-                : 0.06,
+            alignment: 0.06,
           );
         }
       });

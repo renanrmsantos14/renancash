@@ -95,7 +95,7 @@ class HomePagePatrimonio extends StatelessWidget {
           const SizedBox(height: 4),
           _linha('Conta Inter', brl(p.inter), suave),
           _linha('Investimentos', brl(p.investimentos), suave),
-          _linha('Fatura atual', '− ${brl(p.fatura)}', suave),
+          _linha('Fatura atual', '−${brl(p.fatura)}', suave),
           if (d.carteiras.isNotEmpty) ...[
             const SizedBox(height: 10),
             TextFont(text: 'Carteiras', fontSize: 14, fontWeight: FontWeight.bold, textColor: suave),

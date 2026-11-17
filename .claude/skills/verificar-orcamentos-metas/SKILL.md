@@ -22,7 +22,8 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 
 ## Casos de borda
 - Orçamento de despesa: "Resta" → passou do limite vira "Acima do limite" com valor em `overspentAmount` e medidor em alerta. Poupança (`income`): "Falta guardar" → "Acima da meta" em verde, sem alerta.
-- "faltam N dias" conta hoje; no último dia mostra "último dia". Fora do período (ciclo passado do histórico) não mostra dias nem ritmo. Ritmo "Pode gastar R$ X/dia" (ou "Guarde") só no detalhe e só com saldo positivo.
+- "faltam N dias" conta hoje; no último dia mostra "último dia". O cartão da lista mostra o texto inteiro ("faltam 19 dias", nunca só "faltam 19") na largura do celular: `test/textos_layout_test.dart`.
+- Análise › pizza sem lançamentos no período: uma linha compacta ("Sem entradas no período" / "Sem saídas no período" + "Escolher período", sem caixa alta por palavra) no lugar da pizza vazia; a seta de troca fica à direita. Patrimônio: "Fatura atual −R$ 569,25" (− colado). Fim das listas de Orçamentos e Metas com `mbFolgaFab`. Fora do período (ciclo passado do histórico) não mostra dias nem ritmo. Ritmo "Pode gastar R$ X/dia" (ou "Guarde") só no detalhe e só com saldo positivo.
 - O valor que conta (`ContagemValor`) usa `allDecimals: true` para não trocar de formato ao terminar ("1.500,00" e não "1.500"). Linhas secundárias seguem o `convertToMoney` normal.
 - Toque no cartão abre o detalhe com `ToqueEscala`; segurar abre a edição. Entrada da lista (`EntradaSuave`) só nos primeiros 600 ms da página; tudo some com "reduzir movimento". Confete da meta não toca com `semMovimento`.
 - Histórico: o item "Histórico do orçamento" do menu e o "Ver ciclos anteriores" do vazio aparecem para orçamentos recorrentes que não vieram do histórico (a condição antiga nunca era verdadeira).

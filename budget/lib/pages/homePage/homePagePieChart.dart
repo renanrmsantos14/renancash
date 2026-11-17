@@ -198,6 +198,27 @@ class IncomeOutcomeArrowPageIndicator extends StatelessWidget {
   }
 }
 
+/// Período sem lançamentos: uma linha (texto e "Escolher período") no lugar da pizza vazia,
+/// para o cartão não empurrar os orçamentos para baixo da dobra.
+class _PizzaVazia extends StatelessWidget {
+  const _PizzaVazia({required this.texto, required this.onEscolherPeriodo});
+  final String texto;
+  final VoidCallback onEscolherPeriodo;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        // À direita, no topo, fica a seta que troca entre saídas e entradas.
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 56, 12),
+        child: Row(
+          children: [
+            Expanded(child: TextFont(text: texto, fontSize: 15, maxLines: 2)),
+            LowKeyButton(
+                onTap: onEscolherPeriodo, text: "select-period".tr()),
+          ],
+        ),
+      );
+}
+
 class PieChartHomeAndCategorySummary extends StatefulWidget {
   const PieChartHomeAndCategorySummary(
       {required this.isIncome,
@@ -297,6 +318,21 @@ class _PieChartHomeAndCategorySummaryState
               ]),
             ),
             builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.isEmpty) {
+                final soEntradaESaida =
+                    appStateSettings["pieChartIncomeAndExpenseOnly"] == true;
+                return _PizzaVazia(
+                  texto: (widget.isIncome
+                          ? (soEntradaESaida
+                              ? "no-income-within-period"
+                              : "no-incoming-within-period")
+                          : (soEntradaESaida
+                              ? "no-expense-within-period"
+                              : "no-outgoing-within-period"))
+                      .tr(),
+                  onEscolherPeriodo: openPieChartSettings,
+                );
+              }
               if (snapshot.hasData) {
                 TotalSpentCategoriesSummary s =
                     watchTotalSpentInTimeRangeHelper(
@@ -464,54 +500,6 @@ class _PieChartHomeAndCategorySummaryState
                                                 "lightDarkAccentHeavyLight"),
                                           ),
                                         ),
-                                        if (snapshot.data!.length <= 0)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsetsDirectional.all(
-                                                    8.0),
-                                            child: Column(
-                                              children: [
-                                                ConstrainedBox(
-                                                  constraints: BoxConstraints(
-                                                      maxWidth: boxConstraints
-                                                                      .maxWidth -
-                                                                  50 <=
-                                                              10
-                                                          ? 10
-                                                          : boxConstraints
-                                                                  .maxWidth -
-                                                              50),
-                                                  child: TextFont(
-                                                    text: widget.isIncome
-                                                        ? appStateSettings[
-                                                                    "pieChartIncomeAndExpenseOnly"] ==
-                                                                true
-                                                            ? "no-income-within-period"
-                                                                .tr()
-                                                            : "no-incoming-within-period"
-                                                                .tr()
-                                                        : appStateSettings[
-                                                                    "pieChartIncomeAndExpenseOnly"] ==
-                                                                true
-                                                            ? "no-expense-within-period"
-                                                                .tr()
-                                                            : "no-outgoing-within-period"
-                                                                .tr(),
-                                                    textAlign: TextAlign.center,
-                                                    maxLines: 20,
-                                                    fontSize: 17,
-                                                  ),
-                                                ),
-                                                SizedBox(height: 15),
-                                                LowKeyButton(
-                                                  onTap: openPieChartSettings,
-                                                  text: "select-period"
-                                                      .tr()
-                                                      .capitalizeFirstofEach,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
                                       ],
                                     ),
                                   ),
