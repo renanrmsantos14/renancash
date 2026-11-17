@@ -3,10 +3,9 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart' hide AppSettings;
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/dateDivider.dart';
-import 'package:budget/widgets/fab.dart';
-import 'package:budget/widgets/fadeIn.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/noResults.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -165,14 +164,6 @@ class ActivityPageState extends State<ActivityPage> {
         dragDownToDismiss: true,
         title: "activity-log".tr(),
         listID: pageId,
-        floatingActionButton: AnimateFABDelayed(
-          fab: AddFAB(
-            tooltip: "add-transaction".tr(),
-            openPage: AddTransactionPage(
-              routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-            ),
-          ),
-        ),
         slivers: [
           StreamBuilder<List<TransactionActivityLog>>(
             stream: database.watchAllTransactionActivityLog(limit: 30),
@@ -196,7 +187,10 @@ class ActivityPageState extends State<ActivityPage> {
                       return SliverToBoxAdapter(
                         child: Center(
                           child:
-                              NoResults(message: "no-transactions-found".tr()),
+                              NoResults(
+                            message:
+                                "Nenhuma alteração ainda. Transações editadas ou apagadas aparecem aqui.",
+                          ),
                         ),
                       );
                     }
@@ -226,11 +220,8 @@ class ActivityPageState extends State<ActivityPage> {
                               children: [
                                 Expanded(
                                   child: Tappable(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .secondaryContainer
-                                        .withOpacity(0.2),
-                                    borderRadius: 5,
+                                    color: cores(context).surf,
+                                    borderRadius: 12,
                                     child: Padding(
                                       padding:
                                           const EdgeInsetsDirectional.symmetric(

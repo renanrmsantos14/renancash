@@ -1,6 +1,6 @@
 import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
-import 'package:budget/pages/aboutPage.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/widgets/button.dart';
@@ -124,7 +124,10 @@ class _ExchangeRatesState extends State<ExchangeRates> {
               title: "exchange-rate-notice".tr(),
               description: "exchange-rate-notice-description".tr() +
                   "\n\n" +
-                  "select-an-entry-to-set-custom-exchange-rate".tr(),
+                  "select-an-entry-to-set-custom-exchange-rate".tr() +
+                  "\n\n" +
+                  "exchange-rates-api".tr() +
+                  ": github.com/fawazahmed0/exchange-api",
               icon: appStateSettings["outlinedIcons"]
                   ? Icons.info_outlined
                   : Icons.info_outline_rounded,
@@ -142,12 +145,6 @@ class _ExchangeRatesState extends State<ExchangeRates> {
         ),
       ],
       slivers: [
-        SliverToBoxAdapter(
-          child: AboutInfoBox(
-            title: "exchange-rates-api".tr(),
-            link: "https://github.com/fawazahmed0/exchange-api",
-          ),
-        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsetsDirectional.only(top: 5),
@@ -231,8 +228,8 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                         .toString()
                         .allCaps,
                 maxLines: 2,
-                fontSize: 27,
-                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -277,9 +274,7 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                                           ?[key] ==
                                       null
                               ? Colors.transparent
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .secondaryContainer,
+                              : cores(context).surf,
                           child: Padding(
                             padding:
                                 EdgeInsetsDirectional.symmetric(horizontal: 8),

@@ -5,6 +5,7 @@ import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
+import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/fab.dart';
@@ -161,9 +162,31 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                   snapshot.data ?? [];
               // print(snapshot.data);
               if (snapshot.hasData && titles.length <= 0) {
+                if (searchValue != "")
+                  return SliverToBoxAdapter(
+                    child: NoResults(
+                      message: "no-titles-found".tr(),
+                      noSearchResultsVariation: true,
+                    ),
+                  );
+                // Vazio de verdade: explica o recurso e oferece uma ação.
                 return SliverToBoxAdapter(
-                  child: NoResults(
-                    message: "no-titles-found".tr(),
+                  child: Column(
+                    children: [
+                      NoResults(
+                        message:
+                            "Nenhum título ainda. Um título liga o nome de uma transação a uma categoria.",
+                      ),
+                      SizedBox(height: 16),
+                      Button(
+                        label: "add-title".tr(),
+                        onTap: () => openBottomSheet(
+                          context,
+                          popupWithKeyboard: true,
+                          AddAssociatedTitlePage(),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
@@ -222,12 +245,9 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                           SizedBox(width: 15),
                           Expanded(
                             child: TextFont(
-                              text: associatedTitle.title
-                              // +
-                              //     " - " +
-                              //     associatedTitle.order.toString()
-                              ,
-                              fontSize: 16,
+                              text: associatedTitle.title,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
                               maxLines: 3,
                             ),
                           ),
