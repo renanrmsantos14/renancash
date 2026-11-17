@@ -1,7 +1,9 @@
+import 'package:budget/colors.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/iconButtonScaled.dart';
 import 'package:budget/widgets/tappableTextEntry.dart';
+import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/showDatePicker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -29,12 +31,23 @@ class _SelectDateRangeState extends State<SelectDateRange> {
   late DateTime? selectedStartDate = widget.initialStartDate;
   late DateTime? selectedEndDate = widget.initialEndDate;
 
+  // Rótulo de cada data: sem ele, "12 de novembro" e "Para sempre" não dizem o que são.
+  Widget _rotulo(String texto) => Padding(
+        padding: const EdgeInsetsDirectional.only(top: 4),
+        child: TextFont(
+          text: texto,
+          fontSize: 13,
+          textColor: getColor(context, "textLight"),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: widget.padding,
       child: Column(
         children: [
+          _rotulo("Início"),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -42,7 +55,7 @@ class _SelectDateRangeState extends State<SelectDateRange> {
                 child: TappableTextEntry(
                   title: getWordedDateShortMore(
                     selectedStartDate ?? DateTime.now(),
-                    includeYear: selectedStartDate?.year != DateTime.now().year,
+                    includeYear: true,
                   ),
                   placeholder: "",
                   onTap: () async {
@@ -85,6 +98,7 @@ class _SelectDateRangeState extends State<SelectDateRange> {
               ),
             ],
           ),
+          _rotulo("Fim"),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -94,8 +108,7 @@ class _SelectDateRangeState extends State<SelectDateRange> {
                       ? ""
                       : getWordedDateShortMore(
                           selectedEndDate ?? DateTime.now(),
-                          includeYear:
-                              selectedEndDate?.year != DateTime.now().year),
+                          includeYear: true),
                   placeholder: "until-forever".tr(),
                   showPlaceHolderWhenTextEquals: "",
                   onTap: () async {

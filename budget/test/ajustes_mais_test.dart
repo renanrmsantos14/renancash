@@ -2,6 +2,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/struct/mbSync/conexoes.dart';
 import 'package:budget/widgets/editorial/resumoTransacoes.dart';
+import 'package:budget/widgets/mbAplicacoesDaMeta.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -105,6 +106,11 @@ void main() {
     expect(mbOrigemCarteira('mb:2', tipos), 'Poupança · Meu Banco');
     expect(mbOrigemCarteira('mb:investimentos', tipos), 'Meu Banco');
     expect(mbOrigemCarteira('0', tipos), 'Manual');
+  });
+
+  test('ME3: aplicações de mesmo nome ganham a posição', () {
+    expect(mbPosicoesRepetidas(['CDB', 'CDB', 'LCI', 'CDB']),
+        ['1 de 3', '2 de 3', null, '3 de 3']);
   });
 
   test('AS1: contagem diz o que é contado', () {
