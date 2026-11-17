@@ -49,6 +49,34 @@ void main() {
     expect(_con('f', 'X', 'OUTDATED').situacao.rotulo, 'Falha temporária');
   });
 
+  testWidgets('corrente e cartão do Santander aparecem marcados "fora do app"; poupança não',
+      (t) async {
+    // Conta sem 'bank' próprio: a regra usa o banco da conexão.
+    final c = _con('s', 'Banco Santander', 'UPDATED', contas: [
+      {'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança ·24-1', 'balance': 1.06},
+      {'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta ·57', 'balance': 92.49},
+      {'type': 'CREDIT', 'name': 'Santander Free', 'balance': 10},
+    ]);
+    expect([for (final x in c.contas) x.foraDoApp], [false, true, true]);
+    expect(
+        _con('i', 'Banco Inter', 'UPDATED', contas: [
+          {'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'BANCO INTER ·69-6', 'balance': 927.28},
+        ]).contas.single.foraDoApp,
+        isFalse);
+
+    await _monta(
+      t,
+      ContasConectadas(
+        carregar: () async => [c],
+        remover: (_) async {},
+        conectar: (c, {itemId}) async {},
+      ),
+    );
+    expect(find.text('Conta ·57 · Conta corrente'), findsOneWidget);
+    expect(find.text('R\$ 92,49'), findsOneWidget);
+    expect(find.text('Fora do app · usada por outra pessoa'), findsNWidgets(2));
+  });
+
   testWidgets('lista conexões com status, contas e ações', (t) async {
     await _monta(
       t,

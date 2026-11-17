@@ -20,9 +20,10 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 4. Segurança (leitura do diff): token só em `flutter_secure_storage`, nunca em `appStateSettings`; `meubanco://parear` só grava depois de `mbConfirmarEParear`; origem só https (http só em debug para localhost/10.0.2.2); toda entrada manual de token/endereço passa pelo mesmo caminho do QR.
 
 ## Casos de borda
-- Contas conectadas: `flutter test test/mb_conexoes_test.dart` (lista, status, reconectar, vazio/erro, remover com confirmação). Prints: `PRINTS=1 flutter test test/prints_visual_test.dart --update-goldens --plain-name "contas conectadas"`.
+- Contas conectadas: `flutter test test/mb_conexoes_test.dart` (lista, status, reconectar, vazio/erro, remover com confirmação, corrente e cartão do Santander com "Fora do app · usada por outra pessoa"). Prints: `PRINTS=1 flutter test test/prints_visual_test.dart --update-goldens --plain-name "contas conectadas"`.
 - Remover conexão NÃO apaga as contas no servidor: elas ficam com saldo 0 e `removida = 1` no pull, porque as transações antigas dependem do tipo/banco (sinal do cartão, filtro do Santander). O app só as esconde da Início (`meuBancoSync.dart`). Faturas, investimentos e avisos da conexão somem; `DELETE` repetido devolve 200.
 - `precisaReconectar` vem do servidor (mesma regra `PROBLEMA` dos avisos); `OUTDATED` é falha temporária, não pede login.
+- Santander corrente/cartão (`mbContaIgnorada`, mesma regra do Worker) ficam fora de propósito: sem carteira, sem lançamentos, fora da Início e do Patrimônio. Decisão do usuário (conta de outra pessoa); só Contas conectadas mostra, marcada "Fora do app". Não "corrigir" isso; a regra usa também o banco da conexão quando a conta não traz `bank`.
 - Web (sessão por cookie) mostra Contas conectadas sem pareamento; conectar banco só pelo celular.
 - "Desconectar este aparelho" (Meu Banco) abre confirmação "Desconectar este aparelho?" antes de `meuBancoDesconectar`; Cancelar mantém o token. Parear com QR usa textos `EdTexto` e erro de câmera em cartão `surf`.
 - Troca de conta apaga espelho, fila, estado, `mb:` importado, carteiras e categorias `mb:` sem uso, e preserva o que nasceu no RenanCash.

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
-import 'package:budget/struct/meuBancoMapping.dart' show mbPkConta;
+import 'package:budget/struct/meuBancoMapping.dart' show mbContaIgnorada, mbPkConta;
 
 /// Situação de uma conexão (item do Pluggy) para a tela "Contas conectadas".
 enum MbSituacao { emDia, atualizando, reconectar }
@@ -13,11 +13,14 @@ class MbContaConexao {
       {required this.nome,
       required this.tipo,
       required this.saldo,
-      required this.cartao});
+      required this.cartao,
+      required this.foraDoApp});
   final String nome;
   final String tipo;
   final double? saldo;
   final bool cartao;
+  /// Corrente e cartão do Santander (mbContaIgnorada): usados por outra pessoa, não entram no app.
+  final bool foraDoApp;
 
   static const _subtipos = {
     'CHECKING_ACCOUNT': 'Conta corrente',
@@ -32,6 +35,7 @@ class MbContaConexao {
       tipo: _subtipos[j['subtype']] ?? (cartao ? 'Cartão' : 'Conta'),
       saldo: (j['balance'] as num?)?.toDouble(),
       cartao: cartao,
+      foraDoApp: mbContaIgnorada(j),
     );
   }
 }
@@ -59,7 +63,9 @@ class MbConexao {
         atualizado: DateTime.tryParse('${j['atualizado']}')?.toLocal(),
         contas: [
           for (final c in (j['contas'] as List? ?? const []))
-            if (c is Map) MbContaConexao.deJson(c.cast<String, dynamic>())
+            // O banco da conexão vale para a regra do Santander quando a conta não traz o seu.
+            if (c is Map)
+              MbContaConexao.deJson({'bank': j['banco'], ...c.cast<String, dynamic>()})
         ],
       );
 
