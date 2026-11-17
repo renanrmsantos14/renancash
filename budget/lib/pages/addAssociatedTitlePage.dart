@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -150,6 +151,7 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
     return PopupFramework(
       title:
           widget.associatedTitle == null ? "add-title".tr() : "edit-title".tr(),
+      subtitle: "Transações com este nome entram na categoria escolhida",
       child: Column(
         children: [
           Row(
@@ -160,12 +162,24 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
                   selectCategory();
                 },
                 color: Colors.transparent,
-                child: CategoryIcon(
-                  category: selectedCategory,
-                  size: getIsFullScreen(context) ? 40 : 30,
-                  onTap: () {
-                    selectCategory();
-                  },
+                // Sem categoria, o quadrado vazio mostra um "+" para escolher.
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CategoryIcon(
+                      category: selectedCategory,
+                      size: getIsFullScreen(context) ? 40 : 30,
+                      onTap: () {
+                        selectCategory();
+                      },
+                    ),
+                    if (selectedCategory == null)
+                      IgnorePointer(
+                        child: Icon(Icons.add_rounded,
+                            color: cores(context).mu,
+                            semanticLabel: "Escolher categoria"),
+                      ),
+                  ],
                 ),
               ),
               Expanded(
@@ -177,8 +191,8 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
                     setSelectedTitle(text);
                   },
                   padding: EdgeInsetsDirectional.only(start: 7, end: 7),
-                  fontSize: getIsFullScreen(context) ? 25 : 23,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
                   topContentPadding: 0,
                   focusNode: _focusNode,
                   autoFocus: kIsWeb && getIsFullScreen(context),
@@ -189,24 +203,16 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
           SizedBox(
             height: 12,
           ),
-          canAddTitle ?? false
-              ? Button(
-                  label: widget.associatedTitle == null
-                      ? "add-title".tr()
-                      : "save-changes".tr(),
-                  width: MediaQuery.sizeOf(context).width,
-                  onTap: () async {
-                    await addTitle();
-                  },
-                )
-              : Button(
-                  label: widget.associatedTitle == null
-                      ? "add-title".tr()
-                      : "save-changes".tr(),
-                  width: MediaQuery.sizeOf(context).width,
-                  onTap: () {},
-                  color: Colors.grey,
-                ),
+          Button(
+            label: widget.associatedTitle == null
+                ? "add-title".tr()
+                : "save-changes".tr(),
+            width: MediaQuery.sizeOf(context).width,
+            disabled: !(canAddTitle ?? false),
+            onTap: () async {
+              await addTitle();
+            },
+          ),
         ],
       ),
     );

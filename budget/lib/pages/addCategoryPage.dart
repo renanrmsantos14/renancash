@@ -6,6 +6,7 @@ import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editCategoriesPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/editRowEntry.dart';
@@ -301,10 +302,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
           SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .secondaryContainer
-                  .withOpacity(0.7),
+              color: cores(context).surf,
               borderRadius: BorderRadiusDirectional.all(
                   Radius.circular(getPlatform() == PlatformOS.isIOS ? 10 : 15)),
             ),
@@ -331,10 +329,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                     useHorizontalPaddingConstrained: false,
                     customPadding:
                         EdgeInsetsDirectional.symmetric(horizontal: 8),
-                    containerColor: Theme.of(context)
-                        .colorScheme
-                        .secondaryContainer
-                        .withOpacity(0.7),
+                    containerColor: cores(context).surf,
                     openPage: Container(),
                     transaction: Transaction(
                       transactionPk: "-1",
@@ -380,21 +375,11 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                     .watchCategory(widget.mainCategoryPkWhenSubCategory!),
                 builder: (context, snapshot) {
                   return TextFont(
-                    text: "for".tr().capitalizeFirst +
-                        " " +
-                        (snapshot.data?.name ?? ""),
-                    fontSize: getCenteredTitle(
-                                    context: context,
-                                    backButtonEnabled: true) ==
-                                true &&
-                            getCenteredTitleSmall(
-                                    context: context,
-                                    backButtonEnabled: true) ==
-                                false
-                        ? 30
-                        : 22,
-                    maxLines: 5,
-                    fontWeight: FontWeight.bold,
+                    text: "Subcategoria de " + (snapshot.data?.name ?? ""),
+                    fontSize: 14,
+                    maxLines: 2,
+                    fontWeight: FontWeight.w500,
+                    textColor: cores(context).mu,
                   );
                 }),
         subtitleSize: widget.mainCategoryPkWhenSubCategory == null ? null : 10,
@@ -563,8 +548,8 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                         userAttemptedToChangeTitlePassed: true);
                                   },
                                   padding: EdgeInsetsDirectional.zero,
-                                  fontSize: getIsFullScreen(context) ? 34 : 27,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 if (widget.category?.categoryPk != "0")
                                   SizedBox(height: 17),
@@ -694,8 +679,9 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                             horizontal: 20),
                         child: TextFont(
                           text: "subcategories".tr(),
-                          textColor: getColor(context, "textLight"),
-                          fontSize: 16,
+                          textColor: cores(context).mu,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                 widget.category?.categoryPk == "0" || widgetCategory == null
@@ -814,13 +800,9 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   TextFont(
-                                    text: category.name
-                                    // +
-                                    //     " - " +
-                                    //     category.order.toString()
-                                    ,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                    text: category.name,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 15,
                                   ),
                                   StreamBuilder<List<int?>>(
                                     stream: database
@@ -841,16 +823,14 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                                       .tr()
                                                       .toLowerCase()),
                                           fontSize: 14,
-                                          textColor: getColor(context, "black")
-                                              .withOpacity(0.65),
+                                          textColor: cores(context).mu,
                                         );
                                       } else {
                                         return TextFont(
                                           textAlign: TextAlign.start,
-                                          text: "/ transactions",
+                                          text: "…",
                                           fontSize: 14,
-                                          textColor: getColor(context, "black")
-                                              .withOpacity(0.65),
+                                          textColor: cores(context).mu,
                                         );
                                       }
                                     },
@@ -942,8 +922,9 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                         const EdgeInsetsDirectional.symmetric(horizontal: 20),
                     child: TextFont(
                       text: "associated-titles".tr(),
-                      textColor: getColor(context, "textLight"),
-                      fontSize: 16,
+                      textColor: cores(context).mu,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 if (widget.category != null) SizedBox(height: 5),
@@ -1101,11 +1082,7 @@ class AssociatedTitleContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String titleName = title.title;
-    Color backgroundColor = appStateSettings["materialYou"]
-        ? dynamicPastel(
-            context, Theme.of(context).colorScheme.secondaryContainer,
-            amountLight: 0, amountDark: 0.6)
-        : getColor(context, "lightDarkAccent");
+    Color backgroundColor = cores(context).surf;
 
     return Padding(
       padding: const EdgeInsetsDirectional.only(bottom: 8.0),
@@ -1518,7 +1495,7 @@ class FakeCategoryEntryPlaceholder extends StatelessWidget {
         ),
         child: Tappable(
           color:
-              Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.7),
+              cores(context).surf,
           borderRadius: 10,
           onTap: () {},
           child: Padding(
