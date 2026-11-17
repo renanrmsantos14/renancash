@@ -1,4 +1,4 @@
-import 'dart:ffi';
+import 'dart:ffi' show DynamicLibrary;
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/arrumarDadosPage.dart';
