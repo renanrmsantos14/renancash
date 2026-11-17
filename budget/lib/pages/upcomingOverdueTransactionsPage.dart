@@ -137,6 +137,7 @@ class UpcomingOverdueTransactionsState
                               ? "monthly-upcoming".tr()
                               : "total-upcoming".tr();
                     },
+                    contagem: contagemAgendadas,
                   )
                 : CenteredAmountAndNumTransactions(
                     totalWithCountStream:

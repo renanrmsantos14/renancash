@@ -75,11 +75,17 @@ class TransactionEntryTag extends StatelessWidget {
             ),
             // 1
             Builder(builder: (context) {
-              if (subCategory != null) {
+              // Sem título, a subcategoria já é o título: a etiqueta mostra a categoria.
+              final semTitulo = transaction.name == "";
+              if (subCategory != null && !semTitulo) {
                 return SubCategoryTag(category: subCategory!);
               } else {
                 return StreamBuilder<TransactionCategory?>(
-                  stream: database.getCategory(transaction.subCategoryFk!).$1,
+                  stream: database
+                      .getCategory(semTitulo
+                          ? transaction.categoryFk
+                          : transaction.subCategoryFk!)
+                      .$1,
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       TransactionCategory? category = snapshot.data!;

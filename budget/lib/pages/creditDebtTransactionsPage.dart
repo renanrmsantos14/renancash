@@ -217,6 +217,7 @@ class CreditDebtTransactionsState extends State<CreditDebtTransactions>
               isCredit: isCredit,
               searchString: searchValue,
               selectedTab: _tabController.index,
+              semExcessoPorEmprestimo: true,
             ),
             showIncomeArrow: false,
             getInitialText: (totalAmount) {

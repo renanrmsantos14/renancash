@@ -365,6 +365,13 @@ class ObjectiveContainer extends StatelessWidget {
 }) {
   final emprestimo = objective.type == ObjectiveType.loan;
   final receita = objective.income;
+  // Empréstimo sem valor nem transações: pede o valor em vez de "Recebido R$ 0".
+  if (emprestimo && alvo <= 0 && total <= 0) {
+    return (
+      rotulo: receita ? 'Valor emprestado' : 'Valor pego emprestado',
+      valor: 0,
+    );
+  }
   if (!mostrarTotal && total < alvo) {
     return (
       rotulo: emprestimo
@@ -374,6 +381,13 @@ class ObjectiveContainer extends StatelessWidget {
     );
   }
   final concluida = alvo > 0 && total >= alvo;
+  // Quitado fica na mesma coluna dos outros (o saldo), não no valor recebido.
+  if (emprestimo && concluida && !mostrarTotal) {
+    return (
+      rotulo: receita ? 'Quitado · nada a receber' : 'Quitado · nada a pagar',
+      valor: 0,
+    );
+  }
   return (
     rotulo: concluida
         ? (emprestimo ? 'Quitado' : 'Meta alcançada')
@@ -384,15 +398,15 @@ class ObjectiveContainer extends StatelessWidget {
   );
 }
 
-/// "de R$ 1.500,00 · 33%" (empréstimo: "Emprestado R$ 1.500,00 · 33%").
+/// "de R$ 1.500,00 · 33%" (empréstimo: "Emprestado R$ 1.500,00 · 33% recebido").
 String detalheMeta(BuildContext context, Objective objective,
     {required double alvo, required double fracao}) {
   final valor = convertToMoney(Provider.of<AllWallets>(context), alvo);
   final pct = '${(fracao * 100).clamp(0, 999).round()}%';
-  final inicio = objective.type == ObjectiveType.loan
-      ? (objective.income ? 'Emprestado' : 'Pego emprestado')
-      : 'de';
-  return '$inicio $valor · $pct';
+  if (objective.type != ObjectiveType.loan) return 'de $valor · $pct';
+  return objective.income
+      ? 'Emprestado $valor · $pct recebido'
+      : 'Pego emprestado $valor · $pct pago';
 }
 
 String textoTransacoes(int n) => n == 1 ? '1 transação' : '$n transações';
@@ -458,7 +472,9 @@ class CartaoMeta extends StatelessWidget {
     final e = cores(context);
     String dinheiro(double v) =>
         convertToMoney(Provider.of<AllWallets>(context), v);
-    final semAlvo = objective.type == ObjectiveType.goal && alvo <= 0;
+    // Meta sem valor, ou empréstimo ainda vazio: mostra "Definir valor".
+    final semAlvo = alvo <= 0 &&
+        (objective.type == ObjectiveType.goal || total <= 0);
     final d = destaqueMeta(objective,
         alvo: alvo,
         total: total,
