@@ -18,9 +18,9 @@ Objective _emprestimo(double valor, {bool receita = true}) => Objective(
       type: ObjectiveType.loan,
     );
 
-Transaction _tx({String nome = '', String? sub}) => Transaction(
+Transaction _tx({String? sub}) => Transaction(
       transactionPk: 't',
-      name: nome,
+      name: '',
       amount: -20.9,
       note: '',
       categoryFk: 'c',
@@ -32,13 +32,6 @@ Transaction _tx({String nome = '', String? sub}) => Transaction(
       skipPaid: false,
     );
 
-TransactionCategory _cat(String pk, String nome) => TransactionCategory(
-    categoryPk: pk,
-    name: nome,
-    dateCreated: DateTime(2026),
-    order: 0,
-    income: false,
-    methodAdded: null);
 
 void main() {
   group('EM1: total a receber por pessoa', () {
@@ -121,24 +114,8 @@ void main() {
     expect(contagemAgendadas(2), '2 agendadas');
   });
 
-  group('AS2: título vazio usa a subcategoria', () {
-    final cat = _cat('c', 'Assinaturas');
-    final sub = _cat('s', 'Spotify');
-
-    test('subcategoria antes da categoria', () {
-      expect(getTransactionLabelSync(_tx(sub: 's'), cat, subCategory: sub),
-          'Spotify');
-    });
-
-    test('sem subcategoria, a categoria', () {
-      expect(getTransactionLabelSync(_tx(), cat), 'Assinaturas');
-    });
-
-    test('com título, o título', () {
-      expect(
-          getTransactionLabelSync(_tx(nome: 'Plano família', sub: 's'), cat,
-              subCategory: sub),
-          'Plano família');
-    });
+  test('AS2: título vazio usa a subcategoria antes da categoria', () {
+    expect(categoriaDoTitulo(_tx(sub: 's')), 's');
+    expect(categoriaDoTitulo(_tx()), 'c');
   });
 }

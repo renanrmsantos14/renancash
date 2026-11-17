@@ -40,11 +40,15 @@ class TransactionLabel extends StatelessWidget {
     // Sem título, a subcategoria ("Spotify") diz mais que a categoria.
     return TransactionCategoryNameLabel(
         transaction: transaction,
-        categoryPk: transaction.subCategoryFk,
+        categoryPk: categoriaDoTitulo(transaction),
         category: transaction.subCategoryFk == null ? category : null,
         fontSize: fontSize);
   }
 }
+
+/// Sem título, a linha mostra a subcategoria ("Spotify") e, sem ela, a categoria.
+String categoriaDoTitulo(Transaction transaction) =>
+    transaction.subCategoryFk ?? transaction.categoryFk;
 
 class TransactionTitleNameLabel extends StatelessWidget {
   const TransactionTitleNameLabel(
@@ -143,10 +147,8 @@ Future<String> getTransactionLabel(Transaction transaction,
   }
 }
 
-/// Título da transação; sem título, a subcategoria e depois a categoria.
 String getTransactionLabelSync(
-    Transaction transaction, TransactionCategory? category,
-    {TransactionCategory? subCategory}) {
+    Transaction transaction, TransactionCategory? category) {
   if (transaction.name.trim() == "") {
     return (category == null ? transaction.name : nomeDaCategoria(category))
         .capitalizeFirst;
