@@ -31,6 +31,9 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 - Meta sem valor alvo (ex.: Reserva de emergência): mostra o guardado e "Definir valor" (abre a edição), sem medidor.
 - Orçamento compartilhado foi cortado: sem chip "Shared Group Budget", sem filtro de membros, sem resumo por membro, sem popup de excluir compartilhado. Colunas (`sharedKey`, `memberTransactionFilters`...) e `struct/shareBudget.dart` continuam; o filtro de membros salvo é preservado ao editar.
 - Cabeçalho compacto (56 px) no detalhe do orçamento e da meta; o histórico usa título + subtítulo (nome do orçamento), 110 px.
+- Empréstimos: o total "A receber" soma o saldo de cada pessoa limitado a zero (`semExcessoPorEmprestimo`, `saldoEmprestimoSemExcesso`): quem pagou a mais não abate os outros. Caso real: 670 + 499,93 + 30 + 250 = 1.449,93, com o "Vô" quitado em 104% contando 0.
+- Cartão de empréstimo: quitado mostra "Quitado · nada a receber" com R$ 0,00 (coluna do saldo); vazio (sem valor e sem transações) mostra "Valor emprestado" e "Definir valor"; o detalhe diz "Emprestado R$ X · 67% recebido" / "· 33% pago".
+- Editar meta: nome longo quebra em até 2 linhas; meta sem ícone mostra o ícone genérico; datas rotuladas "Início" / "Fim", sempre com o ano (`SelectDateRange`); "Aplicações da meta" com nomes repetidos ganha "· 1 de 4" (`mbPosicoesRepetidas`; o Worker não manda vencimento nem taxa).
 
 ## Evidência obrigatória
 - Tail do analyze e dos testes, PNGs em `.verificacao/prints/` conferidos claro e escuro.

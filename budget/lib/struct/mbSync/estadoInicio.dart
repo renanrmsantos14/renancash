@@ -113,7 +113,7 @@ String quandoRelativo(DateTime d, DateTime agora) {
 
 String haQuanto(DateTime d, DateTime agora) {
   final min = agora.difference(d).inMinutes;
-  if (min < 1) return 'agora há pouco';
+  if (min < 1) return 'agora';
   if (min < 60) return 'há $min min';
   if (min < 1440) return 'há ${min ~/ 60} h';
   return 'há ${min ~/ 1440} d';

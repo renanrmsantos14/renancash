@@ -37,6 +37,9 @@ description: "Verifica as telas de Contas no padrão editorial: detalhe da conta
 - Investimentos: vazio = ícone + "Nenhum investimento sincronizado ainda." + "Abrir o Meu Banco"; variação do mês com + verde / − texto; menos de 2 meses mostra o aviso no lugar do gráfico.
 - Meu Banco: "Desconectar este aparelho" pede confirmação antes de apagar o token.
 - Animações: `ContagemValor` no saldo, entradas/saídas, total e linhas; `ToqueEscala` no saldo, nos cartões e no chip; `EntradaSuave` nas linhas da lista (só nos primeiros 600 ms) e nos blocos de Investimentos. Tudo some com `semMovimento`.
+- Mais > Contas: subtítulo com a origem (`mbOrigemCarteira`): "Conta corrente · Meu Banco", "Poupança · Meu Banco", "Meu Banco" (Investimentos) ou "Manual". Duas "BANCO INTER ·69-6" (corrente e poupança) ficam distinguíveis.
+- Código da moeda ("BRL") só aparece com mais de uma moeda nas carteiras (`allContainSameCurrency`): linhas de Contas e "Total líquido" de Todos os gastos > Agora.
+- Todos os gastos > Histórico: ciclo passado com o intervalo ("6 out – 5 nov", `intervaloDoCiclo`); o número em negrito vem rotulado "Saldo" (ou "Saldo acumulado") e é entradas − saídas, conferível com o par à direita (antes era o net com ajustes de saldo). Legenda do gráfico: "Saídas" / "Entradas" (ou "Saldo acumulado").
 
 ## Evidência obrigatória
 - Tail do analyze e dos testes; PNGs em `.verificacao/prints/contas_*` e `.verificacao/contas-web/`.

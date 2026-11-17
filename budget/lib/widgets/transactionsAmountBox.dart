@@ -96,7 +96,11 @@ class TransactionsAmountBox extends StatelessWidget {
                                   text: convertToMoney(
                                       Provider.of<AllWallets>(context), number,
                                       currencyKey: currencyKey,
-                                      addCurrencyName: currencyKey != null,
+                                      // Código da moeda só quando há mais de uma.
+                                      addCurrencyName: currencyKey != null &&
+                                          Provider.of<AllWallets>(context)
+                                                  .allContainSameCurrency() ==
+                                              false,
                                       finalNumber: finalAmount),
                                   // Zero não pede atenção: sem cor de alerta.
                                   textColor: finalAmount == 0

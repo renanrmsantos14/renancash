@@ -83,6 +83,7 @@ Future<bool> signInGoogle(
   if (kIsWeb) return false;
   if (await checkLockedFeatureIfInDemoMode(context) == false) return false;
 
+  bool cancelado = false;
   try {
     if (googleUser == null) {
       googleSignIn = null;
@@ -145,6 +146,8 @@ Future<bool> signInGoogle(
         await updateSettings("currentUserEmail", googleUser?.email ?? "",
             updateGlobalState: false);
       } else {
+        // No login manual, conta nula = o usuário fechou o seletor do Google.
+        cancelado = silentSignIn != true;
         throw ("Login failed");
       }
     }
@@ -160,23 +163,29 @@ Future<bool> signInGoogle(
   } catch (e) {
     print(e);
     if (waitForCompletion == true && context != null) popRoute(context);
-    openSnackbar(
-      SnackbarMessage(
-        title: "sign-in-error".tr(),
-        description: "sign-in-error-description".tr(),
-        icon: appStateSettings["outlinedIcons"]
-            ? Icons.error_outlined
-            : Icons.error_rounded,
-        timeout: Duration(milliseconds: 3400),
-        onTap: () => signInGoogle(
-          context: context,
-          drivePermissionsAttachments: drivePermissionsAttachments,
-          next: next,
-          silentSignIn: false,
-          waitForCompletion: waitForCompletion,
+    // Cancelar o seletor de contas não é erro: sai sem avisar.
+    if (e is PlatformException && e.code == "sign_in_canceled") {
+      cancelado = true;
+    }
+    if (!cancelado) {
+      openSnackbar(
+        SnackbarMessage(
+          title: "sign-in-error".tr(),
+          description: "sign-in-error-description".tr(),
+          icon: appStateSettings["outlinedIcons"]
+              ? Icons.error_outlined
+              : Icons.error_rounded,
+          timeout: Duration(milliseconds: 3400),
+          onTap: () => signInGoogle(
+            context: context,
+            drivePermissionsAttachments: drivePermissionsAttachments,
+            next: next,
+            silentSignIn: false,
+            waitForCompletion: waitForCompletion,
+          ),
         ),
-      ),
-    );
+      );
+    }
     googleUser = null;
     await updateSettings("currentUserEmail", "", updateGlobalState: false);
     if (runningCloudFunctions) {
@@ -601,11 +610,13 @@ class GoogleAccountLoginButton extends StatefulWidget {
     this.isButtonSelected = false,
     this.isOutlinedButton = true,
     this.forceButtonName,
+    this.description,
   });
   final bool navigationSidebarButton;
   final bool isButtonSelected;
   final bool isOutlinedButton;
   final String? forceButtonName;
+  final String? description;
 
   @override
   State<GoogleAccountLoginButton> createState() =>
@@ -688,6 +699,7 @@ class GoogleAccountLoginButtonState extends State<GoogleAccountLoginButton> {
         ? getPlatform() == PlatformOS.isIOS
             ? SettingsContainerOpenPage(
                 openPage: AccountsPage(),
+                description: widget.description,
                 isOutlined: widget.isOutlinedButton,
                 onTap: (openContainer) {
                   loginWithSync(onNext: openContainer);
@@ -698,6 +710,7 @@ class GoogleAccountLoginButtonState extends State<GoogleAccountLoginButton> {
               )
             : SettingsContainerOpenPage(
                 openPage: AccountsPage(),
+                description: widget.description,
                 isOutlined: widget.isOutlinedButton,
                 onTap: (openContainer) {
                   loginWithSync(onNext: openContainer);
@@ -711,6 +724,7 @@ class GoogleAccountLoginButtonState extends State<GoogleAccountLoginButton> {
         : getPlatform() == PlatformOS.isIOS
             ? SettingsContainerOpenPage(
                 openPage: AccountsPage(),
+                description: widget.description,
                 title: widget.forceButtonName ?? "backup".tr(),
                 icon: MoreIcons.google_drive,
                 isOutlined: widget.isOutlinedButton,
@@ -718,6 +732,7 @@ class GoogleAccountLoginButtonState extends State<GoogleAccountLoginButton> {
               )
             : SettingsContainerOpenPage(
                 openPage: AccountsPage(),
+                description: widget.description,
                 title: widget.forceButtonName ?? googleUser!.displayName ?? "",
                 icon: widget.forceButtonName == null
                     ? appStateSettings["outlinedIcons"]

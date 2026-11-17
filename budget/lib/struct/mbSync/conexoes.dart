@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
-import 'package:budget/struct/meuBancoMapping.dart' show mbContaIgnorada, mbPkConta;
+import 'package:budget/struct/meuBancoMapping.dart'
+    show mbContaIgnorada, mbPkConta, mbPrefixo;
 
 /// Situação de uma conexão (item do Pluggy) para a tela "Contas conectadas".
 enum MbSituacao { emDia, atualizando, reconectar }
@@ -55,19 +56,23 @@ class MbConexao {
   final DateTime? atualizado;
   final List<MbContaConexao> contas;
 
-  factory MbConexao.deJson(Map<String, dynamic> j) => MbConexao(
-        id: '${j['id']}',
-        banco: '${j['banco'] ?? 'Banco'}',
-        status: j['status'] as String?,
-        precisaReconectar: j['precisaReconectar'] == true,
-        atualizado: DateTime.tryParse('${j['atualizado']}')?.toLocal(),
-        contas: [
-          for (final c in (j['contas'] as List? ?? const []))
-            // O banco da conexão vale para a regra do Santander quando a conta não traz o seu.
-            if (c is Map)
-              MbContaConexao.deJson({'bank': j['banco'], ...c.cast<String, dynamic>()})
-        ],
-      );
+  factory MbConexao.deJson(Map<String, dynamic> j) {
+    final contas = [
+      for (final c in (j['contas'] as List? ?? const []))
+        if (c is Map) c.cast<String, dynamic>()
+    ];
+    return MbConexao(
+      id: '${j['id']}',
+      banco: mbNomeDaConexao('${j['banco'] ?? 'Banco'}', contas),
+      status: j['status'] as String?,
+      precisaReconectar: j['precisaReconectar'] == true,
+      atualizado: DateTime.tryParse('${j['atualizado']}')?.toLocal(),
+      // O banco da conexão vale para a regra do Santander quando a conta não traz o seu.
+      contas: [
+        for (final c in contas) MbContaConexao.deJson({'bank': j['banco'], ...c})
+      ],
+    );
+  }
 
   // O servidor decide quando pede novo login (mesma regra dos avisos); aqui só vira texto.
   ({MbSituacao situacao, String rotulo}) get situacao => precisaReconectar
@@ -88,6 +93,31 @@ class MbConexao {
         };
 
   String get sigla => mbSigla(banco);
+}
+
+/// Conector agregador (MeuPluggy, do Open Finance) não é banco: o nome sai das
+/// contas da conexão ("BANCO INTER ·69-6" → "Banco Inter"). Cartões ficam de fora.
+String mbNomeDaConexao(String conector, List<Map<String, dynamic>> contas) {
+  if (!conector.toLowerCase().contains('pluggy')) return conector;
+  final nomes = <String>{
+    for (final c in contas)
+      if (c['type'] != 'CREDIT') _nomeDoBanco('${c['bank'] ?? c['name'] ?? ''}')
+  }..remove('');
+  return nomes.isEmpty ? conector : nomes.join(' · ');
+}
+
+String _nomeDoBanco(String s) {
+  final n = s
+      .replaceFirst(RegExp(r'\s*·\s*[\d-]+$'), '')
+      .replaceFirst(RegExp(r'\s*\(brasil\)', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'\s+S[./]?A\.?$', caseSensitive: false), '')
+      .trim();
+  if (n != n.toUpperCase()) return n;
+  return n
+      .toLowerCase()
+      .split(' ')
+      .map((p) => p.isEmpty ? p : p[0].toUpperCase() + p.substring(1))
+      .join(' ');
 }
 
 Future<MbCliente> _cliente() async {
@@ -117,6 +147,14 @@ Future<Map<String, String>> mbTiposDasCarteiras() async {
   } catch (_) {
     return const {};
   }
+}
+
+/// Origem de uma carteira para o subtítulo: "Conta corrente · Meu Banco",
+/// "Meu Banco" (sem tipo, ex.: Investimentos) ou "Manual".
+String mbOrigemCarteira(String walletPk, Map<String, String> tipos) {
+  if (!walletPk.startsWith(mbPrefixo)) return 'Manual';
+  final tipo = tipos[walletPk];
+  return tipo == null ? 'Meu Banco' : '$tipo · Meu Banco';
 }
 
 /// Rótulos sem repetição para carteiras de mesmo nome (corrente e poupança do mesmo banco):

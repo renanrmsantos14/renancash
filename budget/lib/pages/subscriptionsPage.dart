@@ -122,6 +122,7 @@ class SubscriptionsPageState extends State<SubscriptionsPage> {
                         ? "monthly-subscriptions".tr()
                         : "total-subscriptions".tr();
               },
+              contagem: contagemAssinaturas,
             ),
           ),
           StreamBuilder<List<Transaction>>(
@@ -218,6 +219,12 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     int daysDifference =
         DateTime.now().justDay().difference(transaction.dateCreated).inDays;
+    // "R$ 20,90 / mês" numa assinatura de 1 mês repete o valor da linha.
+    final repeteValor = transaction.periodLength == 1 &&
+        ((selectedType == SelectedSubscriptionsType.monthly &&
+                transaction.reoccurrence == BudgetReoccurence.monthly) ||
+            (selectedType == SelectedSubscriptionsType.yearly &&
+                transaction.reoccurrence == BudgetReoccurence.yearly));
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -292,7 +299,8 @@ class UpcomingTransactionDateHeader extends StatelessWidget {
                   ),
                   if (selectedType != null)
                     AnimatedSizeSwitcher(
-                      child: selectedType == SelectedSubscriptionsType.total
+                      child: selectedType == SelectedSubscriptionsType.total ||
+                              repeteValor
                           ? Container(
                               key: ValueKey(selectedType.toString()),
                             )
@@ -369,12 +377,16 @@ class TotalUpcomingHeaderPeriodSwitcher extends StatelessWidget {
     required this.setSelectedType,
     required this.transactionListStream,
     required this.selectedSubtitleTranslation,
+    required this.contagem,
     super.key,
   });
   final SelectedSubscriptionsType selectedType;
   final Function(SelectedSubscriptionsType) setSelectedType;
   final Stream<List<Transaction>>? transactionListStream;
   final String Function(SelectedSubscriptionsType) selectedSubtitleTranslation;
+
+  /// Legenda da contagem: contagemAssinaturas ou contagemAgendadas.
+  final String Function(int) contagem;
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +401,7 @@ class TotalUpcomingHeaderPeriodSwitcher extends StatelessWidget {
                   selectedType, snapshot.data),
               legenda: snapshot.data == null
                   ? null
-                  : contagemTransacoes(snapshot.data!.length),
+                  : contagem(snapshot.data!.length),
             );
           },
         ),

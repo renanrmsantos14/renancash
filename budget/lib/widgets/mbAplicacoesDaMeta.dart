@@ -6,6 +6,19 @@ import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:flutter/material.dart';
 
+/// Posição de cada nome entre os repetidos ("1 de 4"), null quando o nome é único. O Worker manda só
+/// nome, banco e saldo das aplicações (sem vencimento nem taxa), então 4 "CDB - BANCO INTER" se
+/// distinguem pela posição e pelo saldo.
+List<String?> mbPosicoesRepetidas(List<String> nomes) {
+  final total = <String, int>{};
+  for (final n in nomes) total[n] = (total[n] ?? 0) + 1;
+  final visto = <String, int>{};
+  return [
+    for (final n in nomes)
+      total[n]! < 2 ? null : '${visto[n] = (visto[n] ?? 0) + 1} de ${total[n]}'
+  ];
+}
+
 /// Escolha das aplicações que compõem uma meta (tela de editar meta). Cada aplicação fica em uma meta só:
 /// as que já estão em outra meta aparecem desabilitadas, com o nome dessa meta.
 /// Some quando o app não tem aplicações (sem Meu Banco ou sem investimentos).
@@ -50,6 +63,7 @@ class _MbAplicacoesDaMetaState extends State<MbAplicacoesDaMeta> {
     final saldo = lista
         .where((a) => widget.selecionadas.contains(a.pk))
         .fold(0.0, (s, a) => s + a.saldo);
+    final posicoes = mbPosicoesRepetidas([for (final a in lista) a.nome]);
     return Padding(
       padding: const EdgeInsetsDirectional.only(start: 20, end: 20, top: 25),
       child: OutlinedContainer(
@@ -70,7 +84,7 @@ class _MbAplicacoesDaMetaState extends State<MbAplicacoesDaMeta> {
                     maxLines: 3,
                     textColor: suave),
               ),
-              for (final a in lista)
+              for (final (i, a) in lista.indexed)
                 Builder(builder: (context) {
                   final emOutra = a.metaPk != null && a.metaPk != widget.metaPk;
                   final marcada = widget.selecionadas.contains(a.pk);
@@ -87,7 +101,7 @@ class _MbAplicacoesDaMetaState extends State<MbAplicacoesDaMeta> {
                     subtitle: TextFont(
                         text: emOutra
                             ? 'Já na meta ${nomesDasMetas[a.metaPk] ?? ''}'.trim()
-                            : (a.banco ?? ''),
+                            : [a.banco, posicoes[i]].whereType<String>().join(' · '),
                         fontSize: 12.5,
                         textColor: suave),
                     secondary: TextFont(text: brl(a.saldo), fontSize: 14, fontWeight: FontWeight.bold),

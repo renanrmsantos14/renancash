@@ -11,7 +11,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/conexoes.dart'
-    show mbRotulosCarteiras, mbTiposDasCarteiras;
+    show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/selectAmount.dart';
@@ -1401,17 +1401,18 @@ class AppliedFilterChips extends StatelessWidget {
       ));
     }
     // Carteiras: um chip por pk; nomes iguais (corrente e poupança do mesmo banco) ganham o tipo.
+    // O desempate olha todas as carteiras do app: a poupança filtrada sozinha
+    // ainda divide o nome com a corrente.
     final walletPks = searchFilters.walletPks.toSet().toList();
     final tiposMb = walletPks.isEmpty ? const <String, String>{} : await mbTiposDasCarteiras();
-    final rotulos = mbRotulosCarteiras([
-      for (final pk in walletPks)
-        getWalletStringName(allWallets, allWallets.indexedByPk[pk])
-    ], [
-      for (final pk in walletPks) tiposMb[pk]
-    ]);
-    for (final (i, walletPk) in walletPks.indexed) {
+    final rotuloDe = mbRotulosPorPk({
+      for (final w in allWallets.list)
+        w.walletPk: getWalletStringName(allWallets, w)
+    }, tiposMb);
+    for (final walletPk in walletPks) {
       out.add(AppliedFilterChip(
-        label: rotulos[i],
+        label: rotuloDe[walletPk] ??
+            getWalletStringName(allWallets, allWallets.indexedByPk[walletPk]),
         customBorderColor: HexColor(
           allWallets.indexedByPk[walletPk]?.colour,
           defaultColor: Theme.of(context).colorScheme.primary,
