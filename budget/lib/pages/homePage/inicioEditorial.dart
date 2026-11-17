@@ -398,13 +398,9 @@ class _Restante extends StatelessWidget {
     final e = cores(context);
     final restante = limite - modelo.consumido;
     final estourou = restante < 0;
-    // diasRestantes não conta hoje; no ritmo diário hoje entra (último dia = 1).
-    final dias = max(0, modelo.diasRestantes);
-    final quando = dias == 0
-        ? 'último dia'
-        : dias == 1
-            ? 'falta 1 dia'
-            : 'faltam $dias dias';
+    // diasRestantes não conta hoje; aqui hoje entra, como no cartão do orçamento (último dia = 1).
+    final dias = max(0, modelo.diasRestantes) + 1;
+    final quando = dias == 1 ? 'último dia' : 'faltam $dias dias';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -444,7 +440,7 @@ class _Restante extends StatelessWidget {
         ],
         if (!estourou && AjustesInicio.ritmoDiario) ...[
           const SizedBox(height: 10),
-          Text('Pode gastar ${brl(restante / (dias + 1))}/dia',
+          Text('Pode gastar ${brl(restante / dias)}/dia',
               style: EdTexto.corpo(context)
                   .copyWith(fontWeight: FontWeight.w500)),
         ],
