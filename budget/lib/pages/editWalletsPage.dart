@@ -30,7 +30,8 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:provider/provider.dart';
 import 'exchangeRatesPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
-import 'package:budget/struct/mbSync/estadoInicio.dart' show mbSigla;
+import 'package:budget/struct/mbSync/estadoInicio.dart'
+    show mbLerSaldosReais, mbSigla;
 import 'package:budget/widgets/editorial/contas.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:sliver_tools/sliver_tools.dart';
@@ -50,9 +51,16 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
   String searchValue = "";
   bool isFocused = false;
   final DateTime _aberta = DateTime.now();
+  // Conta do Meu Banco: o saldo real (o da Início), não a soma dos lançamentos.
+  Map<String, double> _saldosReais = const {};
+  double _saldoDe(WalletWithDetails w) =>
+      _saldosReais[w.wallet.walletPk] ?? w.totalSpent ?? 0;
 
   @override
   void initState() {
+    mbLerSaldosReais().then((r) {
+      if (mounted) setState(() => _saldosReais = r);
+    }, onError: (_) {});
     Future.delayed(Duration.zero, () {
       if (widget.runWhenOpen != null) {
         widget.runWhenOpen!();
@@ -179,7 +187,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                     0,
                     (soma, w) =>
                         soma +
-                        (w.totalSpent ?? 0) *
+                        _saldoDe(w) *
                             amountRatioToPrimaryCurrency(
                                 allWallets, w.wallet.currency));
                 return MultiSliver(children: [
@@ -247,7 +255,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                               n == 1 ? "1 transação" : "$n transações",
                             ].join(" · "),
                             saldo: comSinal(
-                                walletWithDetails.totalSpent ?? 0,
+                                _saldoDe(walletWithDetails),
                                 (v) => convertToMoney(allWallets, v,
                                     currencyKey: wallet.currency,
                                     decimals: wallet.decimals,

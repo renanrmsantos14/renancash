@@ -329,7 +329,12 @@ String formatOutputWithNewDelimiterAndDecimal({
         symbol +
         (currencyName ?? "");
   } else {
-    return negativeSign + symbol + input + (currencyName ?? "");
+    // Real com espaço, como na Início ("R$ 927,28"); as outras moedas seguem coladas.
+    return negativeSign +
+        symbol +
+        (symbol == "R\$" ? " " : "") +
+        input +
+        (currencyName ?? "");
   }
 }
 
