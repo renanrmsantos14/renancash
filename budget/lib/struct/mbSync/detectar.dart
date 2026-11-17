@@ -22,8 +22,10 @@ const Map<String, Map<String, dynamic>> _padroes = {
 
 Map<String, dynamic> completarNovo(String tabela, Map<String, dynamic> d) {
   final r = {...?_padroes[tabela], ...d};
-  if (tabela == 'assinaturas' && r['padrao'] == null) {
-    r['padrao'] = '${(d['nome'] as String).toUpperCase()}*';
+  // '*' sobrou de envio rejeitado por nome vazio. O Worker aceita texto de até 200 caracteres.
+  if (tabela == 'assinaturas' && (r['padrao'] == null || r['padrao'] == '*')) {
+    final nome = (d['nome'] as String).toUpperCase();
+    r['padrao'] = '${nome.length > 199 ? nome.substring(0, 199) : nome}*';
   }
   return r;
 }

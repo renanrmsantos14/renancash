@@ -145,14 +145,35 @@ Future<MbFila> mbLerFila() async {
       .getSingle();
   final rej = await database
       .customSelect(
-          'SELECT tabela, id, dados, motivo FROM mb_registros WHERE motivo IS NOT NULL ORDER BY updated_at DESC LIMIT 20')
+          'SELECT tabela, dados, motivo FROM mb_registros WHERE motivo IS NOT NULL ORDER BY updated_at DESC LIMIT 500')
       .get();
-  return MbFila(n.read<int>('n'), [
-    for (final l in rej)
-      () {
-        final d = _json(l.data['dados']);
-        final nome = d?['nome'] ?? d?['descricao'] ?? d?['padrao'] ?? l.data['id'];
-        return '${l.data['tabela']} · $nome: ${l.data['motivo']}';
-      }()
-  ]);
+  return MbFila(
+      n.read<int>('n'),
+      mbRotulosRejeitados([
+        for (final l in rej)
+          (
+            tabela: l.read<String>('tabela'),
+            dados: _json(l.data['dados']),
+            motivo: l.read<String>('motivo')
+          )
+      ]).take(20).toList());
+}
+
+// "tabela · nome: motivo"; sem nome legível vira "tabela: motivo". Linhas iguais se juntam com "(n)".
+List<String> mbRotulosRejeitados(
+    Iterable<({String tabela, Map<String, dynamic>? dados, String motivo})> itens) {
+  final contagem = <String, int>{};
+  for (final r in itens) {
+    final d = r.dados;
+    final nome = [d?['nome'], d?['descricao'], d?['padrao']].firstWhere(
+        (v) => v is String && v.replaceAll('*', '').trim().isNotEmpty,
+        orElse: () => null);
+    final rotulo = nome == null
+        ? '${r.tabela}: ${r.motivo}'
+        : '${r.tabela} · $nome: ${r.motivo}';
+    contagem.update(rotulo, (n) => n + 1, ifAbsent: () => 1);
+  }
+  return [
+    for (final e in contagem.entries) e.value > 1 ? '${e.key} (${e.value})' : e.key
+  ];
 }

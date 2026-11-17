@@ -176,8 +176,9 @@ Map<String, dynamic> projetarLancamento(LancLocal l) {
   };
 }
 
+// No Cashew o título da assinatura é opcional, mas o Worker rejeita `nome` vazio ("dados inválidos").
 Map<String, dynamic> projetarAssinatura(AssinLocal a) => {
-      'nome': _cortar(a.nome),
+      'nome': a.nome.trim().isEmpty ? 'Sem nome' : _cortar(a.nome),
       'valor': a.valor.abs(),
       'dia': a.dia,
       'categoria_id': idDoPk(a.categoriaPk),

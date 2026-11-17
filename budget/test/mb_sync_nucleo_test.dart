@@ -1,3 +1,4 @@
+import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -131,6 +132,34 @@ void main() {
   test('assinatura nova recebe padrao NOME*', () {
     expect(completarNovo('assinaturas', {'nome': 'Netflix'})['padrao'],
         'NETFLIX*');
+  });
+
+  test('padrao "*" de envio rejeitado é refeito a partir do nome', () {
+    expect(
+        completarNovo('assinaturas', {'nome': 'Sem nome', 'padrao': '*'})['padrao'],
+        'SEM NOME*');
+  });
+
+  test('rejeições iguais se juntam e nome vazio não deixa "· :"', () {
+    final itens = <({String tabela, Map<String, dynamic>? dados, String motivo})>[
+      for (var i = 0; i < 5; i++)
+        (
+          tabela: 'assinaturas',
+          dados: <String, dynamic>{'nome': '', 'padrao': '*'},
+          motivo: 'dados inválidos'
+        ),
+      (
+        tabela: 'regras',
+        dados: <String, dynamic>{'padrao': '*uber*'},
+        motivo: 'dados inválidos'
+      ),
+      (tabela: 'metas', dados: null, motivo: 'id inválido'),
+    ];
+    expect(mbRotulosRejeitados(itens), [
+      'assinaturas: dados inválidos (5)',
+      'regras · *uber*: dados inválidos',
+      'metas: id inválido',
+    ]);
   });
 
   test('remotosVencedores: remoto mais velho perde para pendente local', () {

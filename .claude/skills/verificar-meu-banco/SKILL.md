@@ -37,6 +37,9 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 
 - Notificações (PR 7): `mbConferirAlertas` entrega cada alerta com `chave`, `titulo`, `corpo` e `item`; `mbAcoesDoAlerta` cria os botões das respostas do item (reembolso abre o app); `mbResponderPelaNotificacao` responde a fila e ignora item que já saiu dela; o toque simples abre a Início. A faixa `HomePageConexaoCaida` (topo da Início) lê `avisos` e tem "Reconectar" (`mbAbrirConnect(itemId:)`). Print da faixa (390x844): web build, `python3 -m http.server`, Playwright, `avisos` simulados só no print. Botões, 7h e Reconectar real só em aparelho.
 
+- Rejeições do Worker (`packages/core/src/sync.ts`, `TABELAS` + `dadosValidos`): campo `texto` exige string de 1 a 200 caracteres. Caso real (v5.4.27): assinatura do Cashew sem título ia com `nome: ""` e voltava "dados inválidos". Agora `projetarAssinatura` manda `Sem nome` e `completarNovo` refaz o `padrao` `*` (sobra do envio rejeitado) e corta em 200; o item rejeitado se reenvia sozinho na próxima rodada porque a projeção mudou. Testes: `test/mb_mapeamento_test.dart` ("assinatura sem título...") e `test/mb_sync_nucleo_test.dart`. Ao mudar uma projeção, confira cada campo obrigatório contra `TABELAS` do Worker.
+- Tela Meu Banco: `mbRotulosRejeitados` junta rejeições iguais em uma linha com `(n)` e mostra o nome/descrição/padrão do item; sem nome legível fica `tabela: motivo` (nunca `· :` vazio).
+
 ## Evidência obrigatória
 - Tail da saída de `flutter test` (todos passando) e de `flutter analyze`.
 
