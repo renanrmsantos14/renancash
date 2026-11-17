@@ -25,9 +25,13 @@ class TransactionEntryAmount extends StatelessWidget {
     double count = transaction.amount.abs() *
         (amountRatioToPrimaryCurrencyGivenPk(
             Provider.of<AllWallets>(context), transaction.walletFk));
-    final semSinal = (transaction.type == TransactionSpecialType.credit ||
-            transaction.type == TransactionSpecialType.debt) &&
-        transaction.paid == false;
+    // Ajuste de saldo (categoria "0", ex.: valor atual de um investimento) não é entrada nem saída
+    // e fica fora do total do dia: sem sinal e marcado como "ajuste".
+    final ajuste = ehAjusteDeSaldo(transaction);
+    final semSinal = ajuste ||
+        (transaction.type == TransactionSpecialType.credit ||
+                transaction.type == TransactionSpecialType.debt) &&
+            transaction.paid == false;
     final sinal = semSinal
         ? ''
         : transaction.income
@@ -64,6 +68,12 @@ class TransactionEntryAmount extends StatelessWidget {
             ),
           ],
         ),
+        if (ajuste)
+          TextFont(
+            text: 'ajuste · fora do total',
+            fontSize: 11,
+            textColor: getColor(context, "textLight"),
+          ),
         // Original amount:
         AnimatedSizeSwitcher(
           child: showOtherCurrency
@@ -93,6 +103,9 @@ class TransactionEntryAmount extends StatelessWidget {
   }
 }
 
+/// Correção de saldo já lançada: os totais (dia, mês, gráficos de gastos) a deixam de fora.
+bool ehAjusteDeSaldo(Transaction t) => t.paid && t.categoryFk == "0";
+
 Color getTransactionAmountColor(BuildContext context, Transaction transaction) {
   Color color = transaction.objectiveLoanFk != null && transaction.paid
       ? transaction.income
@@ -121,7 +134,7 @@ Color getTransactionAmountColor(BuildContext context, Transaction transaction) {
                           ? getColor(context, "textLight")
                           // getColor(context, "unPaidOverdue")
                           : getColor(context, "textLight");
-  if (transaction.paid == true && transaction.categoryFk == "0") {
+  if (ehAjusteDeSaldo(transaction)) {
     if (appStateSettings["balanceTransferAmountColor"] == "no-color") {
       return getColor(context, "black").withOpacity(0.95);
     } else {

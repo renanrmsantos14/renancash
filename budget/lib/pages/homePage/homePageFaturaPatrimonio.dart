@@ -6,18 +6,22 @@ import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
 import 'package:flutter/material.dart';
 
-/// Dados do cartão "Patrimônio". Recarregam quando `mbAtualizarRevisar` roda
+/// Dados do Patrimônio (cartão e âncora do gráfico). Recarregam quando `mbAtualizarRevisar` roda
 /// (após cada sincronização e ao mexer na fila), que também alimenta o "Para revisar".
-class _CarregaInicio extends StatefulWidget {
-  const _CarregaInicio({required this.construir});
+/// Carregando: nada. Sem Meu Banco no aparelho: [semDados].
+class CarregaPatrimonio extends StatefulWidget {
+  const CarregaPatrimonio(
+      {super.key, required this.construir, this.semDados = const SizedBox.shrink()});
   final Widget Function(BuildContext, PatrimonioInicio) construir;
+  final Widget semDados;
 
   @override
-  State<_CarregaInicio> createState() => _CarregaInicioState();
+  State<CarregaPatrimonio> createState() => _CarregaPatrimonioState();
 }
 
-class _CarregaInicioState extends State<_CarregaInicio> {
+class _CarregaPatrimonioState extends State<CarregaPatrimonio> {
   PatrimonioInicio? _dados;
+  bool _falhou = false;
   late final Listenable _gatilho = Listenable.merge([meuBancoRevisar, meuBancoEmprestimos]);
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
 
@@ -40,15 +44,16 @@ class _CarregaInicioState extends State<_CarregaInicio> {
       final d = await mbCarregarPatrimonioInicio(DateTime.now());
       if (mounted) setState(() => _dados = d);
     } catch (_) {
-      // Dados guardados ilegíveis: mantém o que já está na tela.
+      // Dados guardados ilegíveis: mantém o que já está na tela (na 1ª carga, [semDados]).
+      if (mounted && _dados == null) setState(() => _falhou = true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final d = _dados;
-    if (d == null || d.semDados) return const SizedBox.shrink();
-    return widget.construir(context, d);
+    if (d == null) return _falhou ? widget.semDados : const SizedBox.shrink();
+    return d.semDados ? widget.semDados : widget.construir(context, d);
   }
 }
 
@@ -80,27 +85,34 @@ Widget _linha(String rotulo, String valor, Color suave, {bool forte = false}) =>
       ]),
     );
 
-/// Patrimônio = Inter (conta) + investimentos − fatura atual. Empréstimos ficam de fora; as carteiras aparecem abaixo.
+/// Patrimônio = contas correntes + poupanças + investimentos − fatura atual (os saldos reais do Meu Banco).
+/// Empréstimos ficam de fora; as carteiras manuais aparecem abaixo, também fora do total.
 class HomePagePatrimonio extends StatelessWidget {
-  const HomePagePatrimonio({super.key});
+  const HomePagePatrimonio(this.dados, {super.key});
+  final PatrimonioInicio dados;
 
   @override
-  Widget build(BuildContext context) => _CarregaInicio(construir: (context, d) {
-        final suave = getColor(context, "textLight");
-        final p = d.patrimonio;
-        return _cartao(context, [
-          TextFont(text: 'Patrimônio', fontSize: 18, fontWeight: FontWeight.bold),
-          const SizedBox(height: 2),
-          TextFont(text: brl(p.total), fontSize: 26, fontWeight: FontWeight.bold),
-          const SizedBox(height: 4),
-          _linha('Conta Inter', brl(p.inter), suave),
-          _linha('Investimentos', brl(p.investimentos), suave),
-          _linha('Fatura atual', '− ${brl(p.fatura)}', suave),
-          if (d.carteiras.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            TextFont(text: 'Carteiras', fontSize: 14, fontWeight: FontWeight.bold, textColor: suave),
-            for (final c in d.carteiras) _linha(c.nome, brl(c.saldo), suave),
-          ],
-        ]);
-      });
+  Widget build(BuildContext context) {
+    final suave = getColor(context, "textLight");
+    final p = dados.patrimonio;
+    return _cartao(context, [
+      TextFont(text: 'Patrimônio', fontSize: 18, fontWeight: FontWeight.bold),
+      const SizedBox(height: 2),
+      TextFont(text: brl(p.total), fontSize: 26, fontWeight: FontWeight.bold),
+      const SizedBox(height: 4),
+      _linha('Contas correntes', brl(p.correntes), suave),
+      if (p.poupancas != 0) _linha('Poupanças', brl(p.poupancas), suave),
+      _linha('Investimentos', brl(p.investimentos), suave),
+      _linha('Fatura atual', '− ${brl(p.fatura)}', suave),
+      if (dados.carteiras.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        TextFont(
+            text: 'Carteiras manuais · fora do total',
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            textColor: suave),
+        for (final c in dados.carteiras) _linha(c.nome, brl(c.saldo), suave),
+      ],
+    ]);
+  }
 }
