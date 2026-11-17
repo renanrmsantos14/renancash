@@ -100,6 +100,10 @@ DateTimeRange? getDateTimeRangeForPassedSearchFilters(
   );
 }
 
+/// Aviso da aba Histórico de Todos os gastos: por que as saídas do ciclo passam do gasto do Geral.
+const rotuloHistoricoTodosGastos =
+    'Saídas de todas as contas, com empréstimos e o que fica fora do orçamento Geral.';
+
 class WatchedWalletDetailsPage extends StatelessWidget {
   const WatchedWalletDetailsPage({required this.walletPk, super.key});
   final String walletPk;
@@ -359,6 +363,13 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
     // }
 
     List<Widget> historyTabPage = [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(30, 0, 30, 10),
+          child: Text(rotuloHistoricoTodosGastos,
+              style: EdTexto.rotulo(context)),
+        ),
+      ),
       AllSpendingPastSpendingGraph(
         appStateSettingsNetAllSpendingTotal:
             appStateSettingsNetAllSpendingTotal,
