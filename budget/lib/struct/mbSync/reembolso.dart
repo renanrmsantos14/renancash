@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 const int mbJanelaReembolsoDias = 30;
 const int _maxPartes = 6; // 1/1 a 1/6 do gasto
 const int _pontosExato = 40;
+const int _pontosRecorrente = 15; // valor parecido ou "como das outras vezes"
 
 class MbGastoCandidato {
   final String pk, nome, categoria;
@@ -87,11 +88,18 @@ List<MbSugestaoReembolso> mbSugerirReembolso(Iterable<MbGastoCandidato> gastos,
   return saida;
 }
 
-/// O gasto em destaque no cartão: só quando o Pix é exatamente uma parte dele e nenhum outro empata.
-MbSugestaoReembolso? mbReembolsoForte(List<MbSugestaoReembolso> s) =>
-    s.isNotEmpty && s.first.pontos >= _pontosExato && (s.length == 1 || s[1].pontos < s.first.pontos)
+/// O gasto em destaque no cartão: o primeiro do ranking, sem empate, quando o Pix é exatamente uma parte dele. Se o
+/// pagador já mandou a parte de 2 contas ou mais (`recorrente`), basta valor parecido ou a categoria em que ele racha.
+MbSugestaoReembolso? mbReembolsoForte(List<MbSugestaoReembolso> s, {bool recorrente = false}) =>
+    s.isNotEmpty &&
+            s.first.pontos >= (recorrente ? _pontosRecorrente : _pontosExato) &&
+            (s.length == 1 || s[1].pontos < s.first.pontos)
         ? s.first
         : null;
+
+/// Quantas vezes o pagador (favorecido normalizado) já mandou a parte de uma conta.
+int mbVezesQueRachou(Iterable<MbVinculoReembolso> vinculos, String pagador) =>
+    pagador.isEmpty ? 0 : vinculos.where((v) => v.pagador == pagador).length;
 
 /// Minha parte de um gasto (centavos, positivo) depois dos reembolsos ligados. Nunca abaixo de zero: `excesso` > 0
 /// quando os reembolsos passam do gasto (o app avisa).

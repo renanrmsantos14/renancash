@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:math' show max;
 
 import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart' show mbRendimentosJuntos;
 import 'package:budget/struct/pendenciasVencidas.dart' show meuBancoVencidas;
 import 'package:budget/struct/mbSync/avisos.dart' show mbAtualizarAvisos, meuBancoAvisos;
 import 'package:budget/struct/mbSync/classificarDados.dart'
@@ -193,7 +195,8 @@ final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const [
 /// bancos desconectados e contas vencidas.
 int mbTotalPendencias() =>
     meuBancoRevisar.value.length +
-    meuBancoClassificar.value.where((l) => l.revisao == null).length +
+    meuBancoClassificar.value.where((l) => l.revisao == null).length -
+    max<int>(0, mbRendimentosJuntos(meuBancoClassificar.value).length - 1) + // rendimentos: um cartão só
     (AjustesInicio.bancos ? meuBancoAvisos.value.length : 0) +
     (AjustesInicio.vencidas
         ? meuBancoVencidas.value.where((t) => !t.income).length

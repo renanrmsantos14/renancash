@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart';
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
@@ -42,6 +43,7 @@ final ValueNotifier<Map<String, MbEstadoIa>> meuBancoIaEstado = ValueNotifier(co
 MbOpcoes mbOpcoesClassificar = const MbOpcoes();
 List<MbPadrao> mbPadroesClassificar = const [];
 MbUso mbUsoClassificar = const MbUso();
+List<MbHistorico> mbHistoricoClassificar = const []; // todas as transações: "como no mês passado"
 
 Future<Set<String>> _lerRevisados() async {
   try {
@@ -90,6 +92,19 @@ Future<void> mbAtualizarClassificar() async {
     final nomes = {for (final c in cats) c.categoryPk: nomeDaCategoria(c)};
     final txs = await database.select(database.transactions).get();
     mbUsoClassificar = MbUso.de([for (final t in txs) (descricao: t.name, categoriaPk: t.categoryFk)]);
+    mbHistoricoClassificar = [
+      for (final t in txs)
+        (
+          pk: t.transactionPk,
+          nome: t.name,
+          valor: t.amount,
+          data: t.dateCreated,
+          categoriaPk: t.categoryFk,
+          subPk: t.subCategoryFk,
+          categoriaNome: nomes[t.categoryFk] ?? '',
+          subNome: nomes[t.subCategoryFk],
+        )
+    ];
     final lancamentos = <MbLancamentoIa>[];
     for (final t in txs) {
       if (!t.transactionPk.startsWith(mbPrefixo)) continue;
@@ -117,12 +132,14 @@ Future<void> mbAtualizarClassificar() async {
   }
 }
 
-// Sugestão local para quem ainda não tem uma da IA.
+// "Como no mês passado" na frente de tudo (nem vai para a IA); senão a da IA que já chegou ou a local.
 void _preencherLocais(List<MbLancamentoIa> fila) {
   final atual = meuBancoSugestoes.value;
   meuBancoSugestoes.value = {
     for (final l in fila)
-      if (atual[l.pk]?.fonte == MbFonteSugestao.ia)
+      if (mbComoMesPassado(l, mbHistoricoClassificar, mbOpcoesClassificar) case final s?)
+        l.pk: s
+      else if (atual[l.pk]?.fonte == MbFonteSugestao.ia)
         l.pk: atual[l.pk]!
       else if (mbSugestaoLocal(l, mbPadroesClassificar, mbOpcoesClassificar) case final s?)
         l.pk: s
@@ -130,12 +147,13 @@ void _preencherLocais(List<MbLancamentoIa> fila) {
 }
 
 final Set<String> _pedidos = {};
+const _semPedir = {MbFonteSugestao.ia, MbFonteSugestao.mesPassado};
 
 /// Pede à IA as sugestões dos próximos da fila (lote pequeno, uma vez por lançamento nesta sessão).
 Future<void> mbPedirSugestoes(List<MbLancamentoIa> proximos) async {
   final lote = [
     for (final l in proximos)
-      if (meuBancoSugestoes.value[l.pk]?.fonte != MbFonteSugestao.ia && !_pedidos.contains(l.pk)) l
+      if (!_semPedir.contains(meuBancoSugestoes.value[l.pk]?.fonte) && !_pedidos.contains(l.pk)) l
   ].take(mbLoteIa).toList();
   if (lote.isEmpty || mbOpcoesClassificar.categorias.isEmpty) return;
   _pedidos.addAll(lote.map((l) => l.pk));
@@ -210,7 +228,7 @@ Future<MbSugestao?> mbEntenderExplicacao(MbLancamentoIa l, String explicacao) as
 
 /// Aplica a escolha do usuário: categoria, subcategoria, título e vínculo no lançamento (com data de edição, para a
 /// categoria subir como ajuste), lembra o padrão e tira da fila. Pix enviado do Worker grava também a decisão.
-Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha) async {
+Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha, {bool sincronizar = true}) async {
   final vinculo = mbOpcoesClassificar.vinculo(escolha.vinculoPk);
   await (database.update(database.transactions)..where((t) => t.transactionPk.equals(l.pk)))
       .write(TransactionsCompanion(
@@ -233,9 +251,17 @@ Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha) asyn
   if (revisao != null) {
     // Mesma resposta da fila Para revisar: decisão e memória do destinatário (já sincroniza).
     unawaited(mbResponderRevisao(revisao, 'categoria', categoriaPk: escolha.categoriaPk));
-  } else {
+  } else if (sincronizar) {
     unawaited(sincronizarMeuBanco());
   }
+}
+
+/// "Aplicar a todos os iguais" e "Confirmar todos" (rendimentos): a mesma escolha em cada um, um sync só no fim.
+Future<void> mbConfirmarVarios(List<MbLancamentoIa> ls, MbSugestao escolha) async {
+  for (final l in ls) {
+    await mbConfirmarClassificacao(l, escolha, sincronizar: false);
+  }
+  unawaited(sincronizarMeuBanco());
 }
 
 Future<void> _tirarDaFila(String pk) async {
