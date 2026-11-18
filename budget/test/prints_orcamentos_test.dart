@@ -2,6 +2,7 @@
 // Só roda com PRINTS=1:
 //   PRINTS=1 flutter test test/prints_orcamentos_test.dart --update-goldens
 // Os PNGs vão para .verificacao/prints/ (fora do git).
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
@@ -524,7 +525,7 @@ Future<void> _printPaginaComBanco(
       semLancamentos: semLancamentos,
       limitesEstourados: limitesEstourados,
       semLimites: semLimites,
-    );
+    ).timeout(const Duration(seconds: 20));
   });
   await t.pumpWidget(_app(modo, construir(orc), usarScaffold: usarScaffold));
   for (var i = 0; i < 6; i++) {
@@ -538,7 +539,8 @@ Future<void> _printPaginaComBanco(
       matchesGoldenFile('../../.verificacao/prints/$nome.png'));
   await t.pumpWidget(const SizedBox());
   await t.pump(const Duration(seconds: 3));
-  await t.runAsync(() => database.close());
+  // Sem await: o close() do Drift espera timers do relógio falso e travava o teste.
+  unawaited(database.close());
 }
 
 void main() {
