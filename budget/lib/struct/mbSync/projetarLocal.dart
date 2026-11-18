@@ -24,6 +24,15 @@ Map<String, dynamic> mbTextosEditados(Transaction t) =>
             if (t.note.trim().isNotEmpty && t.note != 'Pendente')
               'nota': _cortar200(t.note.trim()),
           };
+// Empréstimo ligado a uma transação do banco (`mb:`) viaja no ajuste, senão o gasto do ciclo diverge entre aparelhos
+// (transação de empréstimo não conta no orçamento). `null` só vai para limpar o que o servidor tem. A meta não entra:
+// já viaja em `aplicacao_ids` da tabela metas.
+Map<String, dynamic> mbDivida(Transaction t, Map<String, dynamic>? servidor) => {
+      if (t.objectiveLoanFk != null)
+        'divida_id': idDoPk(t.objectiveLoanFk!)
+      else if (servidor?['divida_id'] != null)
+        'divida_id': null,
+    };
 String? _naoVazio(String? s) => s == null || s.isEmpty ? null : s;
 String _cortar200(String s) => s.length > 200 ? s.substring(0, 200) : s;
 
@@ -334,7 +343,9 @@ Future<Map<String, Projetado>> mbProjetarLocal(
         categoriaPkAplicada: aplicado[pk],
         existeLocal: t != null,
         nomeCategoria: catPorPk[t?.categoryFk]?.name ?? '',
-        textos: t == null ? const {} : mbTextosEditados(t),
+        textos: t == null
+            ? const {}
+            : {...mbTextosEditados(t), ...mbDivida(t, vigente?.registro.dados)},
         orcamentoPks: escolhas[pk],
         limparOrcamentos: escolhas[pk] == null &&
             servidorTemEscolha('ajustes', pk.startsWith('mb:') ? pk.substring(3) : pk),
