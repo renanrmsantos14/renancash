@@ -23,6 +23,9 @@ test("Geral: só o orçamento Geral conta; sem valor definido não há aviso", (
   assert.equal(orcamentoGeral([{ tabela: "orcamentos", id: "o1", dados: { nome: "Mercado", valor: 500 } }]), null);
   assert.equal(orcamentoGeral([geralReg(2000)]).valor, 2000);
   assert.deepEqual(alertasGeral(null), []);
+  const arquivado = geralReg(2000);
+  arquivado.dados = { ...arquivado.dados, arquivado: 1 };
+  assert.equal(orcamentoGeral([arquivado]), null);
 });
 
 test("Geral: gasto só em outro orçamento não conta; gasto sem escolha conta", () => {

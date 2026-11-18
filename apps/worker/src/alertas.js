@@ -19,7 +19,7 @@ export const ID_GERAL = "cashew:mb:orc:geral";
 
 // Só o Geral gera aviso (perfil: alertas de 80% e 100% apenas no orçamento padrão). Sem valor definido, não há o que avisar.
 export function orcamentoGeral(registros) {
-  const todos = doTipo(registros, "orcamentos");
+  const todos = doTipo(registros, "orcamentos").filter((o) => o.arquivado !== 1); // arquivado no app não gera aviso
   const g = todos.find((o) => o.id === ID_GERAL) || todos.find((o) => (o.nome || "").trim().toLowerCase() === "geral");
   return g && g.valor > 0 ? g : null;
 }

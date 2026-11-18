@@ -98,3 +98,51 @@ test("meta aceita aplicacao_ids (lista de ids) e valor_alvo 0 para meta sem valo
   assert.ok(!meta({ nome: "Viagem", valor_alvo: 5000, aplicacao_ids: "a1" }));
   assert.ok(!meta({ nome: "Viagem", valor_alvo: 5000, aplicacao_ids: [1] }));
 });
+
+test("carteiras: nome obrigatório, demais campos opcionais e tipados", () => {
+  assert.ok(dadosValidos("carteiras", { nome: "Nubank" }));
+  assert.ok(dadosValidos("carteiras", { nome: "Nubank", cor: "FF0000", icone: "bank.png", ordem: 2, moeda: "brl", decimais: 2 }));
+  assert.ok(!dadosValidos("carteiras", { cor: "FF0000" }));
+  assert.ok(!dadosValidos("carteiras", { nome: "Nubank", ordem: "1" }));
+});
+
+test("lançamento agendado/recorrente: campos opcionais tipados", () => {
+  const base = { data: "2026-12-05", descricao: "Aluguel", valor: -1500 };
+  assert.ok(dadosValidos("lancamentos", base));
+  assert.ok(dadosValidos("lancamentos", { ...base, tipo: "recorrente", pago: 0, pulado: 0, proxima_criada: 1, repeticao: "mensal", periodo: 1, fim: "2027-06-05", vencimento: "2026-12-05", fim_nulo: null }));
+  assert.ok(dadosValidos("lancamentos", { ...base, tipo: "agendada", fim: null, repeticao: null }));
+  assert.ok(!dadosValidos("lancamentos", { ...base, tipo: "assinatura" }));
+  assert.ok(!dadosValidos("lancamentos", { ...base, pago: 2 }));
+  assert.ok(!dadosValidos("lancamentos", { ...base, repeticao: "quinzenal" }));
+  assert.ok(!dadosValidos("lancamentos", { ...base, fim: "05/06/2027" }));
+});
+
+test("limites: orcamento_id, categoria_id e valor obrigatórios", () => {
+  assert.ok(dadosValidos("limites", { orcamento_id: "cashew:b1", categoria_id: "cashew:c1", valor: 30 }));
+  assert.ok(!dadosValidos("limites", { orcamento_id: "cashew:b1", valor: 30 }));
+  assert.ok(!dadosValidos("limites", { orcamento_id: "cashew:b1", categoria_id: "cashew:c1", valor: "30" }));
+});
+
+test("orçamento: arquivado e limite_absoluto opcionais (0 ou 1)", () => {
+  const base = { nome: "Casa", valor: 500, categoria_ids: [], periodo: "ciclo" };
+  assert.ok(dadosValidos("orcamentos", base));
+  assert.ok(dadosValidos("orcamentos", { ...base, arquivado: 1, limite_absoluto: 0 }));
+  assert.ok(dadosValidos("orcamentos", { ...base, arquivado: null }));
+  assert.ok(!dadosValidos("orcamentos", { ...base, arquivado: true }));
+  assert.ok(!dadosValidos("orcamentos", { ...base, limite_absoluto: 2 }));
+});
+
+test("ajuste aceita nome e nota editados (texto não vazio)", () => {
+  assert.ok(dadosValidos("ajustes", { nome: "Almoço com cliente", nota: "reembolsável" }));
+  assert.ok(dadosValidos("ajustes", { nome: null, nota: null, gasto: 1 }));
+  assert.ok(!dadosValidos("ajustes", { nome: "" }));
+  assert.ok(!dadosValidos("ajustes", { nome: 5 }));
+});
+
+test("configuração guarda o valor serializado em JSON", () => {
+  assert.ok(dadosValidos("configuracoes", { valor: "true" }));
+  assert.ok(dadosValidos("configuracoes", { valor: JSON.stringify(["a", "b"]) }));
+  assert.ok(!dadosValidos("configuracoes", { valor: true }));
+  assert.ok(!dadosValidos("configuracoes", { valor: "" }));
+  assert.ok(!dadosValidos("configuracoes", { valor: "x".repeat(4001) }));
+});

@@ -1,7 +1,7 @@
 // Protocolo de sincronização dos dados do usuário (tabela genérica `registros` no D1).
 // Last-write-wins por registro pelo `updated_at` do cliente; o cursor de leitura usa o `server_at` do servidor.
 
-export type Tabela = "categorias" | "regras" | "orcamentos" | "metas" | "dividas" | "assinaturas" | "ajustes" | "lancamentos" | "revisoes";
+export type Tabela = "categorias" | "regras" | "orcamentos" | "limites" | "metas" | "dividas" | "assinaturas" | "ajustes" | "lancamentos" | "revisoes" | "carteiras" | "configuracoes";
 
 export interface Registro {
   tabela: Tabela;
@@ -11,22 +11,36 @@ export interface Registro {
   deleted_at: string | null;
 }
 
-type Campo = "texto" | "numero" | "lista" | "data" | readonly (string | number)[];
+type Campo = "texto" | "json" | "numero" | "lista" | "data" | readonly (string | number)[];
 type Esquema = Readonly<Record<string, Campo>>; // chave terminada em "?" = opcional (ausente ou null); chaves extras são aceitas
 
 export const TABELAS: Readonly<Record<Tabela, Esquema>> = {
   categorias: { nome: "texto", tipo: ["despesa", "receita"], "cor?": "texto", "icone?": "texto", "pai_id?": "texto", "ordem?": "numero", "pluggy?": "lista" },
   regras: { padrao: "texto", categoria_id: "texto", "conta_id?": "texto", "prioridade?": "numero" },
-  orcamentos: { nome: "texto", valor: "numero", categoria_ids: "lista", periodo: ["ciclo", "mensal"] },
+  // arquivado: orçamento arquivado no app (continua existindo). limite_absoluto: os limites por categoria são valores em vez de percentuais.
+  orcamentos: { nome: "texto", valor: "numero", categoria_ids: "lista", periodo: ["ciclo", "mensal"], "arquivado?": [0, 1], "limite_absoluto?": [0, 1] },
+  // Limite de uma categoria dentro de um orçamento; `valor` é percentual ou valor absoluto conforme `limite_absoluto` do orçamento.
+  limites: { orcamento_id: "texto", categoria_id: "texto", valor: "numero" },
   // valor_alvo 0 = meta sem valor definido. aplicacao_ids: ids das aplicações (Pluggy) que compõem a meta; cada aplicação em uma meta só.
   metas: { nome: "texto", valor_alvo: "numero", "valor_atual?": "numero", "prazo?": "data", "aplicacao_ids?": "lista" },
   dividas: { tipo: ["emprestimo"], nome: "texto", "pessoa?": "texto", sentido: ["devo", "me_devem"], valor_total: "numero", "pago?": "numero" },
   assinaturas: { nome: "texto", valor: "numero", dia: "numero", padrao: "texto", status: ["confirmada", "ignorada"], "categoria_id?": "texto" },
-  ajustes: { "category?": "texto", "gasto?": [0, 1], "categoria_id?": "texto", "nota?": "texto" },
+  // nome/nota: título e nota editados numa transação do banco (`mb:`); sem eles vale o texto do banco.
+  ajustes: { "category?": "texto", "gasto?": [0, 1], "categoria_id?": "texto", "nota?": "texto", "nome?": "texto" },
   // Fila "Para revisar": tipo "decisao" (id `tx:<transação>`) guarda a resposta do usuário; tipo "destinatario" (id `dest:<nome>`)
   // lembra a categoria do Pix enviado a essa pessoa. valor/data/descricao ficam na decisão para a lista de empréstimos não depender da transação.
   revisoes: { tipo: ["decisao", "destinatario"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda"], "categoria_id?": "texto", "valor?": "numero", "data?": "data", "descricao?": "texto" },
-  lancamentos: { data: "data", descricao: "texto", valor: "numero", "categoria_id?": "texto", "carteira?": "texto", "nota?": "texto" },
+  // Uma configuração do app que afeta dados e cálculos (id = nome da chave); `valor` é o JSON do valor.
+  configuracoes: { valor: "json" },
+  carteiras: { nome: "texto", "cor?": "texto", "icone?": "texto", "ordem?": "numero", "moeda?": "texto", "decimais?": "numero" },
+  // Agendada/recorrente: `tipo` + estado (pago, pulado, proxima_criada = já gerou a ocorrência seguinte, que tem id previsível `<id>::predict::<n>`),
+  // despago = o usuário desmarcou o pagamento (sem ele, `pago: 0` não desfaz uma ocorrência paga),
+  // repetição (repeticao/periodo/fim) e `vencimento` (dia em que venceu; `data` passa a ser o dia do pagamento).
+  lancamentos: {
+    data: "data", descricao: "texto", valor: "numero", "categoria_id?": "texto", "carteira?": "texto", "nota?": "texto",
+    "tipo?": ["agendada", "recorrente"], "pago?": [0, 1], "despago?": [0, 1], "pulado?": [0, 1], "proxima_criada?": [0, 1],
+    "repeticao?": ["diaria", "semanal", "mensal", "anual", "personalizada"], "periodo?": "numero", "fim?": "data", "vencimento?": "data",
+  },
 };
 
 export const MAX_LOTE = 500;
@@ -39,6 +53,7 @@ const DATA = /^\d{4}-\d{2}-\d{2}$/;
 function campoValido(tipo: Campo, v: unknown): boolean {
   if (Array.isArray(tipo)) return (tipo as readonly unknown[]).includes(v);
   if (tipo === "texto") return typeof v === "string" && v.length > 0 && v.length <= 200;
+  if (tipo === "json") return typeof v === "string" && v.length > 0 && v.length <= 4000; // valor serializado (listas e mapas de configuração)
   if (tipo === "numero") return typeof v === "number" && Number.isFinite(v);
   if (tipo === "lista") return Array.isArray(v) && v.every((x) => typeof x === "string");
   return typeof v === "string" && DATA.test(v);
