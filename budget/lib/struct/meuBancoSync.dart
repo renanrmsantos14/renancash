@@ -25,7 +25,9 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart' show DateFormat;
 
 const String meuBancoUrlPadrao =
-    "https://meu-banco.renanrmsantos14.workers.dev";
+    "https://renancash.renanrmsantos14.workers.dev";
+// Endereço anterior do Worker (renomeado para renancash): quem pareou com ele passa a usar o novo.
+const String _urlAntiga = "https://meu-banco.renanrmsantos14.workers.dev";
 const String _chaveToken = "meu_banco_token";
 const String _chaveUrl = "meu_banco_url";
 const String _chaveDesde = "meuBancoDesde";
@@ -65,7 +67,13 @@ Future<String?> meuBancoLerToken() async {
 Future<String> meuBancoLerUrl() async {
   try {
     final u = await _storage.read(key: _chaveUrl);
-    if (u != null && u.trim().isNotEmpty) return u.trim();
+    if (u != null && u.trim().isNotEmpty) {
+      if (u.trim() == _urlAntiga) {
+        await _storage.write(key: _chaveUrl, value: meuBancoUrlPadrao);
+        return meuBancoUrlPadrao;
+      }
+      return u.trim();
+    }
   } catch (e) {
     if (kDebugMode) debugPrint("Meu Banco: falha ao ler a URL do armazenamento seguro: $e");
   }
