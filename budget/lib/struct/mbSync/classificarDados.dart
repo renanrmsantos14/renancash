@@ -228,15 +228,20 @@ Future<MbSugestao?> mbEntenderExplicacao(MbLancamentoIa l, String explicacao) as
 
 /// Aplica a escolha do usuário: categoria, subcategoria, título e vínculo no lançamento (com data de edição, para a
 /// categoria subir como ajuste), lembra o padrão e tira da fila. Pix enviado do Worker grava também a decisão.
-Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha, {bool sincronizar = true}) async {
+///
+/// `aguardarRevisao`: espera a resposta da fila Para revisar terminar (em vez de soltá-la), para quem confirma vários
+/// em sequência não disparar respostas e sincronizações concorrentes.
+Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha,
+    {bool sincronizar = true, bool aguardarRevisao = false}) async {
   final vinculo = mbOpcoesClassificar.vinculo(escolha.vinculoPk);
   await (database.update(database.transactions)..where((t) => t.transactionPk.equals(l.pk)))
       .write(TransactionsCompanion(
     categoryFk: Value(escolha.categoriaPk),
     subCategoryFk: Value(escolha.subPk),
     name: escolha.titulo == null ? const Value.absent() : Value(escolha.titulo!),
-    objectiveLoanFk: vinculo?.tipo == 'emprestimo' ? Value(vinculo!.pk) : const Value.absent(),
-    objectiveFk: vinculo?.tipo == 'meta' ? Value(vinculo!.pk) : const Value.absent(),
+    // `Value(null)` apaga o vínculo antigo (trocar A→B ou "Sem vínculo"); `Value.absent()` o deixaria como estava.
+    objectiveLoanFk: Value(vinculo?.tipo == 'emprestimo' ? vinculo!.pk : null),
+    objectiveFk: Value(vinculo?.tipo == 'meta' ? vinculo!.pk : null),
     dateTimeModified: Value(DateTime.now()),
   ));
   mbPadroesClassificar = mbRegistrarPadrao(
@@ -250,7 +255,12 @@ Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha, {boo
   final revisao = l.revisao;
   if (revisao != null) {
     // Mesma resposta da fila Para revisar: decisão e memória do destinatário (já sincroniza).
-    unawaited(mbResponderRevisao(revisao, 'categoria', categoriaPk: escolha.categoriaPk));
+    final resposta = mbResponderRevisao(revisao, 'categoria', categoriaPk: escolha.categoriaPk);
+    if (aguardarRevisao) {
+      await resposta;
+    } else {
+      unawaited(resposta);
+    }
   } else if (sincronizar) {
     unawaited(sincronizarMeuBanco());
   }
@@ -259,7 +269,7 @@ Future<void> mbConfirmarClassificacao(MbLancamentoIa l, MbSugestao escolha, {boo
 /// "Aplicar a todos os iguais" e "Confirmar todos" (rendimentos): a mesma escolha em cada um, um sync só no fim.
 Future<void> mbConfirmarVarios(List<MbLancamentoIa> ls, MbSugestao escolha) async {
   for (final l in ls) {
-    await mbConfirmarClassificacao(l, escolha, sincronizar: false);
+    await mbConfirmarClassificacao(l, escolha, sincronizar: false, aguardarRevisao: true);
   }
   unawaited(sincronizarMeuBanco());
 }

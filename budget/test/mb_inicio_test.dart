@@ -37,10 +37,6 @@ ModeloInicio _montar({List<Map<String, dynamic>>? contas, Map<String, dynamic>? 
           ],
       faturas: faturas ?? {},
       sincronizadoEm: _agora.subtract(const Duration(minutes: 12)).toUtc().toIso8601String(),
-      ultimas: [
-        (nome: 'Padaria', categoria: 'Alimentação', data: DateTime(2026, 11, 9), valor: -12.0, receita: false),
-        (nome: 'Salário', categoria: 'Renda', data: DateTime(2026, 11, 8), valor: 100.0, receita: true),
-      ],
       nome: nome,
       agora: _agora,
     );
@@ -70,7 +66,6 @@ void main() {
         contas: contas,
         faturas: {},
         sincronizadoEm: null,
-        ultimas: [],
         nome: '',
         agora: _agora);
     expect(m.contas.map((c) => c.nome), ['BANCO INTER ·69-6', 'Nubank ·12-3', 'Santander ·24-1']);
@@ -88,7 +83,6 @@ void main() {
         ],
         faturas: {},
         sincronizadoEm: null,
-        ultimas: [],
         nome: '',
         agora: _agora,
         agruparPoupancas: false);
@@ -114,12 +108,11 @@ void main() {
     expect(c.pct, 50.0);
   });
 
-  test('ciclo, saudação, índice de hoje e últimas', () {
+  test('ciclo, saudação e índice de hoje', () {
     final m = _montar();
     expect(m.ciclo, 'Ciclo 26 out – 25 nov');
     expect(m.saudacao, 'Olá, Renan');
     expect(m.indiceHoje, 14);
-    expect(m.ultimas.map((u) => u.quando), ['hoje', 'ontem']);
     expect(_montar(nome: '  ').saudacao, 'Olá');
     expect(_montar().periodo, '26 out – 25 nov');
   });
@@ -153,7 +146,7 @@ void main() {
   ModeloInicio comCiclo(Map<String, dynamic> ciclo) => montarModeloInicio(
       ciclo: ciclo, contas: [
         {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Inter', 'balance': 1000.0}
-      ], faturas: {}, sincronizadoEm: null, ultimas: [], nome: 'Renan', agora: _agora);
+      ], faturas: {}, sincronizadoEm: null, nome: 'Renan', agora: _agora);
 
   testWidgets('Configurações › Início: sem ritmo diário e sem saldo nas contas', (t) async {
     await abrir(t, _montar());
@@ -214,7 +207,7 @@ void main() {
 
   testWidgets('sem banco conectado: convite para conectar em vez da Início vazia', (t) async {
     await abrir(t, montarModeloInicio(
-        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora));
+        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, nome: '', agora: _agora));
     expect(find.text('Conectar banco'), findsOneWidget);
     expect(find.textContaining('Ainda sem dados'), findsNothing);
     await t.pumpWidget(const SizedBox());
@@ -249,7 +242,7 @@ void main() {
     meuBancoPareado.value = true;
     addTearDown(() => meuBancoPareado.value = false);
     await abrir(t, montarModeloInicio(
-        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, ultimas: [], nome: '', agora: _agora));
+        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, nome: '', agora: _agora));
     expect(find.text('Ainda sem dados. Puxe a tela para atualizar.'), findsOneWidget);
     expect(find.textContaining('Disponível'), findsNothing);
     await t.pumpWidget(const SizedBox());
