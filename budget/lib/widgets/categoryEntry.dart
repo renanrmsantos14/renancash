@@ -178,7 +178,7 @@ class CategoryEntry extends StatelessWidget {
                               child: TextFont(
                                 text: category.name,
                                 fontSize: 17,
-                                maxLines: 1,
+                                maxLines: 2,
                               ),
                             ),
                             SizedBox(width: 10),

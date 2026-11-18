@@ -171,10 +171,21 @@ class _LateralEditorialState extends State<LateralEditorial> {
                           style: EdTexto.rotulo(context)),
                     ),
                   const SizedBox(height: 4),
-                  Text(
-                      textoVersao(
-                          packageInfoGlobal?.version ?? '?', mbCompilado),
-                      style: EdTexto.mono(context)),
+                  // Com página empilhada o VersaoCanto desenha a versão; aqui só reserva o espaço
+                  // (duas versões ficariam sobrepostas se a lateral continuasse visível).
+                  ValueListenableBuilder<bool>(
+                    valueListenable: mbRotaEmpilhada,
+                    builder: (context, empilhada, _) => Visibility(
+                      visible: !empilhada,
+                      maintainSize: true,
+                      maintainAnimation: true,
+                      maintainState: true,
+                      child: Text(
+                          textoVersao(
+                              packageInfoGlobal?.version ?? '?', mbCompilado),
+                          style: EdTexto.mono(context)),
+                    ),
+                  ),
                 ],
               ),
             ),

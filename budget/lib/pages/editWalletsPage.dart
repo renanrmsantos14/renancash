@@ -638,7 +638,7 @@ class PrimaryCurrencySetting extends StatelessWidget {
           ? Icons.card_membership_outlined
           : Icons.card_membership_rounded,
       afterWidget: Tappable(
-        color: Theme.of(context).colorScheme.secondaryContainer,
+        color: cores(context).chip,
         borderRadius: 10,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),

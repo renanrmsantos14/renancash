@@ -56,6 +56,7 @@ class TransactionEntryAmount extends StatelessWidget {
                             Provider.of<AllWallets>(context),
                             number,
                             finalNumber: count,
+                            allDecimals: true,
                           ),
                       fontSize: 15.5 - (showOtherCurrency ? 1 : 0),
                       fontWeight: FontWeight.w500,
@@ -90,6 +91,7 @@ class TransactionEntryAmount extends StatelessWidget {
                         .indexedByPk[transaction.walletFk]
                         ?.currency,
                     addCurrencyName: true,
+                    allDecimals: true,
                   ),
                   fontSize: 12,
                   textColor: getTransactionAmountColor(context, transaction),

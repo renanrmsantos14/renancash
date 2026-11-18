@@ -244,7 +244,7 @@ class CartaoOrcamento extends StatelessWidget {
               ),
               Expanded(
                 child: Text(nome,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: EdTexto.corpo(context)
                         .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),

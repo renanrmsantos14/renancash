@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 /// O sinal vem do valor animado; [alvo] só fixa as casas decimais.
 String _dinheiro(BuildContext c, double v, {double? alvo}) {
   final s = convertToMoney(Provider.of<AllWallets>(c, listen: false), v.abs(),
-      finalNumber: (alvo ?? v).abs());
+      finalNumber: (alvo ?? v).abs(), allDecimals: true);
   return v < 0 ? '−$s' : s;
 }
 

@@ -181,8 +181,8 @@ class _TransacoesDesktopState extends State<TransacoesDesktop> {
                     flex: 2,
                     child: Text(
                         // Espaço sem quebra: "R$" nunca fica separado do valor.
-                        'Gastos ${convertToMoney(carteiras, gastos).replaceAll(' ', '\u00A0')} · '
-                        'Receitas ${convertToMoney(carteiras, receitas).replaceAll(' ', '\u00A0')}',
+                        'Gastos ${convertToMoney(carteiras, gastos, allDecimals: true).replaceAll(' ', '\u00A0')} · '
+                        'Receitas ${convertToMoney(carteiras, receitas, allDecimals: true).replaceAll(' ', '\u00A0')}',
                         textAlign: TextAlign.end,
                         // Quebra em duas linhas em vez de cortar o total de receitas.
                         maxLines: 2,
@@ -285,7 +285,8 @@ class _LinhaState extends State<_Linha> {
     final carteiras = Provider.of<AllWallets>(context);
     // Valor na moeda da própria conta (os totais do mês usam a moeda principal).
     final valor = convertToMoney(carteiras, t.amount.abs(),
-        currencyKey: carteiras.indexedByPk[t.walletFk]?.currency);
+        currencyKey: carteiras.indexedByPk[t.walletFk]?.currency,
+        allDecimals: true);
     Widget celula(int i, String texto,
             {TextStyle? estilo, bool direita = false}) =>
         Expanded(
