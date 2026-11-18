@@ -12,10 +12,12 @@ import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
 import 'package:budget/struct/mbSync/casosComuns.dart' show MbAtalhoRapido;
+import 'package:budget/struct/mbSync/classificar.dart' show MbLancamentoIa;
+import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/meuBancoSync.dart'
-    show meuBancoPareado, meuBancoPareadoConferido;
+    show meuBancoPareado, meuBancoPareadoConferido, meuBancoUltimaSync;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/widgets/editorial/lateralEditorial.dart';
@@ -65,6 +67,57 @@ const _metasExemplo = [
   (nome: 'Reserva de emergência', total: 7649.50, alvo: 10000.0),
   (nome: 'Viagem 2027', total: 2400.00, alvo: 6000.0),
   (nome: 'Troca de notebook', total: 1500.00, alvo: 5000.0),
+];
+
+const _limitesExemplo = [
+  (nome: 'Alimentação', gasto: 912.30, limite: 1000.0),
+  (nome: 'Transporte', gasto: 388.10, limite: 600.0),
+  (nome: 'Lazer', gasto: 140.0, limite: 400.0),
+];
+
+final _patrimonioExemplo = (
+  patrimonio: mbPatrimonio(
+      correntes: 4338.0, poupancas: 500.0, investimentos: 18430.0, fatura: 1240.0),
+  faturas: mbFaturasAbertas(
+    contas: [
+      {
+        'id': 'd',
+        'type': 'CREDIT',
+        'name': 'Ultravioleta ·4412',
+        'balance': 1240.0,
+        'due_date': '2026-11-22',
+      },
+    ],
+    faturas: const {},
+    agora: _agora,
+  ),
+  carteiras: const <CarteiraInicio>[],
+  semDados: false,
+);
+
+/// Fila "Para classificar" de exemplo (3 itens, R$ 212,40) e sincronização "há 4 min".
+void _pendenciasExemplo() {
+  meuBancoClassificar.value = [
+    for (final (i, v) in [120.40, 62.0, 30.0].indexed)
+      MbLancamentoIa(
+          pk: 'p$i', descricao: 'Compra $i', valor: -v, data: DateTime(2026, 11, 11)),
+  ];
+  meuBancoUltimaSync.value = DateTime.now().subtract(const Duration(minutes: 4));
+}
+
+void _limparPendencias() {
+  meuBancoClassificar.value = const [];
+  meuBancoUltimaSync.value = null;
+}
+
+final _ultimasExemplo = [
+  _ultima('u1', 'Pão de Açúcar', 'Mercado', -182.30, DateTime.now()),
+  _ultima('u2', 'Almoço Betinhos', 'Alimentação', -20.98,
+      DateTime.now().subtract(const Duration(days: 1))),
+  _ultima('u3', 'Uber', 'Transporte', -27.90,
+      DateTime.now().subtract(const Duration(days: 1))),
+  _ultima('u4', 'Salário', 'Receita', 6500.0, DateTime(2026, 11, 5)),
+  _ultima('u5', 'Compra avulsa', 'Sem categoria', -49.90, DateTime(2026, 11, 4)),
 ];
 
 const _emprestimosExemplo = MbEmprestimos([
@@ -280,12 +333,17 @@ void main() {
   for (final modo in ['claro', 'escuro']) {
     final b = modo == 'claro' ? Brightness.light : Brightness.dark;
 
+    // Página inteira (rola no aparelho): viewport alto para o print mostrar todas as seções.
     testWidgets('print inicio editorial completo $modo', skip: _pular,
         (t) async {
       appStateSettings = _ajustes(modo);
       meuBancoEmprestimos.value = _emprestimosExemplo;
-      addTearDown(() => meuBancoEmprestimos.value = const MbEmprestimos());
-      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      _pendenciasExemplo();
+      addTearDown(() {
+        meuBancoEmprestimos.value = const MbEmprestimos();
+        _limparPendencias();
+      });
+      t.view.physicalSize = const Size(390 * 2, 2300 * 2);
       t.view.devicePixelRatio = 2;
       addTearDown(t.view.reset);
       await t.pumpWidget(MaterialApp(
@@ -296,6 +354,9 @@ void main() {
             _modeloCompleto(),
             atalhos: _atalhosExemplo,
             metas: _metasExemplo,
+            patrimonio: _patrimonioExemplo,
+            limites: _limitesExemplo,
+            transacoes: _ultimasExemplo,
           ),
         ),
       ));
@@ -304,6 +365,32 @@ void main() {
           find.byType(MaterialApp),
           matchesGoldenFile(
               '../../.verificacao/prints/inicio_editorial_completo_$modo.png'));
+    });
+
+    // Sem limite no Geral: o cartão pede "Definir limite do ciclo"; as demais seções seguem.
+    testWidgets('print inicio painel sem limite $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustes(modo);
+      _pendenciasExemplo();
+      addTearDown(_limparPendencias);
+      t.view.physicalSize = const Size(390 * 2, 1700 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: temaFlutter(temaAtivo(b)),
+        home: Scaffold(
+          body: InicioEditorial.comModelo(
+            _modeloSemLimite(),
+            patrimonio: _patrimonioExemplo,
+            transacoes: _ultimasExemplo,
+          ),
+        ),
+      ));
+      await t.pump(const Duration(seconds: 3));
+      await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+              '../../.verificacao/prints/inicio_painel_sem_limite_$modo.png'));
     });
 
     testWidgets('print inicio metas emprestimos e contas $modo', skip: _pular,
@@ -515,11 +602,13 @@ void main() {
       appStateSettings = _ajustes(modo);
       meuBancoPareado.value = true;
       meuBancoEmprestimos.value = _emprestimosExemplo;
+      _pendenciasExemplo();
       addTearDown(() {
         meuBancoPareado.value = false;
         meuBancoEmprestimos.value = const MbEmprestimos();
+        _limparPendencias();
       });
-      t.view.physicalSize = const Size(1440, 900);
+      t.view.physicalSize = const Size(1440, 1300);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       await t.pumpWidget(MaterialApp(
@@ -536,18 +625,10 @@ void main() {
           conteudo: PainelDesktop.comDados(
             _modeloCompleto(),
             metas: _metasExemplo,
-            transacoes: [
-              _ultima('u1', 'Pão de Açúcar', 'Mercado', -182.30,
-                  DateTime.now()),
-              _ultima('u2', 'Almoço Betinhos', 'Alimentação', -20.98,
-                  DateTime.now().subtract(const Duration(days: 1))),
-              _ultima('u3', 'Uber', 'Transporte', -27.90,
-                  DateTime.now().subtract(const Duration(days: 1))),
-              _ultima('u4', 'Salário', 'Receita', 6500.0,
-                  DateTime(2026, 11, 5)),
-              _ultima('u5', 'Compra avulsa', 'Sem categoria', -49.90,
-                  DateTime(2026, 11, 4)),
-            ],
+            atalhos: _atalhosExemplo,
+            patrimonio: _patrimonioExemplo,
+            limites: _limitesExemplo,
+            transacoes: _ultimasExemplo,
           ),
         ),
       ));
