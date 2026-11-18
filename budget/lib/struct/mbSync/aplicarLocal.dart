@@ -631,6 +631,23 @@ Future<Projetado?> _assinatura(Registro r, Map<String, dynamic> d, DateTime hoje
         periodLength: const Value(1),
         dateTimeModified: modificado,
       ));
+  // Com a linha, ocorrências já pagas ficam pagas (histórico), em vez de virar várias cobranças pendentes.
+  final linha = _linha(d, Transaction.fromJson, mbProjAssinatura);
+  if (linha != null) {
+    final carteiraExiste =
+        await database.getWalletInstanceOrNull(linha.walletFk) != null;
+    await (database.update(database.transactions)
+          ..where((x) => x.transactionPk.equals(a.pk)))
+        .write(linha.toCompanion(false).copyWith(
+              transactionPk: const Value.absent(),
+              categoryFk: categoria == linha.categoryFk ? null : const Value.absent(),
+              subCategoryFk: const Value.absent(),
+              walletFk: carteiraExiste ? null : const Value.absent(),
+              objectiveFk: const Value.absent(),
+              objectiveLoanFk: const Value.absent(),
+              dateTimeModified: modificado,
+            ));
+  }
   final t = await (database.select(database.transactions)
         ..where((x) => x.transactionPk.equals(a.pk)))
       .getSingle();

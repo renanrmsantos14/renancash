@@ -1529,6 +1529,47 @@ void main() {
       expect((await _txs()).single.walletFk, 'w1');
     });
 
+    test('assinatura com linha: ocorrência paga continua paga e título vazio continua vazio', () async {
+      await _categoria('c1', 'Streaming');
+      final pago = DateTime(2026, 8, 20, 9).millisecondsSinceEpoch;
+      cliente.servidor.add(Registro(
+          'assinaturas',
+          'cashew:s1',
+          {
+            'nome': 'Sem nome',
+            'valor': 20.9,
+            'dia': 20,
+            'categoria_id': 'cashew:c1',
+            'linha': {
+              'transactionPk': 's1',
+              'name': '',
+              'amount': -20.9,
+              'note': '',
+              'categoryFk': 'c1',
+              'walletFk': '0',
+              'dateCreated': pago,
+              'originalDateDue': pago,
+              'income': false,
+              'periodLength': 1,
+              'reoccurrence': 3,
+              'type': 1,
+              'paid': true,
+              'createdAnotherFutureTransaction': true,
+              'skipPaid': false,
+            }
+          },
+          _futuro(),
+          null));
+      await sync();
+      final t = (await _txs()).single;
+      expect(t.paid, true);
+      expect(t.name, '');
+      expect(t.dateCreated, DateTime.fromMillisecondsSinceEpoch(pago));
+      cliente.enviados.clear();
+      await sync();
+      expect(_semCatsMb(cliente.enviados), isEmpty);
+    });
+
     test('acima de 7500 bytes a linha não vai; abaixo vai sem as colunas de aparelho', () {
       final pequeno = mbComLinha({'nome': 'x'},
           {'name': 'x', 'dateTimeModified': 1, 'sharedKey': 'k', 'methodAdded': 1});
