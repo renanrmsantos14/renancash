@@ -638,7 +638,14 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         : (especial ? null : destinos[mbChaveDestino(receita, mbTraduzirCategoria(categoria))]) ??
             destinos[mbChaveDestino(receita, nomeCategoria)];
     final pendente = t["status"] == "PENDING";
-    final nome = descricao.trim().isEmpty ? "Sem descrição" : descricao.trim();
+    // Título e nota editados em outro aparelho (ajuste `nome`/`nota`) valem também para a transação que chega agora.
+    final ajusteNome = ctx.ajustes[id]?['nome'];
+    final ajusteNota = ctx.ajustes[id]?['nota'];
+    final nome = ajusteNome is String && ajusteNome.trim().isNotEmpty
+        ? ajusteNome.trim()
+        : descricao.trim().isEmpty
+            ? "Sem descrição"
+            : descricao.trim();
     // Reembolso e renda decididos na fila não são estorno automático (reembolso abate abaixo, renda é receita).
     final decidida = resposta == 'reembolso' || resposta == 'renda';
     final automatica = receita && !aValidar && ef.fonte != 'ajuste' && ef.fonte != 'regra' && !decidida;
@@ -649,7 +656,11 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
       nome: nome,
       valor: valor,
       receita: receita,
-      nota: pendente ? "Pendente" : "",
+      nota: pendente
+          ? "Pendente"
+          : ajusteNota is String
+              ? ajusteNota.trim()
+              : "",
       data: _parseData(t["date"] as String?),
       carteiraPk: mbPkConta(contaId),
       categoriaNome: destino?.nome ?? nomeCategoria,

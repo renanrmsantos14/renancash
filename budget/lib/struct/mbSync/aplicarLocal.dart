@@ -1,6 +1,7 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/configuracoes.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
@@ -10,14 +11,17 @@ import 'package:budget/struct/mbSync/registro.dart';
 import 'package:drift/drift.dart';
 
 const List<String> _ordemAplicar = [
+  'carteiras',
   'categorias',
   'regras',
   'orcamentos',
+  'limites',
   'metas',
   'dividas',
   'lancamentos',
   'assinaturas',
-  'ajustes'
+  'ajustes',
+  'configuracoes'
 ];
 
 DateTime _proximoDia(int dia, DateTime hoje) {
@@ -33,7 +37,7 @@ DateTime _proximoDia(int dia, DateTime hoje) {
 }
 
 // Leituras repetidas por registro, feitas uma vez por chamada de mbAplicarRegistros.
-// Só categorias mudam durante a aplicação (invalidadas em _categoria); carteiras não.
+// Categorias e carteiras mudam durante a aplicação (invalidadas em _categoria e _carteira).
 class _Cache {
   List<TransactionWallet>? _carteiras;
   final Map<bool, String?> _primeira = {};
@@ -51,6 +55,8 @@ class _Cache {
 
   Future<bool> categoriaExiste(String pk) async =>
       _categoriaExiste[pk] ??= await database.getCategoryInstanceOrNull(pk) != null;
+
+  void carteirasMudaram() => _carteiras = null;
 
   void categoriasMudaram() {
     _primeira.clear();
@@ -90,6 +96,10 @@ Future<void> mbAplicarRegistros(
         try {
           p = await _aplicar(r, d, espelho, hoje, cache);
           if (p != null) p = mbReescreverIds(p, semPrefixo);
+          if (r.tabela == 'carteiras' && p != null) {
+            novos.addAll(await _religarLancamentos(r, p, espelho));
+            cache.carteirasMudaram();
+          }
         } catch (e) {
           // Registro remoto inaplicável (dados fora do formato esperado): fica só no espelho.
           p = null;
@@ -109,23 +119,79 @@ Future<Projetado?> _aplicar(Registro r, Map<String, dynamic> d,
     Map<String, Espelho> espelho, DateTime hoje, _Cache cache) async {
   final modificado = Value<DateTime?>(DateTime.parse(r.updatedAt).toLocal());
   switch (r.tabela) {
+    case 'carteiras':
+      return _carteira(r, d, modificado);
     case 'categorias':
       return _categoria(r, d, modificado, cache);
     case 'regras':
       return _regra(r, d, espelho, modificado, cache);
     case 'orcamentos':
       return _orcamento(r, d, hoje, modificado);
+    case 'limites':
+      return _limite(r, d, modificado);
     case 'metas':
     case 'dividas':
       return _objetivo(r, d, modificado);
     case 'lancamentos':
       return _lancamento(r, d, modificado, cache);
+    case 'configuracoes':
+      return mbAplicarConfiguracao(r.id, d);
     case 'ajustes':
       return _ajuste(r, d, modificado);
     case 'assinaturas':
       return _assinatura(r, d, hoje, modificado, cache);
   }
   return null;
+}
+
+// Carteira criada em outro aparelho. Ordem local é preservada; carteira nova vai para o fim da lista.
+Future<Projetado?> _carteira(
+    Registro r, Map<String, dynamic> d, Value<DateTime?> modificado) async {
+  final pk = pkDoId(r.id);
+  final nome = (d['nome'] as String).trim();
+  if (!mbCarteiraSincroniza(pk) || nome.isEmpty) return null;
+  final existente = await database.getWalletInstanceOrNull(pk);
+  await database.into(database.wallets).insertOnConflictUpdate(
+      WalletsCompanion(
+        walletPk: Value(pk),
+        name: Value(nome),
+        colour: Value(d['cor'] as String? ?? existente?.colour),
+        iconName: Value(d['icone'] as String? ?? existente?.iconName),
+        order: Value(existente?.order ?? (await database.getAllWallets()).length),
+        currency: Value(d['moeda'] as String? ?? existente?.currency ?? 'brl'),
+        decimals: Value((d['decimais'] as num?)?.toInt() ?? existente?.decimals ?? 2),
+        dateTimeModified: modificado,
+      ));
+  return mbProjCarteira((await database.getWalletInstanceOrNull(pk))!);
+}
+
+// Lançamentos que chegaram antes da carteira caíram na '0'; quando ela chega, voltam para ela.
+// A data de modificação não muda, e o espelho passa a guardar o nome certo para não virar edição de volta.
+Future<List<Espelho>> _religarLancamentos(
+    Registro carteira, Projetado p, Map<String, Espelho> espelho) async {
+  final pk = pkDoId(carteira.id);
+  final nome = p.dados['nome'] as String;
+  final alvos = [
+    for (final e in espelho.values)
+      if (e.registro.tabela == 'lancamentos' &&
+          e.registro.deletedAt == null &&
+          e.registro.dados?['carteira'] == nome)
+        e
+  ];
+  final out = <Espelho>[];
+  for (final e in alvos) {
+    final txPk = pkDoId(e.registro.id);
+    final n = await (database.update(database.transactions)
+          ..where((t) =>
+              t.transactionPk.equals(txPk) &
+              t.walletFk.equals('0') &
+              t.transactionPk.like('mb:%').not()))
+        .write(TransactionsCompanion(walletFk: Value(pk)));
+    if (n > 0 && e.projecao != null) {
+      out.add(Espelho(e.registro, {...e.projecao!, 'carteira': nome}, e.pendente, e.motivo));
+    }
+  }
+  return out;
 }
 
 Future<Projetado?> _categoria(Registro r, Map<String, dynamic> d,
@@ -192,6 +258,13 @@ Future<Projetado?> _orcamento(Registro r, Map<String, dynamic> d, DateTime hoje,
         startDate: Value(existente?.startDate ?? DateTime(hoje.year, hoje.month, 1)),
         endDate: Value(existente?.endDate ??
             DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59)),
+        // Sem o campo (registro antigo ou do painel) o estado local fica como está.
+        archived: Value(d['arquivado'] == null
+            ? existente?.archived ?? false
+            : d['arquivado'] == 1),
+        isAbsoluteSpendingLimit: Value(d['limite_absoluto'] == null
+            ? existente?.isAbsoluteSpendingLimit ?? false
+            : d['limite_absoluto'] == 1),
         periodLength: Value(existente?.periodLength ?? 1),
         reoccurrence: Value(existente?.reoccurrence ?? BudgetReoccurence.monthly),
         colour: Value(existente?.colour),
@@ -203,8 +276,36 @@ Future<Projetado?> _orcamento(Registro r, Map<String, dynamic> d, DateTime hoje,
             [BudgetTransactionFilters.defaultBudgetTransactionFilters]),
         dateTimeModified: modificado,
       ));
-  return mbProjOrcamento((await (database.select(database.budgets)
-        ..where((b) => b.budgetPk.equals(o.pk)))
+  return mbProjOrcamento(
+      (await (database.select(database.budgets)
+            ..where((b) => b.budgetPk.equals(o.pk)))
+          .getSingle()),
+      servidor: d);
+}
+
+// Limite de categoria: precisa do orçamento e da categoria já aqui (senão fica só no espelho).
+Future<Projetado?> _limite(
+    Registro r, Map<String, dynamic> d, Value<DateTime?> modificado) async {
+  final pk = pkDoId(r.id);
+  final orcamento = pkDoId(d['orcamento_id'] as String);
+  final categoria = pkDoId(d['categoria_id'] as String);
+  if (await (database.select(database.budgets)
+            ..where((b) => b.budgetPk.equals(orcamento)))
+          .getSingleOrNull() ==
+          null ||
+      await database.getCategoryInstanceOrNull(categoria) == null) {
+    return null;
+  }
+  await database.into(database.categoryBudgetLimits).insertOnConflictUpdate(
+      CategoryBudgetLimitsCompanion(
+        categoryLimitPk: Value(pk),
+        categoryFk: Value(categoria),
+        budgetFk: Value(orcamento),
+        amount: Value((d['valor'] as num).toDouble()),
+        dateTimeModified: modificado,
+      ));
+  return mbProjLimite((await (database.select(database.categoryBudgetLimits)
+        ..where((l) => l.categoryLimitPk.equals(pk)))
       .getSingle()));
 }
 
@@ -269,6 +370,17 @@ Future<Projetado?> _lancamento(Registro r, Map<String, dynamic> d,
           .map((w) => w.walletPk)
           .firstOrNull ??
       '0';
+  // Agendada/recorrente carrega o estado completo (pago, repetição, vencimento). A ocorrência seguinte
+  // tem pk previsível (`updatePredictableKey`): os dois aparelhos geram o mesmo pk e o registro vence por LWW, sem duplicar.
+  final tipo = mbTipoAgendadoDeTexto(l.tipo);
+  final existente = await (database.select(database.transactions)
+        ..where((x) => x.transactionPk.equals(l.pk)))
+      .getSingleOrNull();
+  // Paga aqui e chegou não paga sem `despago` (edição concorrente de outro aparelho): continua paga e a
+  // projeção devolvida (pago 0) difere da local, então a versão paga é reenviada e o outro aparelho a recebe.
+  final eraAgendada = mbTipoAgendado(existente?.type) != null;
+  final manterPaga =
+      tipo != null && !l.pago && d['despago'] != 1 && eraAgendada && existente!.paid;
   await database.into(database.transactions).insertOnConflictUpdate(
       TransactionsCompanion(
         transactionPk: Value(l.pk),
@@ -278,9 +390,22 @@ Future<Projetado?> _lancamento(Registro r, Map<String, dynamic> d,
         categoryFk: Value(categoria),
         walletFk: Value(carteira),
         dateCreated: Value(l.data),
-        originalDateDue: Value(l.data),
+        originalDateDue: Value(tipo == null ? l.data : l.vencimento ?? l.data),
         income: Value(receita),
-        paid: const Value(true),
+        paid: Value(tipo == null ? true : l.pago || manterPaga),
+        // Deixou de ser agendada (virou lançamento comum em outro aparelho): zera o tipo.
+        type: tipo != null || eraAgendada ? Value(tipo) : const Value.absent(),
+        skipPaid: tipo == null ? const Value.absent() : Value(l.pulado),
+        createdAnotherFutureTransaction:
+            tipo == null
+                ? const Value.absent()
+                : Value(l.proximaCriada ||
+                    (manterPaga && existente.createdAnotherFutureTransaction == true)),
+        reoccurrence: tipo == null
+            ? const Value.absent()
+            : Value(mbRepeticaoDeTexto(l.repeticao)),
+        periodLength: tipo == null ? const Value.absent() : Value(l.periodo),
+        endDate: tipo == null ? const Value.absent() : Value(l.fim),
         objectiveFk: Value(l.metaPk),
         objectiveLoanFk: Value(l.dividaPk),
         dateTimeModified: modificado,
@@ -291,7 +416,10 @@ Future<Projetado?> _lancamento(Registro r, Map<String, dynamic> d,
       .getSingle();
   final nomeCarteira =
       carteiras.where((w) => w.walletPk == carteira).map((w) => w.name).firstOrNull ?? '';
-  return mbProjLancamento(t, nomeCarteira, orcamentos: l.orcamentoPks);
+  final p = mbProjLancamento(t, nomeCarteira,
+      orcamentos: l.orcamentoPks, servidor: d);
+  if (manterPaga) p.dados['pago'] = 0;
+  return p;
 }
 
 // Ajuste de uma transação `mb:` feito em outro aparelho: só a escolha de orçamentos é aplicada aqui
@@ -303,10 +431,25 @@ Future<Projetado?> _ajuste(
   final escolha = orcamentoPksDeDados(d);
   final txPk = 'mb:${r.id}';
   await mbGravarEscolhaDeOrcamento(txPk, escolha);
+  // Título e nota editados no outro aparelho; a transação passa a contar como editada (o pull do banco não os desfaz).
+  String? texto(String chave) {
+    final v = d[chave];
+    return v is String && v.trim().isNotEmpty ? v.trim() : null;
+  }
+
+  final nome = texto('nome'), nota = texto('nota');
   await (database.update(database.transactions)
         ..where((t) => t.transactionPk.equals(txPk)))
-      .write(TransactionsCompanion(dateTimeModified: modificado));
+      .write(TransactionsCompanion(
+          name: nome == null ? const Value.absent() : Value(nome),
+          note: nota == null ? const Value.absent() : Value(nota),
+          dateTimeModified: modificado));
   final dados = <String, dynamic>{};
+  final tx = await (database.select(database.transactions)
+        ..where((t) => t.transactionPk.equals(txPk)))
+      .getSingleOrNull();
+  // Mesma projeção que o aparelho gera sozinho (mbTextosEditados), senão o ajuste voltaria como edição.
+  if (tx != null) dados.addAll(mbTextosEditados(tx));
   final categoriaId = d['categoria_id'];
   if (categoriaId is String && categoriaId.isNotEmpty) {
     final c = await database.getCategoryInstanceOrNull(pkDoId(categoriaId));
@@ -361,6 +504,17 @@ Future<Projetado?> _assinatura(Registro r, Map<String, dynamic> d, DateTime hoje
 Future<void> _apagar(Registro r) async {
   final pk = pkDoId(r.id);
   switch (r.tabela) {
+    case 'carteiras':
+      // Carteira com transações fica (não destrói dados).
+      if (mbCarteiraSincroniza(pk) &&
+          (await (database.select(database.transactions)
+                    ..where((t) => t.walletFk.equals(pk))
+                    ..limit(1))
+                  .get())
+              .isEmpty) {
+        await (database.delete(database.wallets)..where((w) => w.walletPk.equals(pk)))
+            .go();
+      }
     case 'categorias':
       if ((await database.getAllTransactionsFromCategory(pk)).isEmpty) {
         await (database.delete(database.categories)
@@ -371,7 +525,14 @@ Future<void> _apagar(Registro r) async {
       await (database.delete(database.associatedTitles)
             ..where((a) => a.associatedTitlePk.equals(pk)))
           .go();
+    case 'limites':
+      await (database.delete(database.categoryBudgetLimits)
+            ..where((l) => l.categoryLimitPk.equals(pk)))
+          .go();
     case 'orcamentos':
+      await (database.delete(database.categoryBudgetLimits)
+            ..where((l) => l.budgetFk.equals(pk)))
+          .go();
       await database.customStatement(
           'DELETE FROM mb_orcamento_tx WHERE orcamento_pk = ?', [pk]);
       await (database.delete(database.budgets)..where((b) => b.budgetPk.equals(pk)))

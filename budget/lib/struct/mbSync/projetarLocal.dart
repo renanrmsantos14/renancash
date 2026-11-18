@@ -1,12 +1,44 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/configuracoes.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/registro.dart';
+import 'package:budget/struct/meuBancoMapping.dart' show mbPrefixo;
 
 String? mbEditadoEm(DateTime? d) => d == null || d.year < 2001 ? null : isoMs(d);
+
+// Carteira manual: sem prefixo `mb:` (inclui a de investimentos) e fora da padrão '0', que existe em todo aparelho.
+bool mbCarteiraSincroniza(String pk) => pk != '0' && !pk.startsWith(mbPrefixo);
+
+// Título e nota que o usuário editou numa transação `mb:` (editada = dateTimeModified depois de 2000); sem edição
+// o texto vem do banco e não viaja. Nota vazia não é enviada (o esquema não aceita texto vazio): apagar a nota não propaga.
+Map<String, dynamic> mbTextosEditados(Transaction t) =>
+    mbEditadoEm(t.dateTimeModified) == null
+        ? const {}
+        : {
+            if (t.name.trim().isNotEmpty) 'nome': _cortar200(t.name.trim()),
+            if (t.note.trim().isNotEmpty && t.note != 'Pendente')
+              'nota': _cortar200(t.note.trim()),
+          };
+String? _naoVazio(String? s) => s == null || s.isEmpty ? null : s;
+String _cortar200(String s) => s.length > 200 ? s.substring(0, 200) : s;
+
+Projetado mbProjCarteira(TransactionWallet w) => Projetado(
+    'carteiras',
+    idDoPk(w.walletPk),
+    {
+      'nome': _cortar200(w.name),
+      // o Worker rejeita texto vazio
+      'cor': _naoVazio(w.colour),
+      'icone': _naoVazio(w.iconName),
+      'ordem': w.order,
+      'moeda': _naoVazio(w.currency),
+      'decimais': w.decimals,
+    },
+    mbEditadoEm(w.dateTimeModified));
 
 Projetado mbProjCategoria(TransactionCategory c) => Projetado(
     'categorias',
@@ -21,15 +53,34 @@ Projetado mbProjCategoria(TransactionCategory c) => Projetado(
         ordem: c.order)),
     mbEditadoEm(c.dateTimeModified));
 
-Projetado mbProjOrcamento(Budget b) => Projetado(
-    'orcamentos',
-    idDoPk(b.budgetPk),
-    projetarOrcamento(OrcLocal(
-        pk: b.budgetPk,
-        nome: b.name,
-        valor: b.amount,
-        categoriaPks: b.categoryFks)),
-    mbEditadoEm(b.dateTimeModified));
+// `servidor`: dados do registro vigente no servidor. Um sinalizador falso só é enviado (como 0) se o servidor tem o 1.
+Projetado mbProjOrcamento(Budget b, {Map<String, dynamic>? servidor}) {
+  int? sinal(bool v, String chave) =>
+      v ? 1 : (servidor?[chave] != null ? 0 : null);
+  return Projetado(
+      'orcamentos',
+      idDoPk(b.budgetPk),
+      projetarOrcamento(OrcLocal(
+          pk: b.budgetPk,
+          nome: b.name,
+          valor: b.amount,
+          categoriaPks: b.categoryFks,
+          arquivado: sinal(b.archived, 'arquivado'),
+          limiteAbsoluto:
+              sinal(b.isAbsoluteSpendingLimit, 'limite_absoluto'))),
+      mbEditadoEm(b.dateTimeModified));
+}
+
+// Limite de uma categoria dentro de um orçamento. `valor` é percentual ou absoluto conforme `limite_absoluto` do orçamento.
+Projetado mbProjLimite(CategoryBudgetLimit l) => Projetado(
+    'limites',
+    idDoPk(l.categoryLimitPk),
+    {
+      'orcamento_id': idDoPk(l.budgetFk),
+      'categoria_id': idDoPk(l.categoryFk),
+      'valor': l.amount,
+    },
+    mbEditadoEm(l.dateTimeModified));
 
 Projetado mbProjObjetivo(Objective o, {List<String> aplicacoes = const []}) {
   final divida = o.type == ObjectiveType.loan;
@@ -47,24 +98,69 @@ Projetado mbProjObjetivo(Objective o, {List<String> aplicacoes = const []}) {
       mbEditadoEm(o.dateTimeModified));
 }
 
+const _repeticoes = {
+  BudgetReoccurence.daily: 'diaria',
+  BudgetReoccurence.weekly: 'semanal',
+  BudgetReoccurence.monthly: 'mensal',
+  BudgetReoccurence.yearly: 'anual',
+  BudgetReoccurence.custom: 'personalizada',
+};
+String? mbRepeticaoTexto(BudgetReoccurence? r) => _repeticoes[r];
+BudgetReoccurence? mbRepeticaoDeTexto(String? s) =>
+    _repeticoes.entries.where((e) => e.value == s).map((e) => e.key).firstOrNull;
+
+// Agendada (upcoming) e recorrente (repetitive) viajam como lançamento com `tipo`.
+String? mbTipoAgendado(TransactionSpecialType? t) => switch (t) {
+      TransactionSpecialType.upcoming => 'agendada',
+      TransactionSpecialType.repetitive => 'recorrente',
+      _ => null,
+    };
+TransactionSpecialType? mbTipoAgendadoDeTexto(String? s) => switch (s) {
+      'agendada' => TransactionSpecialType.upcoming,
+      'recorrente' => TransactionSpecialType.repetitive,
+      _ => null,
+    };
+
+// Ocorrência paga não é desfeita por versão não paga de outro aparelho (ver _lancamento). Despagar de propósito
+// (o servidor tem pago 1 e aqui está 0) vai com `despago: 1`, que acompanha o registro enquanto ela estiver não paga
+// (aparelho que ficou dias offline ainda vê o marcador); ao pagar de novo sai `pago: 1` sem ele.
 Projetado mbProjLancamento(Transaction t, String carteiraNome,
-        {Set<String>? orcamentos, bool limparOrcamentos = false}) =>
-    Projetado(
-    'lancamentos',
-    idDoPk(t.transactionPk),
-    projetarLancamento(LancLocal(
-        pk: t.transactionPk,
-        nome: t.name,
-        nota: t.note,
-        valor: t.amount,
-        categoriaPk: t.categoryFk,
-        carteiraNome: carteiraNome,
-        data: t.dateCreated,
-        metaPk: t.objectiveFk,
-        dividaPk: t.objectiveLoanFk,
-        orcamentoPks: orcamentos,
-        limparOrcamentos: limparOrcamentos)),
-    mbEditadoEm(t.dateTimeModified));
+    {Set<String>? orcamentos,
+    bool limparOrcamentos = false,
+    Map<String, dynamic>? servidor}) {
+  final tipo = mbTipoAgendado(t.type);
+  final p = Projetado(
+      'lancamentos',
+      idDoPk(t.transactionPk),
+      projetarLancamento(LancLocal(
+          pk: t.transactionPk,
+          nome: t.name,
+          nota: t.note,
+          valor: t.amount,
+          categoriaPk: t.categoryFk,
+          carteiraNome: carteiraNome,
+          data: t.dateCreated,
+          metaPk: t.objectiveFk,
+          dividaPk: t.objectiveLoanFk,
+          orcamentoPks: orcamentos,
+          limparOrcamentos: limparOrcamentos,
+          tipo: tipo,
+          pago: t.paid,
+          pulado: t.skipPaid,
+          proximaCriada: t.createdAnotherFutureTransaction == true,
+          repeticao: mbRepeticaoTexto(t.reoccurrence),
+          periodo: t.periodLength,
+          fim: t.endDate,
+          vencimento: t.originalDateDue)),
+      mbEditadoEm(t.dateTimeModified));
+  if (tipo == null) return p;
+  if (!t.paid && (servidor?['pago'] == 1 || servidor?['despago'] == 1)) {
+    p.dados['despago'] = 1;
+  } else if (t.paid && servidor?['despago'] != null) {
+    p.dados['despago'] = null;
+  }
+  return p;
+}
 
 Projetado mbProjAssinatura(Transaction t) => Projetado(
     'assinaturas',
@@ -108,7 +204,7 @@ Projetado mbReescreverIds(Projetado p, Set<String> semPrefixo) {
   final dados = {
     for (final e in p.dados.entries)
       e.key: switch (e.key) {
-        'pai_id' || 'categoria_id' || 'meta_id' || 'divida_id' =>
+        'pai_id' || 'categoria_id' || 'meta_id' || 'divida_id' || 'orcamento_id' =>
           ref(e.value) ?? e.value,
         'categoria_ids' || 'orcamento_ids' when e.value is List => [
             for (final v in e.value as List) ref(v) ?? v
@@ -124,12 +220,13 @@ bool mbEhLancamentoManual(Transaction t) =>
     !t.transactionPk.startsWith('mb:') &&
     (t.type == null ||
         t.type == TransactionSpecialType.credit ||
-        t.type == TransactionSpecialType.debt);
+        t.type == TransactionSpecialType.debt ||
+        mbTipoAgendado(t.type) != null);
 
 // Projeta o estado atual do Drift. `espelho` fornece o padrão já conhecido das regras;
 // `aplicado` (tx_pk -> categoria aplicada pelo sync) alimenta os ajustes de transações `mb:`.
 // `existentes` recebe as chaves que continuam no Drift mas ficam fora da projeção (orçamento
-// arquivado, transação de outro tipo): ausência nelas não pode virar tombstone.
+// transação de outro tipo): ausência nelas não pode virar tombstone.
 Future<Map<String, Projetado>> mbProjetarLocal(
     Map<String, Espelho> espelho, Map<String, String> aplicado,
     {required String agora, Set<String>? existentes}) async {
@@ -142,21 +239,35 @@ Future<Map<String, Projetado>> mbProjetarLocal(
     }
   }
 
-  final carteiras = {
-    for (final w in await database.select(database.wallets).get())
-      w.walletPk: w.name
-  };
+  final listaCarteiras = await database.select(database.wallets).get();
+  final carteiras = {for (final w in listaCarteiras) w.walletPk: w.name};
+  for (final w in listaCarteiras) {
+    if (mbCarteiraSincroniza(w.walletPk)) {
+      add(mbProjCarteira(w));
+    } else {
+      existentes?.add('carteiras/${mbIdLocal(w.walletPk, semPrefixo)}');
+    }
+  }
   final cats = await database.select(database.categories).get();
   final catPorPk = {for (final c in cats) c.categoryPk: c};
   cats.forEach((c) => add(mbProjCategoria(c)));
   for (final a in await database.select(database.associatedTitles).get()) {
     add(mbProjRegra(a, espelho['regras/${mbIdLocal(a.associatedTitlePk, semPrefixo)}']?.registro.dados));
   }
-  for (final b in await database.select(database.budgets).get()) {
-    if (b.archived) {
-      existentes?.add('orcamentos/${mbIdLocal(b.budgetPk, semPrefixo)}');
+  final orcamentos = await database.select(database.budgets).get();
+  for (final b in orcamentos) {
+    add(mbProjOrcamento(b,
+        servidor: espelho['orcamentos/${mbIdLocal(b.budgetPk, semPrefixo)}']
+            ?.registro
+            .dados));
+  }
+  // Limites por categoria: só os de orçamento que existe aqui (órfão fica fora, sem virar tombstone).
+  final orcamentosPks = {for (final b in orcamentos) b.budgetPk};
+  for (final l in await database.select(database.categoryBudgetLimits).get()) {
+    if (orcamentosPks.contains(l.budgetFk)) {
+      add(mbProjLimite(l));
     } else {
-      add(mbProjOrcamento(b));
+      existentes?.add('limites/${mbIdLocal(l.categoryLimitPk, semPrefixo)}');
     }
   }
   final aplicacoesPorMeta = await mbAplicacoesPorMeta();
@@ -180,6 +291,9 @@ Future<Map<String, Projetado>> mbProjetarLocal(
       add(mbProjAssinatura(t));
     } else if (mbEhLancamentoManual(t)) {
       add(mbProjLancamento(t, carteiras[t.walletFk] ?? '',
+          servidor: espelho['lancamentos/${mbIdLocal(t.transactionPk, semPrefixo)}']
+              ?.registro
+              .dados,
           orcamentos: escolhas[t.transactionPk],
           limparOrcamentos: escolhas[t.transactionPk] == null &&
               servidorTemEscolha('lancamentos', mbIdLocal(t.transactionPk, semPrefixo))));
@@ -200,10 +314,14 @@ Future<Map<String, Projetado>> mbProjetarLocal(
         categoriaPkAplicada: aplicado[pk],
         existeLocal: t != null,
         nomeCategoria: catPorPk[t?.categoryFk]?.name ?? '',
+        textos: t == null ? const {} : mbTextosEditados(t),
         orcamentoPks: escolhas[pk],
         limparOrcamentos: escolhas[pk] == null &&
             servidorTemEscolha('ajustes', pk.startsWith('mb:') ? pk.substring(3) : pk),
         editadoEm: t == null ? agora : mbEditadoEm(t.dateTimeModified)));
+  }
+  for (final c in await mbProjConfiguracoes(espelho, existentes ?? <String>{})) {
+    out[c.chave] = c;
   }
   return out;
 }

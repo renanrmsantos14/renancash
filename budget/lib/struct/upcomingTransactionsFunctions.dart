@@ -95,9 +95,13 @@ Future createNewSubscriptionTransaction(
         }
       }
 
+      // Outro aparelho (sync) já criou, e talvez até pagou, esta ocorrência: não sobrescreve.
+      final newPk = updatePredictableKey(transaction.transactionPk);
+      if (await database.tryGetTransactionFromPk(newPk) != null) return;
+
       Transaction newTransaction = transaction.copyWith(
         paid: false,
-        transactionPk: updatePredictableKey(transaction.transactionPk),
+        transactionPk: newPk,
         dateCreated: newDate,
         createdAnotherFutureTransaction: Value(false),
         pairedTransactionFk: closelyRelatedPairedTransactionFk != null
