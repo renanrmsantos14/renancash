@@ -332,6 +332,7 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     mbCicloCache = mbCicloDeJson(json['ciclo']);
     await mbGarantirOrcamentoGeral();
     await mbGarantirReserva();
+    await mbVincularAplicacoesNovas();
     // Resposta dada durante esta sincronização regrava a marca com outro valor e fica para a próxima.
     if (repuxar != null && await mbLerEstado(_chaveRepuxar) == repuxar) {
       await mbRemoverEstado(_chaveRepuxar);

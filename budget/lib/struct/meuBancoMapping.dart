@@ -338,6 +338,35 @@ bool mbContaIgnorada(Map c) =>
             (c["subtype"] == null || c["subtype"] == "CHECKING_ACCOUNT"))) &&
     _bancoIgnorado.hasMatch("${c["name"] ?? ""} ${c["bank"] ?? ""}");
 
+/// Poupança (Pluggy SAVINGS_ACCOUNT) própria, não ignorada: no app ela é uma aplicação da carteira
+/// Investimentos (saldo em "Investido", meta possível), não uma conta/carteira.
+bool mbEhPoupanca(Map c) =>
+    c["type"] == "BANK" && c["subtype"] == "SAVINGS_ACCOUNT" && !mbContaIgnorada(c);
+
+/// Contas sem as poupanças: o que "Nas contas", a lista de contas e as carteiras mostram.
+List<Map<String, dynamic>> mbSemPoupancas(Iterable<Map<String, dynamic>> contas) =>
+    [for (final c in contas) if (!mbEhPoupanca(c)) c];
+
+/// A poupança como aplicação: pk `mb:inv:cc-<id da conta>`, "Poupança Inter" (banco sem "Banco"/sufixo).
+MbInvestimento? mbPoupancaComoInvestimento(Map c) {
+  if (!mbEhPoupanca(c) || c["balance"] is! num || c["removida"] == 1 || c["removida"] == true) {
+    return null;
+  }
+  final banco = (c["bank"] ?? "").toString().trim();
+  final curto = banco
+      .replaceFirst(RegExp(r"^banco\s+", caseSensitive: false), "")
+      .replaceFirst(RegExp(r"\s*·\s*[\d-]+$"), "")
+      .trim();
+  final legivel = curto.isNotEmpty && curto == curto.toUpperCase()
+      ? curto[0] + curto.substring(1).toLowerCase()
+      : curto;
+  return MbInvestimento(
+      mbPkInvestimento("cc-${c["id"]}"),
+      legivel.isEmpty ? "Poupança" : "Poupança $legivel",
+      (c["balance"] as num).toDouble(),
+      banco.isEmpty ? null : banco);
+}
+
 const String mbCarteiraInvestimentos = mbPrefixo + "investimentos";
 
 class MbInvestimento {
@@ -474,7 +503,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
   final ignoradasPks = <String>{};
   for (final c in (json["contas"] as List? ?? const [])) {
     final id = c["id"].toString();
-    if (mbContaIgnorada(c)) {
+    // Poupança não é carteira: vira aplicação (abaixo) e a carteira antiga, se existir, é apagada.
+    if (mbContaIgnorada(c) || mbEhPoupanca(c)) {
       ignoradasPks.add(mbPkConta(id));
       continue;
     }
@@ -646,7 +676,10 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
                     mbPkInvestimento(i["id"].toString()),
                     (i["nome"] ?? "Investimento").toString().trim(),
                     (i["saldo"] as num).toDouble(),
-                    i["banco"]?.toString())
+                    i["banco"]?.toString()),
+            for (final c in (json["contas"] as List? ?? const []))
+              if (c is Map && mbPoupancaComoInvestimento(c) != null)
+                mbPoupancaComoInvestimento(c)!,
           ]
         : null,
   );

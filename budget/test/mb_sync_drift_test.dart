@@ -376,7 +376,9 @@ void main() {
       await sync();
       expect(await progresso('m1'), 1700.5);
       final porPk = {for (final t in await _txs()) t.transactionPk: t.objectiveFk};
-      expect(porPk['mb:inv:i3'], isNull);
+      // i3 não tinha meta: o vínculo inicial a leva para a Reserva de emergência (uma vez).
+      expect(porPk['mb:inv:i3'], 'mb:meta:reserva');
+      expect(porPk['mb:inv:i1'], 'm1');
       // Meta de poupança (income): o tile do RenanCash mostra o progresso positivo.
       expect((await (database.select(database.objectives)..where((o) => o.objectivePk.equals('m1'))).getSingle()).income, isTrue);
       expect(await mbLerAplicado(), isEmpty);

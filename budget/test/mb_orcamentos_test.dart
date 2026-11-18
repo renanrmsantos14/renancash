@@ -366,7 +366,7 @@ void main() {
       expect(mbPatrimonio(correntes: 100, investimentos: 0, fatura: -50).total, 50);
     });
 
-    test('carrega do que está no aparelho: correntes, poupança, investimentos, fatura e carteiras manuais', () async {
+    test('carrega do que está no aparelho: correntes, investimentos (com a poupança), fatura e carteiras manuais', () async {
       await mbCriarTabelas();
       await mbGravarEstado({
         'contas': jsonEncode([
@@ -378,6 +378,8 @@ void main() {
       });
       await _tx('i1', 400, carteira: mbCarteiraInvestimentos, categoria: '0');
       await _tx('i2', 100, carteira: mbCarteiraInvestimentos, categoria: '0');
+      // A poupança (conta 'b' acima) é a aplicação mb:inv:cc-b: entra em Investido, não em Nas contas.
+      await _tx('mb:inv:cc-b', 700, carteira: mbCarteiraInvestimentos, categoria: '0');
       await _tx('d1', 50, carteira: '0', categoria: 'c1');
       // Carteira do Meu Banco: a soma local (sem saldo inicial nem transferências) não é saldo e
       // não aparece como carteira; a conta já está em "Contas correntes" com o saldo real.
@@ -387,8 +389,8 @@ void main() {
       final r = await mbCarregarPatrimonioInicio(agora);
       expect(r.semDados, false);
       expect(r.patrimonio.correntes, 1000);
-      expect(r.patrimonio.poupancas, 700);
-      expect(r.patrimonio.investimentos, 500);
+      expect(r.patrimonio.poupancas, 0);
+      expect(r.patrimonio.investimentos, 1200);
       expect(r.patrimonio.fatura, 300);
       expect(r.patrimonio.total, 1900);
       expect(r.carteiras.map((c) => c.saldo), [50.0]);
