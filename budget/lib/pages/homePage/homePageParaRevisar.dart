@@ -7,6 +7,7 @@ import 'package:budget/struct/mbSync/reembolso.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/struct/meuBancoSync.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/functions.dart' show popRoute;
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -26,6 +27,15 @@ const _rotulos = {
   'devolucao': 'Devolução',
   'reembolso': 'Reembolso',
   'renda': 'Renda',
+};
+// Tipo de cada resposta, para a cor do ponto no botão (ajuda ao pai é gasto em Família).
+const _tipoDaResposta = {
+  'emprestimo': TipoMov.emprestimo,
+  'investimento': TipoMov.investimento,
+  'ajuda': TipoMov.gasto,
+  'devolucao': TipoMov.receita,
+  'reembolso': TipoMov.receita,
+  'renda': TipoMov.receita,
 };
 const int _itensNoCartao = 3;
 
@@ -252,6 +262,12 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     final detalhe = i.ehSalario
         ? 'Há ${i.dias} dias sem salário no Inter. Qual entrada é o salário?'
         : '${brl(i.valor.abs())}${data == null ? '' : ' · ${diaMes(data)}'}';
+    // Pix enviado é gasto; recebido é receita; o envio ao Santander ainda não tem tipo até responder.
+    final tipoItem = i.tipo == 'pix_enviado'
+        ? TipoMov.gasto
+        : i.tipo == 'envio_santander'
+            ? TipoMov.aClassificar
+            : TipoMov.receita;
     // Quem já mandou a parte de 2 contas ou mais: o gasto provável já vem no topo, com Confirmar.
     final recorrente = i.tipo == 'pix_recebido' &&
         i.txId != null &&
@@ -259,13 +275,19 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     return Opacity(
       opacity: _enviando ? 0.5 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(titulo,
-            style: EdTexto.corpo(context).copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: cores(context).tx)),
+        Row(children: [
+          IconeTipo(tipoItem),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(titulo,
+                style: EdTexto.corpo(context).copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: cores(context).tx)),
+          ),
+        ]),
         const SizedBox(height: 2),
-        Text(detalhe, style: EdTexto.rotulo(context)),
+        Text(detalhe, style: EdTexto.rotulo(context).copyWith(color: i.ehSalario ? null : tipoItem.cor(context))),
         const SizedBox(height: 14),
         if (recorrente && data != null) ...[
           ParteDeConta(
@@ -277,10 +299,11 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
         ],
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (i.tipo == 'pix_enviado')
-            _botao('Escolher categoria', _escolherCategoria),
+            _botao('Escolher categoria', _escolherCategoria, tipo: TipoMov.gasto),
           for (final r in i.respostas)
             _botao(_rotulos[r]!,
-                r == 'reembolso' ? _escolherReembolso : () => _responder(r)),
+                r == 'reembolso' ? _escolherReembolso : () => _responder(r),
+                tipo: _tipoDaResposta[r]),
           for (final c in i.candidatos)
             _botao(
                 '${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',
@@ -290,14 +313,15 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     );
   }
 
-  Widget _botao(String rotulo, VoidCallback onTap) =>
-      BotaoEscolha(rotulo: rotulo, onTap: _enviando ? null : onTap);
+  Widget _botao(String rotulo, VoidCallback onTap, {TipoMov? tipo}) =>
+      BotaoEscolha(rotulo: rotulo, tipo: tipo, onTap: _enviando ? null : onTap);
 }
 
 /// Resposta em chip da triagem (Para revisar e contas vencidas).
 class BotaoEscolha extends StatelessWidget {
-  const BotaoEscolha({super.key, required this.rotulo, this.onTap});
+  const BotaoEscolha({super.key, required this.rotulo, this.onTap, this.tipo});
   final String rotulo;
+  final TipoMov? tipo; // ponto na cor do tipo (gasto, receita, investimento, empréstimo)
   final VoidCallback? onTap; // null: enviando, sem toque
 
   @override
@@ -322,6 +346,13 @@ class BotaoEscolha extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (tipo != null) ...[
+                      Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: tipo!.cor(context))),
+                      const SizedBox(width: 8),
+                    ],
                     Flexible(
                       child: Text(rotulo,
                           style: EdTexto.corpo(context)

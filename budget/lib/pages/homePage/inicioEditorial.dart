@@ -18,6 +18,7 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
@@ -960,11 +961,13 @@ class UltimasInicio extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              IconeTipo(mbTipoDaTransacao(t.transaction, t.category.name), tamanho: 22),
+              const SizedBox(width: 8),
               Text(
                   '${t.transaction.income ? '+' : '−'}${brl(t.transaction.amount.abs())}',
                   style: EdTexto.corpo(context).copyWith(
                       fontWeight: FontWeight.w500,
-                      color: t.transaction.income ? e.pos : e.tx)),
+                      color: mbTipoDaTransacao(t.transaction, t.category.name).cor(context))),
             ]),
           ),
       ],

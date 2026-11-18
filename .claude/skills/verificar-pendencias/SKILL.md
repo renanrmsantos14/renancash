@@ -12,6 +12,11 @@ description: "Verifica a aba Pendências e a fila Para validar: toda transação
 - `widgets/editorial/itemClassificar.dart` (cartão) e `pages/pendenciasPage.dart` (fila: Para revisar → Para classificar → contas vencidas; `ordenarPulados`, posição real "N de T", estado inicial `_CarregandoPendencias`, vazio com aviso `_NadaNaFila` e largura máxima editorial de 680 px no desktop).
 - `pages/homePage/homePageParaRevisar.dart` (cartão `HomePageParaRevisar` no padrão Editorial com divisor entre itens e `ItemParaRevisar` exibindo o pagador em `Pix recebido de <Nome>`).
 
+## Código de cores por tipo (vale no app inteiro)
+- Definido em `budget/lib/struct/tipoMovimento.dart` (`TipoMov`, `mbTipoMov`, `mbTipoDaTransacao`, `IconeTipo`, `SeloTipo`) e nos tokens `tGasto/tReceita/tInvest/tEmpr/tTransf` de `EditorialCores` (claro e escuro, contraste AA testado em `test/tipo_movimento_test.dart`).
+- Gasto vermelho ↓ (−R$), Receita verde ↑ (+R$), Investimento azul ↗, Empréstimo âmbar ⇄, Transferência/fatura cinza ↻, A classificar neutro com borda.
+- Confira nos prints (claro e escuro): ícone e valor na cor do tipo em Transações, Últimas da Início, detalhe e Para validar; selo "GASTO · Categoria"; botões de alternativa com ponto na cor do tipo; Confirmar continua verde.
+
 ## Regras que precisam valer
 - Fila "Para validar": `mbMapearPull` põe na categoria "A classificar" toda transação do ciclo atual (data ≥ início do ciclo do Worker) até haver validação: só ajuste sincronizado (a Confirmar grava a categoria com `dateTimeModified` = agora) ou decisão em `revisoes` validam; regra, Pluggy, nome, mapa e memória do destinatário só sugerem. Antes de validar a transação conta no total do ciclo como "A classificar", fora das categorias, e o estorno/cashback automático fica desligado (estorno se liga por "Abater da compra"). Histórico de ciclos anteriores e sem ciclo no Worker não muda. Envio Inter→Santander não conta até responder; pagamento de fatura, transferência entre contas próprias e aplicações não entram.
 - Entram na fila: lançamentos `mb:` não pendentes e não revisados em categoria sem utilidade (A classificar…) ou "Pix enviado" do Worker. Não há regra automática nova.

@@ -6,6 +6,7 @@ import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/struct/mbSync/reembolso.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado, mbNomeDoPagador;
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -93,6 +94,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
     }
   }
 
+  TipoMov _tipoDaOpcao(MbCategoriaOpcao c) => mbTipoMov(valor: c.receita ? 1 : -1, categoria: c.nome);
+
   /// O que aconteceu com o pedido à IA para este lançamento (null: a sugestão da IA já está na tela).
   ({IconData icone, String texto})? _situacaoIa() {
     final fonte = meuBancoSugestoes.value[_l.pk]?.fonte;
@@ -120,6 +123,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
         final sub = cat?.subs.where((x) => x.pk == sugestao?.subPk).firstOrNull;
         final alternativas = mbAlternativas(_l, cat?.pk, mbUsoClassificar, op);
         final situacaoIa = _situacaoIa();
+        // O tipo (gasto, receita, investimento…) vem da categoria sugerida; sem sugestão, só pelo sinal do valor.
+        final tipo = cat == null || sugestao == null ? mbTipoMov(valor: _l.valor) : _tipoDaOpcao(cat);
         // Salário e rendimento já vêm com a categoria do mês passado: sem "Rachou uma conta?" na frente.
         final parteDeConta =
             _l.valor > 0 && !mbEhJurosPoupanca(_l) && sugestao?.fonte != MbFonteSugestao.mesPassado;
@@ -130,33 +135,29 @@ class _ItemClassificarState extends State<ItemClassificar> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(16)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(nomeSemEspacosRepetidos(_l.descricao),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+                Row(children: [
+                  IconeTipo(tipo, tamanho: 32),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(nomeSemEspacosRepetidos(_l.descricao),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+                  ),
+                ]),
                 const SizedBox(height: 2),
                 Text([if (_l.conta.isNotEmpty) _l.conta, diaMes(_l.data)].join(' · '),
                     style: EdTexto.rotulo(context)),
                 const SizedBox(height: 16),
                 Text(brl(_l.valor),
-                    style: EdTexto.numeroGrande(context)
-                        .copyWith(fontWeight: FontWeight.w700, color: _l.valor > 0 ? e.pos : e.tx)),
+                    style: EdTexto.numeroGrande(context).copyWith(fontWeight: FontWeight.w700, color: tipo.cor(context))),
                 const SizedBox(height: 16),
                 if (cat != null && sugestao != null) ...[
                   Text(_rotuloFonte[sugestao.fonte]!, style: EdTexto.rotulo(context)),
                   const SizedBox(height: 6),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                          color: e.pos.withOpacity(.16), borderRadius: BorderRadius.circular(999)),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        child: Text(sub == null ? cat.nome : '${cat.nome} › ${sub.nome}',
-                            style: EdTexto.corpo(context)
-                                .copyWith(fontSize: 16, fontWeight: FontWeight.w600, color: e.pos)),
-                      ),
-                    ),
+                    child: SeloTipo(tipo, categoria: sub == null ? cat.nome : '${cat.nome} › ${sub.nome}'),
                   ),
                   if (sugestao.pergunta != null) ...[
                     const SizedBox(height: 10),
@@ -187,6 +188,7 @@ class _ItemClassificarState extends State<ItemClassificar> {
               for (final c in alternativas)
                 BotaoEscolha(
                     rotulo: c.nome,
+                    tipo: _tipoDaOpcao(c),
                     onTap: _enviando ? null : () => _confirmar(MbSugestao(_l.pk, c.pk, confianca: 1))),
               BotaoEscolha(rotulo: 'Outras', onTap: _enviando ? null : _outras),
             ]),
@@ -355,7 +357,7 @@ class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(brl(total), style: EdTexto.numeroGrande(context).copyWith(fontSize: 32, color: e.pos)),
+            Text(brl(total), style: EdTexto.numeroGrande(context).copyWith(fontSize: 32, color: e.tReceita)),
             const SizedBox(height: 6),
             Text(['${itens.length} rendimentos de poupança', ...contas].join(' · '), style: EdTexto.rotulo(context)),
             const SizedBox(height: 2),
@@ -403,7 +405,10 @@ class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final c in mbAlternativas(itens.first, cat?.pk, mbUsoClassificar, op))
-                BotaoEscolha(rotulo: c.nome, onTap: _enviando ? null : () => setState(() => _categoriaPk = c.pk)),
+                BotaoEscolha(
+                    rotulo: c.nome,
+                    tipo: TipoMov.receita,
+                    onTap: _enviando ? null : () => setState(() => _categoriaPk = c.pk)),
             ]),
             if (_aviso != null) ...[
               const SizedBox(height: 8),

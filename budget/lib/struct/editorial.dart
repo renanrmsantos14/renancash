@@ -5,6 +5,8 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
   final Color bg, surf, tx, mu, line, acc, warn, warnbg, warntx, pos, chip;
   // Cartão de saldo: fundo e acento (variante escura), iguais nos dois modos.
   final Color card, accCartao;
+  // Cor por TIPO de movimento (gasto, receita, investimento, empréstimo, transferência), igual no app inteiro.
+  final Color tGasto, tReceita, tInvest, tEmpr, tTransf;
 
   const EditorialCores({
     required this.bg,
@@ -20,6 +22,11 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
     required this.chip,
     required this.card,
     required this.accCartao,
+    required this.tGasto,
+    required this.tReceita,
+    required this.tInvest,
+    required this.tEmpr,
+    required this.tTransf,
   });
 
   static const claro = EditorialCores(
@@ -35,7 +42,12 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
       pos: Color(0xFF2F7A4A),
       chip: Color(0xFFF2F2F1),
       card: Color(0xFF111111),
-      accCartao: Color(0xFF5CC783));
+      accCartao: Color(0xFF5CC783),
+      tGasto: Color(0xFFB42318),
+      tReceita: Color(0xFF1F7A4C),
+      tInvest: Color(0xFF1D5FC7),
+      tEmpr: Color(0xFF9A5B00),
+      tTransf: Color(0xFF6E6E73));
 
   static const escuro = EditorialCores(
       bg: Color(0xFF0B0B0C),
@@ -50,7 +62,12 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
       pos: Color(0xFF6FD394),
       chip: Color(0xFF1C1C1E),
       card: Color(0xFF1A1A1C),
-      accCartao: Color(0xFF5CC783));
+      accCartao: Color(0xFF5CC783),
+      tGasto: Color(0xFFF0726B),
+      tReceita: Color(0xFF6FD394),
+      tInvest: Color(0xFF7DAEFF),
+      tEmpr: Color(0xFFF2B24D),
+      tTransf: Color(0xFF8E8E93));
 
   @override
   EditorialCores copyWith({
@@ -67,6 +84,11 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
     Color? chip,
     Color? card,
     Color? accCartao,
+    Color? tGasto,
+    Color? tReceita,
+    Color? tInvest,
+    Color? tEmpr,
+    Color? tTransf,
   }) =>
       EditorialCores(
         bg: bg ?? this.bg,
@@ -82,6 +104,11 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
         chip: chip ?? this.chip,
         card: card ?? this.card,
         accCartao: accCartao ?? this.accCartao,
+        tGasto: tGasto ?? this.tGasto,
+        tReceita: tReceita ?? this.tReceita,
+        tInvest: tInvest ?? this.tInvest,
+        tEmpr: tEmpr ?? this.tEmpr,
+        tTransf: tTransf ?? this.tTransf,
       );
 
   @override
@@ -102,6 +129,11 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
       chip: l(chip, other.chip),
       card: l(card, other.card),
       accCartao: l(accCartao, other.accCartao),
+      tGasto: l(tGasto, other.tGasto),
+      tReceita: l(tReceita, other.tReceita),
+      tInvest: l(tInvest, other.tInvest),
+      tEmpr: l(tEmpr, other.tEmpr),
+      tTransf: l(tTransf, other.tTransf),
     );
   }
 }

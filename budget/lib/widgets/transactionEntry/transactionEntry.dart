@@ -442,6 +442,7 @@ class TransactionEntry extends StatelessWidget {
         transaction: transaction,
         showOtherCurrency: showOtherCurrency,
         unsetCustomCurrency: unsetCustomCurrency,
+        categoriaNome: category?.name,
       );
       Widget transactionActionLabelButton = TransactionEntryTypeButton(
         transaction: transaction,
