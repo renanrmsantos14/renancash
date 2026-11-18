@@ -172,6 +172,7 @@ bool _bancoQuebrado = false;
 
 /// Um banco que travou uma vez trava as próximas: falha logo, com o passo no log.
 Future<void> _prepararBanco({bool comDados = true}) async {
+  _diag('prepararBanco inicio');
   if (_bancoQuebrado) throw StateError('banco travou em teste anterior');
   try {
     await _montarBanco(comDados: comDados).timeout(const Duration(seconds: 25));
@@ -183,7 +184,9 @@ Future<void> _prepararBanco({bool comDados = true}) async {
 
 Future<void> _montarBanco({bool comDados = true}) async {
   if (_bancoAberto) {
+    _diag('fechando banco');
     await database.close();
+    _diag('banco fechado');
     _bancoAberto = false;
   }
   database = FinanceDatabase(NativeDatabase.memory());
@@ -344,6 +347,8 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
       matchesGoldenFile(
           '../../.verificacao/prints/transacoes_${nome}_$modo.png'));
   _diag('golden ok');
+  await t.pumpWidget(const SizedBox.shrink());
+  _diag('desmontado');
   await _fecharBanco(t);
 }
 
@@ -365,6 +370,7 @@ Future<DetalheModelo?> _detalheFalso(String pk) async => DetalheModelo(
     );
 
 void main() {
+  tearDown(() => _diag('tearDown'));
   setUpAll(() async {
     if (Platform.isLinux) {
       open.overrideFor(
