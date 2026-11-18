@@ -363,7 +363,14 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
   await t.pumpWidget(Container(key: UniqueKey()));
   _diag('b4 pumpWidget vazio');
   await t.pump(const Duration(seconds: 1));
-  _diag('b5 pump 1s');
+  _diag('b5 pump 1s micro=${t.binding.microtaskCount} frame=${t.binding.hasScheduledFrame}');
+  // ignore: invalid_use_of_protected_member
+  t.binding.asyncBarrier();
+  _diag('b6 barrier');
+  await t.pumpWidget(const Text('fim', textDirection: TextDirection.ltr));
+  _diag('b7 texto final');
+  await t.pump(const Duration(seconds: 10));
+  _diag('b8 pump 10s');
   if (_variante == 'A' && _bancoAberto) {
     await t.runAsync(() => database.close());
     _bancoAberto = false;
