@@ -10,7 +10,7 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 
 ## Preparar ambiente
 - `export PATH=$HOME/dev/flutter/bin:$PATH JAVA_HOME=$HOME/dev/jdk17 ANDROID_HOME=$HOME/Android/Sdk` e `cd budget`. No Windows local: Flutter em `/c/Users/mendo/development/flutter-3.24.5/bin`.
-- Servidor (repo `renanrmsantos14/meu-banco`, `apps/worker`): `node --test test/*.test.mjs`. Rotas de conexões: `GET /api/pluggy/items` e `DELETE /api/pluggy/items/:id` (Bearer ou cookie).
+- Servidor (`apps/worker` neste repositório; skill `verificar-worker`): `pnpm test` na raiz. Rotas de conexões: `GET /api/pluggy/items` e `DELETE /api/pluggy/items/:id` (Bearer ou cookie).
 - Sem rede nem token real: os testes usam cliente falso e Drift em memória.
 
 ## Roteiro

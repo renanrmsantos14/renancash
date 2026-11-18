@@ -1,0 +1,26 @@
+{
+  "name": "@meu-banco/worker",
+  "version": "0.0.87",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "mock": "node mock/api-mock.mjs",
+    "db:local": "wrangler d1 execute meu-banco --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute meu-banco --remote --file=schema.sql",
+    "dev": "wrangler dev --test-scheduled",
+    "importar:cashew": "node scripts/importar-cashew.mjs",
+    "push": "node scripts/conferir-app.mjs && node scripts/versao.mjs && wrangler deploy",
+    "prints": "node scripts/prints-app.mjs",
+    "migrar:fase2": "node scripts/migrar-fase2.mjs",
+    "logs": "wrangler tail"
+  },
+  "dependencies": {
+    "@meu-banco/core": "workspace:*",
+    "uqr": "0.1.2"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1",
+    "wrangler": "^4.40.0"
+  }
+}

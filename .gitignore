@@ -3,3 +3,15 @@
 
 # Provas de verificação
 .verificacao/
+
+# Worker (apps/worker) e pacotes pnpm
+node_modules/
+.wrangler/
+.dev.vars
+.env
+vapid-*.txt
+vapid-*.json
+.worktrees/
+apps/worker/public/app/
+apps/worker/.prints/
+.verificacao/

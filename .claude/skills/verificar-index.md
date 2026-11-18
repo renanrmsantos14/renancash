@@ -8,3 +8,5 @@
 - verificar-atualizador | budget/lib/struct/atualizador.dart, budget/test/atualizador_test.dart, .github/workflows/release-android.yml | busca da Release, SHA-256 do APK, timeout do download, recusa de Release sem hash e do .sha256 publicado pelo workflow
 
 Verificação roda no GitHub Actions ("Checks do PR": analyze, testes e prints `prints_*_test.dart` no artefato "prints"); não rode Flutter no PC local.
+- verificar-worker | apps/worker/src/**, apps/worker/mock/**, apps/worker/scripts/**, apps/worker/test/**, apps/worker/schema.sql, apps/worker/wrangler.toml, apps/worker/public/**, packages/core/** | Worker + D1 + mock do Pluggy: sync, ciclo, alertas, /api/notificacoes, tokens de aparelho, migração
+- verificar-app-web | apps/worker/public/app/**, apps/worker/scripts/prints-app.mjs, apps/worker/scripts/conferir-app.mjs | app web em /app/ (sessão, CSP_APP e prints Playwright)

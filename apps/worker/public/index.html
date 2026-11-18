@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="RenanCash">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>RenanCash · Painel</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --texto: #16181d; --suave: #626a77; --borda: #e3e6eb;
+    --verde: #0f8a4b; --vermelho: #c62f2f; --laranja: #ff7a00; --azul: #2563eb; --barra: #eceef2;
+    --aviso-bg: #fff4e5; --aviso-borda: #f5b45b; --erro-bg: #fdecec; --erro-borda: #e58a8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #181b21; --texto: #eceef2; --suave: #9aa3b2; --borda: #2a2f38;
+      --verde: #3ccf7f; --vermelho: #ff6b6b; --laranja: #ff9a3c; --azul: #6aa0ff; --barra: #262b33;
+      --aviso-bg: #2d2210; --aviso-borda: #8a5a14; --erro-bg: #2d1515; --erro-borda: #8a2f2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--texto);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 16px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 16px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  header .sub { color: var(--suave); font-size: 13px; flex: 1 1 200px; }
+  header .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+  select, input, button { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--borda);
+    border-radius: 10px; padding: 8px 12px; min-height: 40px; }
+  button { background: var(--laranja); border-color: var(--laranja); color: #fff; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.sec { background: var(--card); border-color: var(--borda); color: var(--texto); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--suave); font-weight: 500; }
+  :focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; min-width: 0; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .valor { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .linha { display: flex; justify-content: space-between; gap: 8px; color: var(--suave); font-size: 13px; margin-top: 6px; }
+  .linha b { color: var(--texto); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--verde); } .neg { color: var(--vermelho); }
+  .barra { height: 8px; background: var(--barra); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .barra > i { display: block; height: 100%; background: var(--laranja); border-radius: 99px; }
+  section { margin-top: 12px; }
+  .cat { display: grid; grid-template-columns: minmax(90px, 180px) 1fr auto; gap: 10px; align-items: center; margin: 8px 0; font-size: 14px; }
+  .cat .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat .barra { margin: 0; }
+  .cat .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .filtros { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .filtros input { flex: 1 1 200px; }
+  .tx { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+  .tx:last-child { border-bottom: 0; }
+  .tx .data { color: var(--suave); font-size: 13px; width: 44px; flex: none; font-variant-numeric: tabular-nums; }
+  .tx .meio { flex: 1; min-width: 0; }
+  .tx .desc { overflow-wrap: anywhere; }
+  .tx .info { color: var(--suave); font-size: 12px; margin-top: 2px; }
+  .tx .v { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--borda); margin-left: 4px; color: var(--suave); }
+  .tag.cartao { border-color: var(--laranja); color: var(--laranja); }
+  .tag.futura { border-color: var(--azul); color: var(--azul); }
+  .aviso { border: 1px solid var(--aviso-borda); background: var(--aviso-bg); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .aviso.erro { border-color: var(--erro-borda); background: var(--erro-bg); }
+  .aviso a { color: inherit; font-weight: 700; }
+  .tx[role=button], tr[role=button] { cursor: pointer; }
+  .tx[role=button]:hover, tr[role=button]:hover { background: var(--barra); }
+  .nota { color: var(--suave); font-size: 12px; margin: 8px 0 0; }
+  .dica { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .dica button { min-height: 32px; padding: 2px 10px; }
+  svg.grafico { display: block; width: 100%; height: auto; }
+  .g-txt { fill: var(--suave); font-size: 11px; }
+  .g-val { fill: var(--texto); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .g-eixo { stroke: var(--borda); stroke-width: 1; }
+  .g-barra { fill: var(--laranja); opacity: .5; }
+  .g-barra.sel { opacity: 1; }
+  .g-linha { fill: none; stroke: var(--azul); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+  .g-ponto { fill: var(--card); stroke: var(--azul); stroke-width: 2; }
+  #fundo, #fundoConfirma { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .5); display: flex; justify-content: flex-end; }
+  #fundoConfirma { z-index: 20; justify-content: center; align-items: center; padding: 16px; }
+  #sheet { background: var(--card); width: min(440px, 100%); height: 100%; overflow-y: auto; padding: 16px; border-left: 1px solid var(--borda); outline: 0; overscroll-behavior: contain; }
+  #sheet > header { margin-bottom: 8px; flex-wrap: nowrap; justify-content: space-between; }
+  #sheet > header h2 { margin: 0; font-size: 17px; }
+  .caixa { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; max-width: 340px; width: 100%; }
+  .caixa p { margin: 0 0 12px; font-weight: 600; }
+  .qr { background: #fff; padding: 8px; border-radius: 8px; width: 216px; margin: 0 auto 12px; }
+  .qr svg { display: block; width: 200px; height: 200px; }
+  .botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  dl.det { display: grid; grid-template-columns: 96px 1fr; gap: 6px 10px; margin: 0 0 12px; font-size: 14px; }
+  dl.det dt { color: var(--suave); } dl.det dd { margin: 0; overflow-wrap: anywhere; }
+  .campo { display: block; margin-top: 12px; font-size: 13px; color: var(--suave); font-weight: 600; }
+  .campo select { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--texto); }
+  #ciclo { margin-bottom: 12px; }
+  #ciclo .barra { height: 10px; margin: 10px 0 8px; }
+  #ciclo .barra span { display: block; height: 100%; border-radius: inherit; background: var(--verde); transform-origin: left; transform: scaleX(var(--p, 0));
+    transition: transform .6s cubic-bezier(.23, 1, .32, 1), background-color .2s ease-out; }
+  #ciclo .barra.alerta span { background: var(--laranja); }
+  #ciclo .barra.estourado span { background: var(--vermelho); }
+  #ciclo .sub { color: var(--suave); font-size: 13px; }
+  #ciclo b { font-variant-numeric: tabular-nums; }
+  #ciclo p { margin: 6px 0; }
+  .ciclo-topo { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ciclo-topo h2 { margin: 0; }
+  .ciclo-topo .ghost { margin-left: auto; min-height: 44px; }
+  .alertas { padding-left: 18px; margin: 6px 0; }
+  .alertas li + li { margin-top: 6px; }
+  .apps { list-style: none; margin: 12px 0 0; padding: 0; }
+  .apps li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--borda); }
+  .apps .info { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+  .apps .info .sub { display: block; color: var(--suave); font-size: 12px; }
+  .apps button { min-height: 44px; }
+  .apps li.revogado .info { opacity: .6; }
+  .novo-token[hidden] { display: none; }
+  .novo-token { border: 1px solid var(--laranja); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .novo-token input { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; margin: 8px 0; }
+  .campo input { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--texto); }
+  button { transition: transform .16s cubic-bezier(.23, 1, .32, 1); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  @media (prefers-reduced-motion: reduce) { #ciclo .barra span, button { transition: none; } }
+  .marca { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; }
+  .marca input { width: 20px; height: 20px; min-height: 0; }
+  @media (max-width: 640px) {
+    #fundo { align-items: flex-end; }
+    #sheet { width: 100%; height: auto; max-height: 88vh; max-height: 88dvh; border-left: 0; border-top: 1px solid var(--borda); border-radius: 16px 16px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  }
+  .vazio { color: var(--suave); font-size: 14px; padding: 8px 0; }
+  .duas { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  #versao { position: fixed; right: 8px; bottom: 6px; font-size: 11px; color: var(--suave); opacity: .7; pointer-events: none; user-select: none; }
+  @media (max-width: 420px) { .valor { font-size: 22px; } .cat { grid-template-columns: 100px 1fr auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>RenanCash</h1>
+    <div class="sub" id="atualizado">Carregando…</div>
+    <div class="acoes">
+      <select id="mes" aria-label="Mês"></select>
+      <button id="atualizar" type="button">Atualizar</button>
+      <button id="instalar" class="sec" type="button" hidden>Instalar</button>
+      <button id="sair" class="ghost" type="button">Sair</button>
+    </div>
+  </header>
+  <div id="offline" class="aviso" role="status" hidden></div>
+  <div id="dicaIos" class="aviso dica" hidden>
+    <span>Para instalar no iPhone: Compartilhar → Adicionar à Tela de Início.</span>
+    <button id="fecharDica" class="ghost" type="button" aria-label="Fechar dica">×</button>
+  </div>
+  <div id="avisos"></div>
+  <section class="card" id="ciclo" aria-live="polite"></section>
+  <div class="grid" id="cards"></div>
+  <div class="duas">
+    <section class="card"><h2>Gastos por mês</h2><div id="varGastos"></div><div id="graficoGastos"></div></section>
+    <section class="card"><h2>Saldo da conta corrente</h2><div id="graficoSaldo"></div>
+      <p class="nota">Reconstruído de trás para frente: saldo atual menos as transações de cada mês. Não é o saldo real gravado pelo banco.</p></section>
+  </div>
+  <div class="duas">
+    <section class="card"><h2>Gastos por categoria</h2><div id="categorias"></div></section>
+    <section class="card"><h2>Faturas do cartão</h2><div id="faturas"></div></section>
+  </div>
+  <section class="card">
+    <h2>Transações do mês</h2>
+    <div class="filtros">
+      <input id="busca" type="search" placeholder="Buscar descrição, categoria…" aria-label="Buscar">
+      <select id="filtroConta" aria-label="Conta"><option value="">Todas as contas</option></select>
+    </div>
+    <div id="transacoes"></div>
+  </section>
+</div>
+<div id="fundo" hidden>
+  <aside id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitulo" tabindex="-1">
+    <header><h2 id="sheetTitulo"></h2><button id="sheetX" class="ghost" type="button" aria-label="Fechar">×</button></header>
+    <div id="sheetCorpo"></div>
+  </aside>
+</div>
+<div id="fundoConfirma" hidden>
+  <div class="caixa" role="alertdialog" aria-modal="true" aria-labelledby="confirmaTitulo">
+    <p id="confirmaTitulo">Descartar alterações?</p>
+    <div class="botoes"><button id="continuar" type="button">Continuar editando</button><button id="descartar" class="sec" type="button">Descartar</button></div>
+  </div>
+</div>
+<span id="versao">v0.0.87 · 18/11/2026 18:24</span>
+
+<script type="module">
+import { CATEGORIAS, categoriaEfetiva, traduzir, regraAuto, naoEhGasto, valorGasto as gastoDe } from "/regras.js";
+const $ = (id) => document.getElementById(id);
+const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const moeda = (v) => (v == null || isNaN(v) ? "—" : brl.format(v));
+const dataBR = (s) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "—");
+const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+const fmtMes = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+const dataHora = (iso) => (iso ? fmtDataHora.format(new Date(iso)) : "nunca");
+const nomeMes = (m) => { const [a, n] = m.split("-").map(Number); return fmtMes.format(Date.UTC(a, n - 1, 15)); };
+
+// Monta elementos com textContent (nunca innerHTML com dados do banco).
+function h(tag, attrs, ...filhos) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v; else if (k === "style") el.style.cssText = v; else el.setAttribute(k, v);
+  }
+  for (const f of filhos.flat()) if (f != null && f !== false) el.append(f instanceof Node ? f : String(f));
+  return el;
+}
+
+const aplicarAjuste = (t) => { t.cat_orig = t.category; t.category = categoriaEfetiva(t); return t; };
+
+const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
+const STATUS_TX = { POSTED: "Lançada", PENDING: "Pendente" };
+const CORTE_FATURA = 7; // a API não traz o fechamento nem liga a compra à fatura: estima-se o fechamento 7 dias antes do vencimento
+
+let D = null; // /api/dados
+let C = null; // /api/ciclo
+let H = null; // /api/historico
+let porId = {};
+const ehCartao = (t) => porId[t.account_id]?.type === "CREDIT";
+const valorGasto = (t) => gastoDe(t, ehCartao(t));
+
+function somarDias(iso, n) {
+  const d = new Date(iso + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Sessão expirada em qualquer rota /api leva ao login.
+async function fetchApi(url, opts) {
+  const r = await fetch(url, { cache: "no-store", ...opts });
+  if (r.status === 401) { location.replace("/login"); throw new Error("Sessão expirada"); }
+  return r;
+}
+async function api(url, opts) {
+  const r = await fetchApi(url, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || "HTTP " + r.status);
+  j._cacheEm = r.headers.get("x-cache-em"); // preenchido pelo service worker quando serve do cache (offline)
+  return j;
+}
+
+async function carregar(mes, comHistorico = true) {
+  const [dados, hist, ciclo] = await Promise.all([
+    api("/api/dados" + (mes ? "?mes=" + encodeURIComponent(mes) : "")),
+    comHistorico ? api("/api/historico").catch(() => null) : H,
+    comHistorico ? api("/api/ciclo").catch(() => null) : C, // trocar de mês não muda o ciclo
+  ]);
+  D = dados;
+  C = ciclo;
+  D.transacoes.forEach(aplicarAjuste);
+  if (comHistorico) hist?.transacoes.forEach(aplicarAjuste); // H reaproveitado já tem o ajuste aplicado
+  H = hist;
+  porId = Object.fromEntries(D.contas.map((c) => [c.id, c]));
+  const emCache = D._cacheEm;
+  $("offline").hidden = !emCache;
+  if (emCache) $("offline").textContent = "Offline: dados de " + fmtCurto.format(new Date(emCache)).replace(",", "");
+  render();
+}
+const fmtCurto = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function render() {
+  // Cabeçalho
+  $("atualizado").textContent = "Atualizado em " + dataHora(D.ultimaAtualizacao);
+  const meses = new Set(D.meses); meses.add(D.mes);
+  $("mes").replaceChildren(...[...meses].sort().reverse().map((m) => h("option", { value: m, selected: m === D.mes }, nomeMes(m))));
+
+  // Avisos
+  const avisos = [];
+  for (const a of D.snapshots.avisos || []) {
+    avisos.push(h("div", { class: "aviso" }, h("b", {}, a.banco + ": "), a.mensagem + " ",
+      a.reconnect_url ? h("a", { href: a.reconnect_url, target: "_blank", rel: "noopener noreferrer" }, "Reconectar o banco") : null));
+  }
+  const ex = D.ultimaExecucao;
+  if (ex && ex.ok === 0) avisos.push(h("div", { class: "aviso erro" }, h("b", {}, "A última atualização falhou (" + dataHora(ex.started_at) + "): "), ex.message));
+  else if (ex && ex.ok === 1 && ex.message && ex.message !== "OK") avisos.push(h("div", { class: "aviso" }, h("b", {}, "Atualização com avisos: "), ex.message));
+  $("avisos").replaceChildren(...avisos);
+
+  // Cards
+  const bancos = D.contas.filter((c) => c.type !== "CREDIT");
+  const cartoes = D.contas.filter((c) => c.type === "CREDIT");
+  const txConta = D.transacoes.filter((t) => !ehCartao(t) && !t.scheduled);
+  const entradas = txConta.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const saidas = txConta.filter((t) => t.amount < 0).reduce((s, t) => s - t.amount, 0);
+
+  const cards = [];
+  cards.push(h("div", { class: "card" }, h("h2", {}, "Conta corrente"),
+    h("div", { class: "valor" }, moeda(bancos.reduce((s, c) => s + (c.balance || 0), 0))),
+    bancos.map((c) => h("div", { class: "linha" }, c.name || "Conta", h("b", {}, moeda(c.balance))))));
+
+  for (const c of cartoes) {
+    const f = D.snapshots["faturas:" + c.id] || {};
+    const aberta = f.open_bill || {};
+    const valorAberta = aberta.total_amount != null ? Number(aberta.total_amount) : c.balance;
+    const usado = c.credit_limit != null && c.available_limit != null ? c.credit_limit - c.available_limit : null;
+    const pct = c.credit_limit ? Math.min(100, Math.max(0, (usado / c.credit_limit) * 100)) : 0;
+    cards.push(h("div", { class: "card" }, h("h2", {}, c.name || "Cartão"),
+      h("div", { class: "valor" }, moeda(valorAberta)),
+      h("div", { class: "linha" }, "Fatura aberta · vence", h("b", {}, dataBR(aberta.due_date || c.due_date))),
+      h("div", { class: "barra", role: "progressbar", "aria-valuenow": Math.round(pct), "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": "Limite usado" }, h("i", { style: "width:" + pct.toFixed(1) + "%" })),
+      h("div", { class: "linha" }, "Disponível", h("b", {}, moeda(c.available_limit) + " de " + moeda(c.credit_limit)))));
+  }
+
+  cards.push(h("div", { class: "card" }, h("h2", {}, "Conta no mês"),
+    h("div", { class: "linha" }, "Entradas", h("b", { class: "pos" }, moeda(entradas))),
+    h("div", { class: "linha" }, "Saídas", h("b", { class: "neg" }, moeda(saidas))),
+    h("div", { class: "linha" }, "Resultado", h("b", { class: entradas - saidas >= 0 ? "pos" : "neg" }, moeda(entradas - saidas)))));
+  $("cards").replaceChildren(...cards);
+
+  renderGraficos();
+  renderCiclo();
+
+  // Gastos por categoria
+  const porCat = {};
+  for (const t of D.transacoes) {
+    const v = valorGasto(t);
+    if (!v) continue;
+    const k = traduzir(t.category);
+    porCat[k] = (porCat[k] || 0) + v;
+  }
+  const lista = Object.entries(porCat).filter(([, v]) => v > 0.004).sort((a, b) => b[1] - a[1]);
+  const maior = lista[0]?.[1] || 1;
+  const total = lista.reduce((s, [, v]) => s + v, 0);
+  $("categorias").replaceChildren(...(lista.length ? [
+    h("div", { class: "linha", style: "margin:0 0 8px" }, "Total do mês", h("b", {}, moeda(total))),
+    ...lista.map(([k, v]) => h("div", { class: "cat" }, h("span", { class: "nome", title: k }, k),
+      h("div", { class: "barra" }, h("i", { style: "width:" + ((v / maior) * 100).toFixed(1) + "%" })),
+      h("span", { class: "v" }, moeda(v)))),
+  ] : [h("div", { class: "vazio" }, "Nenhum gasto neste mês.")]));
+
+  // Faturas (toque abre as compras)
+  const blocos = [];
+  for (const c of cartoes) {
+    const f = D.snapshots["faturas:" + c.id];
+    if (!f) { blocos.push(h("div", { class: "vazio" }, c.name + ": faturas ainda não carregadas.")); continue; }
+    const { aberta, fechadas } = janelasFatura(f);
+    const linhas = [...(aberta ? [aberta] : []), ...fechadas.slice().reverse().slice(0, 8)];
+    if (cartoes.length > 1) blocos.push(h("div", { class: "linha", style: "margin-top:12px" }, h("b", {}, c.name)));
+    blocos.push(h("div", { class: "linha", style: "margin:0 0 8px" }, "Saldo devedor total", h("b", { class: "neg" }, moeda(Number(f.total_pending_debt)))));
+    blocos.push(h("table", {},
+      h("thead", {}, h("tr", {}, h("th", {}, "Vencimento"), h("th", {}, "Situação"), h("th", { class: "num" }, "Valor"))),
+      h("tbody", {}, linhas.length ? linhas.map((j) => {
+        const tr = h("tr", { role: "button", tabindex: 0, "data-foco": "fat:" + c.id + j.venc, title: "Ver as compras desta fatura" },
+          h("td", {}, dataBR(j.venc)),
+          h("td", { class: /PAST_DUE/.test(j.situacao) ? "neg" : "" }, SITUACAO[j.situacao] || j.situacao || "—"),
+          h("td", { class: "num" }, moeda(j.total)));
+        ativar(tr, () => abrirFatura(c, j, tr));
+        return tr;
+      }) : h("tr", {}, h("td", { colspan: 3, class: "vazio" }, "Sem faturas.")))));
+  }
+  $("faturas").replaceChildren(...(blocos.length ? blocos : [h("div", { class: "vazio" }, "Nenhum cartão encontrado.")]));
+
+  // Filtro de contas
+  const sel = $("filtroConta"), atual = sel.value;
+  sel.replaceChildren(h("option", { value: "" }, "Todas as contas"), ...D.contas.map((c) => h("option", { value: c.id, selected: c.id === atual }, c.name || c.id)));
+  renderTransacoes();
+}
+
+// ---------- Gráficos (SVG inline, cores pelos tokens CSS) ----------
+
+const NS = "http://www.w3.org/2000/svg";
+function sv(tag, attrs, ...filhos) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  for (const f of filhos) if (f != null) el.append(f instanceof Node ? f : String(f));
+  return el;
+}
+const fmtMesCurto = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
+const mesCurto = (m) => { const [a, n] = m.split("-").map(Number); return fmtMesCurto.format(Date.UTC(a, n - 1, 15)).replace(".", ""); };
+const compacto = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+const ultimosMeses = (atual, n = 6) => {
+  const [a, m] = atual.split("-").map(Number);
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(a, m - n + i, 1)).toISOString().slice(0, 7));
+};
+
+function renderGraficos() {
+  if (!H) {
+    for (const id of ["graficoGastos", "graficoSaldo"]) $(id).replaceChildren(h("div", { class: "vazio" }, "Histórico indisponível agora."));
+    $("varGastos").replaceChildren();
+    return;
+  }
+  const meses = ultimosMeses(H.mesAtual);
+  const gasto = Object.fromEntries(meses.map((m) => [m, 0]));
+  const fluxo = { ...gasto }; // movimento líquido da conta corrente
+  for (const t of H.transacoes) {
+    const m = t.date.slice(0, 7);
+    if (!(m in gasto)) continue;
+    gasto[m] += valorGasto(t);
+    if (!ehCartao(t)) fluxo[m] += t.amount;
+  }
+  const saldos = [];
+  let s = D.contas.filter((c) => c.type !== "CREDIT").reduce((x, c) => x + (c.balance || 0), 0);
+  for (let i = meses.length - 1; i >= 0; i--) { saldos[i] = s; s -= fluxo[meses[i]]; }
+
+  const i = meses.indexOf(D.mes);
+  const v = gasto[D.mes], ant = gasto[meses[i - 1]];
+  let variacao = "Mês fora dos últimos 6 meses.";
+  if (i > 0 && ant > 0) {
+    const pct = ((v - ant) / ant) * 100;
+    variacao = h("span", { class: pct > 0 ? "neg" : "pos" }, (pct > 0 ? "▲ " : "▼ ") + Math.abs(pct).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "% ", h("span", { style: "color:var(--suave)" }, "vs " + nomeMes(meses[i - 1])));
+  } else if (i === 0) variacao = "Sem mês anterior no histórico.";
+  else if (i > 0) variacao = "Sem gastos no mês anterior.";
+  $("varGastos").replaceChildren(h("div", { class: "linha", style: "margin:0 0 4px" }, i >= 0 ? nomeMes(D.mes) : "", i >= 0 ? h("b", {}, moeda(v)) : null), h("div", { class: "linha", style: "margin:0 0 8px" }, variacao));
+
+  $("graficoGastos").replaceChildren(graficoBarras(meses, meses.map((m) => gasto[m]), D.mes));
+  $("graficoSaldo").replaceChildren(graficoLinha(meses, saldos));
+}
+
+function graficoBarras(meses, valores, selecionado) {
+  const L = 360, A = 180, topo = 22, base = A - 24, fatia = L / meses.length, max = Math.max(...valores, 1);
+  const svg = sv("svg", { class: "grafico", viewBox: `0 0 ${L} ${A}`, role: "img", "aria-label": "Gastos por mês nos últimos 6 meses" },
+    sv("title", {}, "Gastos por mês nos últimos 6 meses"), sv("line", { class: "g-eixo", x1: 0, x2: L, y1: base, y2: base }));
+  meses.forEach((m, i) => {
+    const alt = (valores[i] / max) * (base - topo), x = i * fatia + fatia * 0.2;
+    svg.append(sv("g", {},
+      sv("title", {}, nomeMes(m) + ": " + moeda(valores[i])),
+      sv("rect", { class: "g-barra" + (m === selecionado ? " sel" : ""), x, y: base - alt, width: fatia * 0.6, height: alt, rx: 3 }),
+      sv("text", { class: "g-val", x: x + fatia * 0.3, y: base - alt - 5, "text-anchor": "middle" }, compacto.format(valores[i])),
+      sv("text", { class: "g-txt", x: x + fatia * 0.3, y: A - 8, "text-anchor": "middle" }, mesCurto(m))));
+  });
+  return svg;
+}
+
+function graficoLinha(meses, valores) {
+  const L = 360, A = 180, lado = 26, topo = 30, base = A - 28;
+  const min = Math.min(...valores), max = Math.max(...valores), faixa = max - min || 1;
+  const pt = (i) => [lado + (i * (L - 2 * lado)) / (meses.length - 1), base - ((valores[i] - min) / faixa) * (base - topo)];
+  const svg = sv("svg", { class: "grafico", viewBox: `0 0 ${L} ${A}`, role: "img", "aria-label": "Evolução do saldo da conta corrente nos últimos 6 meses" },
+    sv("title", {}, "Evolução do saldo da conta corrente nos últimos 6 meses"), sv("line", { class: "g-eixo", x1: 0, x2: L, y1: base + 10, y2: base + 10 }),
+    sv("polyline", { class: "g-linha", points: valores.map((_, i) => pt(i).map((n) => n.toFixed(1)).join(",")).join(" ") }));
+  meses.forEach((m, i) => {
+    const [x, y] = pt(i);
+    svg.append(sv("g", {},
+      sv("title", {}, "Fim de " + nomeMes(m) + ": " + moeda(valores[i])),
+      sv("circle", { class: "g-ponto", cx: x, cy: y, r: i === meses.length - 1 ? 5 : 3.5 }),
+      sv("text", { class: "g-val", x, y: y - 9, "text-anchor": "middle" }, compacto.format(valores[i])),
+      sv("text", { class: "g-txt", x, y: A - 8, "text-anchor": "middle" }, mesCurto(m))));
+  });
+  return svg;
+}
+
+// ---------- Ciclo do salário ----------
+
+// Começa no valor anterior (0 na primeira pintura) e desliza até o novo no frame seguinte.
+function barraPreenchida(p, de = "0") {
+  const s = h("span", {});
+  s.style.setProperty("--p", de);
+  requestAnimationFrame(() => requestAnimationFrame(() => s.style.setProperty("--p", String(p / 100))));
+  return s;
+}
+
+function renderCiclo() {
+  const el = $("ciclo");
+  const de = el.querySelector(".barra span")?.style.getPropertyValue("--p") || "0";
+  if (!C) return el.replaceChildren();
+  const c = C.ciclo;
+  const p = c.percentual == null ? null : Math.min(c.percentual, 100);
+  const nivel = c.percentual >= 100 ? "estourado" : c.percentual >= 80 ? "alerta" : "";
+  const ajustar = h("button", { type: "button", class: "ghost", id: "cicloConfig" }, "Ajustar");
+  ajustar.addEventListener("click", () => abrirConfigCiclo(ajustar));
+  const partes = [
+    h("div", { class: "ciclo-topo" },
+      h("h2", {}, "Ciclo " + dataBR(c.inicio).slice(0, 5) + " → " + dataBR(c.fim).slice(0, 5)),
+      h("span", { class: "sub" }, c.diasRestantes === 1 ? "falta 1 dia" : "faltam " + c.diasRestantes + " dias"),
+      ajustar),
+    c.semSalario ? h("div", { class: "aviso" }, "Usando o mês do calendário. Para seguir o salário, abra o crédito do salário na lista e toque em \"Este é o meu salário\".") : null,
+    c.limite == null
+      ? h("p", {}, "Gasto no ciclo: ", h("b", {}, moeda(c.consumido)), ". Defina um limite em Ajustar.")
+      : h("div", {},
+          h("div", { class: "barra " + nivel, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.round(p), "aria-label": "Uso do limite do ciclo" },
+            barraPreenchida(p, de)),
+          h("p", {}, h("b", {}, moeda(c.consumido)), " de " + moeda(c.limite) + " (" + Math.floor(c.percentual) + "%) · ",
+            c.falta >= 0 ? "falta " + moeda(c.falta) : h("b", { class: "neg" }, moeda(-c.falta) + " acima"))),
+    c.parcelasCiclo || c.parcelasDepois
+      ? h("p", { class: "sub" }, "Inclui " + moeda(c.parcelasCiclo) + " de parcelas que caem neste ciclo · " + moeda(c.parcelasDepois) + " já comprometidos nos próximos")
+      : null,
+    C.notificacoes.length
+      ? h("details", {}, h("summary", {}, "Últimos alertas"),
+          h("ul", { class: "alertas" }, C.notificacoes.map((n) => h("li", {}, h("b", {}, n.titulo), " " + n.corpo, h("span", { class: "sub" }, " · " + dataHora(n.criada))))))
+      : null,
+  ];
+  el.replaceChildren(...partes.filter(Boolean)); // replaceChildren converteria null em texto
+}
+
+const b64uParaBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+async function inscricaoAtual() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  return (await navigator.serviceWorker.ready).pushManager.getSubscription();
+}
+
+function abrirConfigCiclo(gatilho) {
+  const ini = C.ciclo.limite == null ? "" : String(C.ciclo.limite);
+  const inp = h("input", { id: "cfgLimite", type: "number", inputmode: "decimal", min: "1", step: "0.01", placeholder: "Ex.: 4000" });
+  inp.value = ini;
+  const erro = h("div", { class: "aviso erro", role: "alert", hidden: true });
+  const status = h("p", { class: "sub", role: "status" });
+  const salvar = h("button", { type: "button" }, "Salvar limite");
+  const pushBtn = h("button", { type: "button", class: "sec" });
+  const teste = h("button", { type: "button", class: "ghost", hidden: true }, "Enviar notificação de teste");
+  const apps = h("button", { type: "button", class: "ghost", id: "abrirApps" }, "Apps conectados");
+  const sujo = () => inp.value !== ini;
+  const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+  // Abrir "Apps conectados" substitui este sheet: não pode perder um limite não salvo nem cortar um salvamento em curso.
+  apps.addEventListener("click", () => {
+    if (sheet.salvando) return;
+    if (sujo()) return falhar(new Error("Salve o limite antes de abrir Apps conectados."));
+    abrirApps(apps);
+  });
+
+  const suportado = "PushManager" in window && C.push.publica;
+  pushBtn.hidden = true; // aparece quando o estado do push for conhecido
+  status.textContent = !suportado ? "Notificações indisponíveis neste navegador." : Notification.permission === "denied" ? "Notificações bloqueadas: libere nas configurações do navegador." : "";
+
+  salvar.addEventListener("click", async () => {
+    if (!sujo()) return fecharSheet();
+    const v = inp.value.trim() === "" ? null : Number(inp.value);
+    if (v !== null && !(v > 0)) return falhar(new Error("Informe um valor maior que zero, ou deixe vazio para remover."));
+    sheet.salvando = true; salvar.disabled = true; erro.hidden = true;
+    try {
+      await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ limite: v }) });
+      C = await api("/api/ciclo"); renderCiclo();
+      sheet.salvando = false; fecharSheet();
+      $("cicloConfig")?.focus(); // renderCiclo trocou o botão "Ajustar": devolve o foco ao novo
+    } catch (e) { sheet.salvando = false; salvar.disabled = false; falhar(e); }
+  });
+
+  pushBtn.addEventListener("click", async () => {
+    pushBtn.disabled = true; erro.hidden = true; status.textContent = "";
+    try {
+      const atual = await inscricaoAtual();
+      if (atual) {
+        await api("/api/push", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: atual.endpoint }) });
+        await atual.unsubscribe();
+        pushBtn.textContent = "Ativar notificações"; teste.hidden = true; status.textContent = "Notificações desativadas.";
+      } else {
+        if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão negada. Libere as notificações nas configurações do navegador.");
+        const nova = await (await navigator.serviceWorker.ready).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uParaBytes(C.push.publica) });
+        await api("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: nova.endpoint }) });
+        pushBtn.textContent = "Desativar notificações"; teste.hidden = false; status.textContent = "Notificações ativadas neste aparelho.";
+      }
+    } catch (e) { falhar(e); }
+    pushBtn.disabled = false;
+  });
+
+  teste.addEventListener("click", async () => {
+    teste.disabled = true; erro.hidden = true;
+    try {
+      const r = await api("/api/push/teste", { method: "POST" });
+      status.textContent = r.enviados ? "Teste enviado; deve chegar em alguns segundos." : "Nenhum aparelho recebeu. Desative e ative de novo.";
+    } catch (e) { falhar(e); }
+    teste.disabled = false;
+  });
+
+  abrirSheet({
+    titulo: "Ciclo e alertas", gatilho, sujo,
+    corpo: h("div", {},
+      h("label", { class: "campo", for: "cfgLimite" }, "Limite total do ciclo (R$)", inp),
+      h("p", { class: "sub" }, C.ciclo.salario ? "Salário: " + C.ciclo.salario : "Salário ainda não marcado."),
+      erro,
+      h("div", { class: "botoes" }, salvar, pushBtn, teste),
+      status,
+      h("div", { class: "botoes" }, apps),
+      h("p", { class: "sub" }, "Alertas: 80% e 100% do limite, gasto acima do normal, banco pedindo reconexão e resumo no domingo às 20h. Silêncio das 22h às 7h.")),
+  });
+  // O estado do push vem depois: se o service worker não responder, o resto do sheet funciona.
+  if (suportado) {
+    inscricaoAtual().then((sub) => {
+      pushBtn.textContent = sub ? "Desativar notificações" : "Ativar notificações";
+      pushBtn.hidden = false;
+      teste.hidden = !sub;
+    }).catch(() => {});
+  }
+}
+
+// ---------- Apps conectados (token de aparelho do app Android) ----------
+
+function abrirApps(gatilho) {
+  let lista = [];
+  let novo = null; // token em claro: só existe nesta tela, até fechar
+  let copiado = false;
+  let pedindo = null; // id aguardando confirmação de revogação
+  const nome = h("input", { id: "appNome", maxlength: "40", autocomplete: "off", placeholder: "Ex.: Pixel 8" });
+  const criar = h("button", { type: "button" }, "Criar token");
+  const erro = h("div", { class: "aviso erro", role: "alert", hidden: true });
+  const status = h("p", { class: "sub", role: "status" });
+  const caixa = h("div", { class: "novo-token", hidden: true });
+  const ul = h("ul", { class: "apps", "aria-label": "Apps conectados" });
+  const falhar = (e) => { erro.textContent = e.message; erro.hidden = false; };
+  const sujo = () => nome.value.trim() !== "" || (novo && !copiado);
+
+  const desenhar = () => {
+    ul.replaceChildren(...(lista.length ? lista.map((t) => {
+      const ativo = !t.revogado;
+      const botoes = !ativo ? [] : pedindo === t.id
+        ? [h("button", { type: "button", "data-ok": t.id }, "Confirmar"), h("button", { type: "button", class: "sec", "data-cancela": t.id }, "Cancelar")]
+        : [h("button", { type: "button", class: "sec", "data-revogar": t.id, "aria-label": "Revogar " + t.nome }, "Revogar")];
+      return h("li", { class: ativo ? "" : "revogado" },
+        h("div", { class: "info" }, t.nome, h("span", { class: "sub" },
+          ativo ? "Criado em " + dataHora(t.criado) + " · último uso: " + dataHora(t.ultimo_uso) : "Revogado em " + dataHora(t.revogado))),
+        ...botoes);
+    }) : [h("li", {}, h("span", { class: "sub" }, "Nenhum app conectado."))]));
+  };
+  const carregarLista = async () => { lista = (await api("/api/app/tokens")).tokens; desenhar(); };
+
+  ul.addEventListener("click", async (e) => {
+    const b = e.target.closest("button");
+    if (!b || sheet.salvando) return;
+    if (b.dataset.revogar) { pedindo = b.dataset.revogar; desenhar(); ul.querySelector("[data-ok]")?.focus(); }
+    else if (b.dataset.cancela) { const id = pedindo; pedindo = null; desenhar(); ul.querySelector(`[data-revogar="${id}"]`)?.focus(); }
+    else if (b.dataset.ok) {
+      sheet.salvando = true; b.disabled = true; erro.hidden = true;
+      try {
+        await api("/api/app/tokens/" + encodeURIComponent(b.dataset.ok), { method: "DELETE" });
+        pedindo = null; await carregarLista(); status.textContent = "Token revogado.";
+      } catch (x) { falhar(x); b.disabled = false; }
+      sheet.salvando = false;
+    }
+  });
+
+  criar.addEventListener("click", async () => {
+    const n = nome.value.trim();
+    if (!n) return falhar(new Error("Informe o nome do aparelho."));
+    if (novo && !copiado) return falhar(new Error("Copie o token atual antes de criar outro: ele não aparece de novo."));
+    sheet.salvando = true; criar.disabled = true; nome.disabled = true; erro.hidden = true; status.textContent = "";
+    try {
+      const r = await api("/api/app/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nome: n }) });
+      novo = r.token; copiado = false; nome.value = "";
+      const campo = h("input", { id: "appToken", readonly: "", value: novo, "aria-label": "Token do aparelho " + r.nome });
+      const copiar = h("button", { type: "button", id: "appCopiar" }, "Copiar");
+      copiar.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(novo); } catch { campo.select(); return falhar(new Error("Não foi possível copiar. Selecione o token e copie manualmente.")); }
+        copiado = true; copiar.textContent = "Copiado ✓";
+      });
+      campo.addEventListener("focus", () => campo.select());
+      const qr = h("div", { class: "qr", role: "img", "aria-label": "QR para parear o app " + r.nome });
+      qr.innerHTML = r.qr; // SVG gerado pelo próprio Worker
+      caixa.replaceChildren(h("strong", {}, "Token de " + r.nome),
+        h("p", { class: "sub" }, "Leia o QR no app ou copie o token. Não será mostrado de novo."), qr, campo, copiar);
+      caixa.hidden = false;
+      await carregarLista();
+      copiar.focus();
+    } catch (x) { falhar(x); }
+    sheet.salvando = false; criar.disabled = false; nome.disabled = false;
+  });
+
+  abrirSheet({
+    titulo: "Apps conectados", gatilho, sujo,
+    corpo: h("div", {},
+      h("p", { class: "sub" }, "Cada aparelho do app Android usa um token próprio, só para leitura das transações. Revogue se perder o aparelho."),
+      h("label", { class: "campo", for: "appNome" }, "Nome do aparelho", nome),
+      erro, h("div", { class: "botoes" }, criar), caixa, status, ul),
+  });
+  carregarLista().catch(falhar);
+}
+
+// ---------- Lista de transações (usada no painel e na fatura) ----------
+
+function ativar(el, fn) {
+  el.addEventListener("click", fn);
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } });
+}
+
+function linhaTx(t) {
+  const cartao = ehCartao(t);
+  const v = cartao ? -t.amount : t.amount; // no cartão, valor positivo = compra (saída)
+  const el = h("div", { class: "tx", role: "button", tabindex: 0, "data-foco": "tx:" + t.id },
+    h("div", { class: "data" }, dataBR(t.date).slice(0, 5)),
+    h("div", { class: "meio" },
+      h("div", { class: "desc" }, t.description || "—"),
+      h("div", { class: "info" }, traduzir(t.category),
+        cartao ? h("span", { class: "tag cartao" }, "cartão") : null,
+        t.scheduled ? h("span", { class: "tag futura" }, "futura") : null,
+        t.status === "PENDING" ? h("span", { class: "tag" }, "pendente") : null,
+        t.ajuste_categoria || t.ajuste_gasto != null ? h("span", { class: "tag" }, "ajustada") : null)),
+    h("div", { class: "v " + (v >= 0 ? "pos" : "neg") }, moeda(v)));
+  ativar(el, () => abrirDetalhe(t, el));
+  return el;
+}
+const listaTx = (lista) => (lista.length ? lista.map(linhaTx) : [h("div", { class: "vazio" }, "Nenhuma transação encontrada.")]);
+
+function renderTransacoes() {
+  const q = $("busca").value.trim().toLowerCase();
+  const conta = $("filtroConta").value;
+  $("transacoes").replaceChildren(...listaTx(D.transacoes.filter((t) => (!conta || t.account_id === conta) &&
+    (!q || [t.description, t.merchant, t.category, traduzir(t.category)].some((x) => (x || "").toLowerCase().includes(q))))));
+}
+
+// ---------- Painel lateral (sheet de baixo no celular) ----------
+
+let sheet = null; // { sujo, salvando, foco }
+
+function abrirSheet({ titulo, corpo, gatilho, sujo }) {
+  sheet = { sujo: sujo || (() => false), salvando: false, foco: sheet ? sheet.foco : gatilho };
+  $("sheetTitulo").textContent = titulo;
+  $("sheetCorpo").replaceChildren(corpo);
+  $("fundo").hidden = false;
+  document.body.style.overflow = "hidden";
+  $("sheet").scrollTop = 0;
+  $("sheet").focus();
+}
+
+function tentarFechar() {
+  if (!sheet || sheet.salvando) return;
+  if (sheet.sujo()) { $("fundoConfirma").hidden = false; $("continuar").focus(); } else fecharSheet();
+}
+
+function continuarEditando() {
+  $("fundoConfirma").hidden = true;
+  $("sheet").focus();
+}
+
+function fecharSheet() {
+  const foco = sheet?.foco;
+  sheet = null;
+  $("fundoConfirma").hidden = true;
+  $("fundo").hidden = true;
+  document.body.style.overflow = "";
+  // A lista é redesenhada após salvar: volta para a linha equivalente.
+  const alvo = foco?.isConnected ? foco : [...document.querySelectorAll("[data-foco]")].find((e) => e.dataset.foco === foco?.dataset.foco);
+  (alvo || document.body).focus();
+}
+
+$("fundo").addEventListener("click", (e) => { if (e.target === $("fundo")) tentarFechar(); });
+$("fundoConfirma").addEventListener("click", (e) => { if (e.target === $("fundoConfirma")) continuarEditando(); });
+$("sheetX").addEventListener("click", tentarFechar);
+$("continuar").addEventListener("click", continuarEditando);
+$("descartar").addEventListener("click", fecharSheet);
+document.addEventListener("keydown", (e) => {
+  if (!sheet) return;
+  const confirmando = !$("fundoConfirma").hidden;
+  if (e.key === "Escape") { e.preventDefault(); confirmando ? continuarEditando() : tentarFechar(); return; }
+  if (e.key !== "Tab") return;
+  const raiz = confirmando ? $("fundoConfirma") : $("sheet");
+  const foc = [...raiz.querySelectorAll("button, select, input, [tabindex='0']")].filter((x) => !x.disabled && x.getClientRects().length);
+  if (!foc.length) { e.preventDefault(); return; }
+  const ativo = document.activeElement;
+  if (!raiz.contains(ativo) || ativo === raiz || (e.shiftKey && ativo === foc[0])) { e.preventDefault(); foc[e.shiftKey ? foc.length - 1 : 0].focus(); }
+  else if (!e.shiftKey && ativo === foc[foc.length - 1]) { e.preventDefault(); foc[0].focus(); }
+});
+
+function abrirDetalhe(t, gatilho) {
+  const cartao = ehCartao(t);
+  const v = cartao ? -t.amount : t.amount;
+  const catIni = t.category || "";
+  const gastoIni = naoEhGasto(t);
+  const opcoes = Object.entries(CATEGORIAS).map(([k, nome]) => [k, nome]);
+  if (catIni && !(catIni in CATEGORIAS)) opcoes.push([catIni, catIni]);
+  opcoes.sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  if (!t.cat_orig) opcoes.unshift(["", "Sem categoria"]); // permite voltar à original quando ela é "Sem categoria"
+  const sel = h("select", { id: "detCategoria" }, opcoes.map(([k, nome]) => h("option", { value: k }, nome)));
+  sel.value = catIni;
+  const chk = h("input", { type: "checkbox", id: "detNaoGasto" });
+  chk.checked = gastoIni;
+  const erro = h("div", { class: "aviso erro", role: "alert", hidden: true });
+  const salvar = h("button", { type: "button" }, "Salvar");
+  const cancelar = h("button", { type: "button", class: "sec" }, "Cancelar");
+  const sujo = () => sel.value !== catIni || chk.checked !== gastoIni;
+  const campos = [salvar, cancelar, sel, chk, $("sheetX")];
+  const ehSalario = !cartao && t.amount > 0 && !t.scheduled;
+  const marcarSalario = ehSalario ? h("button", { type: "button", class: "ghost" }, "Este é o meu salário") : null;
+  marcarSalario?.addEventListener("click", async () => {
+    marcarSalario.disabled = true; erro.hidden = true; sheet.salvando = true;
+    try {
+      await api("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ salario_id: t.id }) });
+      C = await api("/api/ciclo"); renderCiclo();
+      marcarSalario.textContent = "Salário marcado ✓";
+    } catch (e) { erro.textContent = e.message; erro.hidden = false; marcarSalario.disabled = false; }
+    sheet.salvando = false;
+  });
+
+  cancelar.addEventListener("click", tentarFechar);
+  salvar.addEventListener("click", async () => {
+    if (!sujo()) return fecharSheet();
+    const category = sel.value === (t.cat_orig || "") ? null : sel.value;
+    const gasto = chk.checked === regraAuto({ category: sel.value, description: t.description }) ? null : chk.checked ? 0 : 1;
+    sheet.salvando = true;
+    campos.forEach((c) => (c.disabled = true));
+    erro.hidden = true;
+    try {
+      await api("/api/ajustes/" + encodeURIComponent(t.id), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ category, gasto }) });
+    } catch (e) {
+      sheet.salvando = false;
+      campos.forEach((c) => (c.disabled = false));
+      erro.textContent = e.message;
+      erro.hidden = false;
+      return;
+    }
+    await carregar(D.mes).catch(mostrarErro);
+    campos.forEach((c) => (c.disabled = false));
+    sheet.salvando = false;
+    fecharSheet();
+  });
+
+  const linha = (rotulo, valor) => [h("dt", {}, rotulo), h("dd", {}, valor)];
+  abrirSheet({
+    titulo: "Transação", gatilho, sujo,
+    corpo: h("div", {},
+      h("dl", { class: "det" },
+        linha("Data", dataBR(t.date)), linha("Descrição", t.description || "—"), linha("Comerciante", t.merchant || "—"),
+        linha("Conta", porId[t.account_id]?.name || t.account_id),
+        linha("Valor", h("b", { class: v >= 0 ? "pos" : "neg" }, moeda(v))),
+        linha("Status", (STATUS_TX[t.status] || t.status || "—") + (t.scheduled ? " · parcela futura" : "")),
+        linha("Categoria original", traduzir(t.cat_orig)), linha("ID", t.id)),
+      h("label", { class: "campo", for: "detCategoria" }, "Categoria", sel),
+      h("label", { class: "marca", for: "detNaoGasto" }, chk, "Não é gasto (fora dos gráficos e do total)"),
+      erro,
+      h("div", { class: "botoes" }, salvar, cancelar, marcarSalario)),
+  });
+}
+
+// ---------- Faturas ----------
+
+// Compras e fatura não têm campo em comum na API: a fatura abrange as compras entre dois fechamentos estimados.
+function janelasFatura(f) {
+  const fechadas = (f.results || []).map((b) => ({ venc: String(b.dueDate).slice(0, 10), situacao: b.payment_status, total: Number(b.totalAmount) }))
+    .sort((a, b) => a.venc.localeCompare(b.venc));
+  fechadas.forEach((b, i) => {
+    b.ate = somarDias(b.venc, -CORTE_FATURA);
+    b.de = i ? somarDias(fechadas[i - 1].venc, 1 - CORTE_FATURA) : somarDias(b.ate, -30);
+  });
+  const ab = f.open_bill;
+  let aberta = null;
+  if (ab?.due_date) {
+    const venc = String(ab.due_date).slice(0, 10);
+    // A fatura aberta não tem limite superior: inclui as parcelas futuras.
+    aberta = { venc, situacao: "OPEN", total: Number(ab.total_amount), de: fechadas.length ? somarDias(fechadas.at(-1).venc, 1 - CORTE_FATURA) : somarDias(venc, -37), ate: "9999-12-31", aberta: true };
+  }
+  return { fechadas, aberta };
+}
+
+async function abrirFatura(conta, j, gatilho) {
+  const corpo = h("div", {}, h("div", { class: "vazio" }, "Carregando…"));
+  abrirSheet({ titulo: (j.aberta ? "Fatura aberta" : "Fatura") + " · vence " + dataBR(j.venc), corpo, gatilho });
+  try {
+    const r = await api(`/api/fatura?conta=${encodeURIComponent(conta.id)}&de=${j.de}&ate=${j.ate}`);
+    const txs = r.transacoes.map(aplicarAjuste);
+    corpo.replaceChildren(
+      h("div", { class: "linha", style: "margin:0 0 4px" }, "Total listado", h("b", {}, moeda(txs.reduce((x, t) => x + t.amount, 0)))),
+      h("p", { class: "nota", style: "margin:0 0 8px" }, "Compras de " + dataBR(j.de) + (j.aberta ? " em diante, com parcelas futuras. " : " a " + dataBR(j.ate) + ". ") +
+        "Fechamento estimado " + CORTE_FATURA + " dias antes do vencimento (a API não informa a data). O total do banco é o da tabela."),
+      ...listaTx(txs));
+  } catch (e) {
+    corpo.replaceChildren(h("div", { class: "aviso erro", role: "alert" }, e.message));
+  }
+}
+
+// ---------- Eventos ----------
+
+$("mes").addEventListener("change", (e) => carregar(e.target.value, false).catch(mostrarErro));
+$("busca").addEventListener("input", () => D && renderTransacoes());
+$("filtroConta").addEventListener("change", () => D && renderTransacoes());
+$("atualizar").addEventListener("click", async () => {
+  const b = $("atualizar");
+  b.disabled = true; b.textContent = "Atualizando…";
+  try {
+    const r = await fetchApi("/api/atualizar", { method: "POST" });
+    const j = await r.json().catch(() => ({}));
+    await carregar(D?.mes);
+    if (!r.ok || !j.ok) mostrarErro(new Error(j.mensagem || j.erro || "HTTP " + r.status));
+  } catch (e) { mostrarErro(e); }
+  finally { b.disabled = false; b.textContent = "Atualizar"; }
+});
+
+$("sair").addEventListener("click", async () => {
+  let r;
+  try { r = await fetch("/api/sair", { method: "POST" }); } catch (e) { return mostrarErro(new Error("Sem conexão: não foi possível sair.")); }
+  if (!r.ok && r.status !== 401) return mostrarErro(new Error("Não foi possível sair (HTTP " + r.status + ")."));
+  try { for (const n of await caches.keys()) if (n.startsWith("dados-")) await caches.delete(n); } catch {}
+  location.replace("/login");
+});
+
+function mostrarErro(e) {
+  $("avisos").prepend(h("div", { class: "aviso erro", role: "alert" }, h("b", {}, "Erro: "), e.message));
+}
+
+// ---------- PWA ----------
+
+let promptInstalar = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); promptInstalar = e; $("instalar").hidden = false; });
+window.addEventListener("appinstalled", () => { promptInstalar = null; $("instalar").hidden = true; });
+$("instalar").addEventListener("click", async () => {
+  if (!promptInstalar) return;
+  promptInstalar.prompt();
+  await promptInstalar.userChoice;
+  promptInstalar = null;
+  $("instalar").hidden = true;
+});
+
+const noIphone = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const instalado = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+const dicaVista = () => { try { return localStorage.getItem("dicaIos") === "1"; } catch { return false; } };
+if (noIphone && !instalado && !dicaVista()) $("dicaIos").hidden = false;
+$("fecharDica").addEventListener("click", () => {
+  $("dicaIos").hidden = true;
+  try { localStorage.setItem("dicaIos", "1"); } catch {}
+});
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+carregar().catch(mostrarErro);
+</script>
+</body>
+</html>
