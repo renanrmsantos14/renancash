@@ -56,26 +56,29 @@ class LowKeyButton extends StatelessWidget {
             (appStateSettings["materialYou"]
                 ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
                 : getColor(context, "lightDarkAccent")),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(
-              horizontal: 15, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (extraWidgetAtBeginning) extraWidget ?? SizedBox.shrink(),
-              Flexible(
-                child: TextFont(
-                  text: text,
-                  textAlign: TextAlign.center,
-                  fontSize: 14,
-                  textColor:
-                      textColor ?? getColor(context, "black").withOpacity(0.5),
-                  maxLines: 5,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.symmetric(
+                horizontal: 15, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (extraWidgetAtBeginning) extraWidget ?? SizedBox.shrink(),
+                Flexible(
+                  child: TextFont(
+                    text: text,
+                    textAlign: TextAlign.center,
+                    fontSize: 14,
+                    textColor:
+                        textColor ?? getColor(context, "black").withOpacity(0.5),
+                    maxLines: 5,
+                  ),
                 ),
-              ),
-              if (extraWidgetAtBeginning == false)
-                extraWidget ?? SizedBox.shrink(),
-            ],
+                if (extraWidgetAtBeginning == false)
+                  extraWidget ?? SizedBox.shrink(),
+              ],
+            ),
           ),
         ),
         onTap: onTap,

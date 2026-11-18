@@ -16,11 +16,27 @@ const _meses = [
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
 ];
 
+const _mesesCurtos = [
+  'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+  'jul', 'ago', 'set', 'out', 'nov', 'dez'
+];
+
 String _nomeDoMes(String mes) {
   final p = mes.split('-');
   final m = p.length == 2 ? int.tryParse(p[1]) : null;
   return m == null || m < 1 || m > 12 ? mes : '${_meses[m - 1]} de ${p[0]}';
 }
+
+String _rotuloCurtoMes(String mes) {
+  final p = mes.split('-');
+  final m = p.length == 2 ? int.tryParse(p[1]) : null;
+  if (m == null || m < 1 || m > 12) return mes;
+  final ano = p[0].length == 4 ? p[0].substring(2) : p[0];
+  return '${_mesesCurtos[m - 1]}/$ano';
+}
+
+String _capitalizar(String s) =>
+    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
 String _mesAtual(DateTime hoje) =>
     '${hoje.year}-${hoje.month.toString().padLeft(2, '0')}';
@@ -135,7 +151,10 @@ class InvestimentosConteudo extends StatelessWidget {
         if (onAbrirMeuBanco != null)
           TextButton(
             onPressed: onAbrirMeuBanco,
-            style: TextButton.styleFrom(foregroundColor: e.acc),
+            style: TextButton.styleFrom(
+              foregroundColor: e.acc,
+              minimumSize: const Size(64, 44),
+            ),
             child: const Text('Abrir o Meu Banco'),
           ),
       ]),
@@ -239,19 +258,10 @@ class InvestimentosConteudo extends StatelessWidget {
               'O primeiro retrato é de ${_nomeDoMes(serie.isEmpty ? _mesAtual(hoje) : serie.first.mes)}.',
               style: EdTexto.corpo(context).copyWith(color: cores(context).mu)));
     }
-    // Cada ponto no último dia do mês; o mês corrente, em hoje (é o saldo até agora).
-    final datas = [
-      for (final m in serie)
-        m.mes == _mesAtual(hoje)
-            ? DateTime(hoje.year, hoje.month, hoje.day)
-            : () {
-                final p = m.mes.split('-').map(int.parse).toList();
-                return DateTime(p[0], p[1] + 1, 0);
-              }()
-    ];
+    final rotulosX = [for (final m in serie) _rotuloCurtoMes(m.mes)];
     final pontos = [
       for (var i = 0; i < serie.length; i++)
-        Pair(datas[i].difference(datas.first).inDays.toDouble(), serie[i].total, dateTime: datas[i])
+        Pair(i.toDouble(), serie[i].total)
     ];
     return _cartao(
       context,
@@ -260,7 +270,7 @@ class InvestimentosConteudo extends StatelessWidget {
         LineChartWrapper(
           points: [pontos],
           isCurved: true,
-          endDate: datas.last,
+          rotulosX: rotulosX,
           color: cores(context).acc,
         ),
       ]),
@@ -290,7 +300,7 @@ class InvestimentosConteudo extends StatelessWidget {
               title: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_nomeDoMes(m.mes.mes),
+                    Text(_capitalizar(_nomeDoMes(m.mes.mes)),
                         style: EdTexto.corpo(context)
                             .copyWith(fontWeight: FontWeight.w500)),
                     if (m.mes.mes == atual)

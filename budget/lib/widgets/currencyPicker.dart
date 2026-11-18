@@ -2,6 +2,7 @@ import 'package:budget/colors.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/exchangeRatesPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
+import 'package:budget/struct/editorial.dart' show cores;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/noResults.dart';
@@ -13,6 +14,68 @@ import 'package:budget/widgets/viewAllTransactionsButton.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:sliver_tools/sliver_tools.dart';
+
+const _paisesPt = <String, String>{
+  'Brazil': 'Brasil',
+  'United States': 'Estados Unidos',
+  'Euro Member': 'Zona do Euro',
+  'Japan': 'Japão',
+  'United Kingdom': 'Reino Unido',
+  'Australia': 'Austrália',
+  'Canada': 'Canadá',
+  'Switzerland': 'Suíça',
+  'China': 'China',
+  'Sweden': 'Suécia',
+  'New Zealand': 'Nova Zelândia',
+  'Mexico': 'México',
+  'India': 'Índia',
+  'Norway': 'Noruega',
+  'Korea (South)': 'Coreia do Sul',
+  'Argentina': 'Argentina',
+  'Chile': 'Chile',
+  'Colombia': 'Colômbia',
+  'Peru': 'Peru',
+  'Uruguay': 'Uruguai',
+  'Paraguay': 'Paraguai',
+  'South Africa': 'África do Sul',
+  'Russia': 'Rússia',
+  'Turkey': 'Turquia',
+  'Poland': 'Polônia',
+  'Denmark': 'Dinamarca',
+  'Singapore': 'Singapura',
+  'Hong Kong': 'Hong Kong',
+  'Taiwan': 'Taiwan',
+  'Thailand': 'Tailândia',
+  'Indonesia': 'Indonésia',
+  'Malaysia': 'Malásia',
+  'Philippines': 'Filipinas',
+  'Israel': 'Israel',
+  'United Arab Emirates': 'Emirados Árabes',
+  'Saudi Arabia': 'Arábia Saudita',
+  'Egypt': 'Egito',
+};
+
+String _nomePaisMoeda(dynamic currency) {
+  if (currency is! Map) return '';
+  final raw =
+      (currency['CountryName'] ?? currency['Currency'] ?? '').toString();
+  if (raw.isEmpty) return '';
+  if (appStateSettings['locale'] == 'pt') {
+    return _paisesPt[raw] ?? raw.capitalizeFirst;
+  }
+  return currency['CountryName']?.toString() ?? raw.capitalizeFirst;
+}
+
+String _simboloMoeda(dynamic currency, String currencyKey) {
+  if (currency is! Map) return currencyKey.toUpperCase();
+  final sym = (currency['Symbol'] ?? '').toString();
+  if (sym.isEmpty) {
+    return (currency['Code'] ?? currencyKey).toString().allCaps;
+  }
+  // '₣' (U+20A3) não existe na fonte Geist e renderiza glifo ausente (⌧).
+  if (sym == '₣') return 'Fr';
+  return sym;
+}
 
 class CurrencyPicker extends StatefulWidget {
   const CurrencyPicker({
@@ -79,20 +142,17 @@ class _CurrencyPickerState extends State<CurrencyPicker> {
       populateCurrencies();
     } else {
       Map<String, dynamic> outCurrencies = {};
+      final termo = searchTerm.toLowerCase();
       for (String key in currenciesJSON.keys) {
         dynamic currency = currenciesJSON[key];
+        final nomePt = _nomePaisMoeda(currency).toLowerCase();
         if ((currency["CountryName"] != null &&
-                currency["CountryName"]
-                    .toLowerCase()
-                    .contains(searchTerm.toLowerCase())) ||
+                currency["CountryName"].toLowerCase().contains(termo)) ||
             (currency["Currency"] != null &&
-                currency["Currency"]
-                    .toLowerCase()
-                    .contains(searchTerm.toLowerCase())) ||
+                currency["Currency"].toLowerCase().contains(termo)) ||
             (currency["Code"] != null &&
-                currency["Code"]
-                    .toLowerCase()
-                    .contains(searchTerm.toLowerCase()))) {
+                currency["Code"].toLowerCase().contains(termo)) ||
+            nomePt.contains(termo)) {
           outCurrencies[key] = currency;
         }
       }
@@ -280,6 +340,8 @@ class CurrencyItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final e = cores(context);
+    final extraName = _nomePaisMoeda(currenciesJSON[currencyKey]);
     return AnimatedSwitcher(
       duration: Duration(milliseconds: 500),
       child: Tappable(
@@ -287,24 +349,16 @@ class CurrencyItem extends StatelessWidget {
         onTap: () {
           onSelected(currencyKey);
         },
-        borderRadius: getPlatform() == PlatformOS.isIOS ? 10 : 15,
+        borderRadius: 12,
         color: selected
             ? Theme.of(context).colorScheme.secondaryContainer
-            : unSelectedColor ??
-                (appStateSettings["materialYou"]
-                    ? dynamicPastel(context,
-                        Theme.of(context).colorScheme.secondaryContainer,
-                        amountLight: 0.4, amountDark: 0.6)
-                    : getColor(context, "lightDarkAccent")),
+            : unSelectedColor ?? e.surf,
         child: AnimatedContainer(
           decoration: BoxDecoration(
-            borderRadius: BorderRadiusDirectional.circular(
-                getPlatform() == PlatformOS.isIOS ? 10 : 15),
+            borderRadius: BorderRadiusDirectional.circular(12),
             border: Border.all(
-              width: appStateSettings["materialYou"] ? 2 : 0,
-              color: appStateSettings["materialYou"] == true && selected
-                  ? Theme.of(context).colorScheme.secondary
-                  : Colors.transparent,
+              width: selected ? 1.5 : 1,
+              color: selected ? e.acc : e.line,
             ),
           ),
           duration: Duration(milliseconds: 450),
@@ -328,13 +382,8 @@ class CurrencyItem extends StatelessWidget {
                     key: ValueKey("symbol"),
                     text: customCurrency
                         ? currencyKey.toUpperCase()
-                        : currenciesJSON[currencyKey]?["Symbol"] == null ||
-                                currenciesJSON[currencyKey]?["Symbol"] == ""
-                            ? (currenciesJSON[currencyKey]?["Code"]
-                                    .toString()
-                                    .allCaps ??
-                                "")
-                            : (currenciesJSON[currencyKey]?["Symbol"] ?? ""),
+                        : _simboloMoeda(
+                            currenciesJSON[currencyKey], currencyKey),
                     autoSizeText: true,
                     maxFontSize: 50,
                     fontSize: customCurrency ||
@@ -344,20 +393,10 @@ class CurrencyItem extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     textAlign: TextAlign.center,
                   ),
-                  if (((currenciesJSON[currencyKey]?["CountryName"] == null ||
-                              currenciesJSON[currencyKey]?["CountryName"] ==
-                                  "") &&
-                          (currenciesJSON[currencyKey]?["Currency"] == null ||
-                              currenciesJSON[currencyKey]?["Currency"] ==
-                                  "")) ==
-                      false)
+                  if (extraName.isNotEmpty)
                     TextFont(
                       key: ValueKey("extraName"),
-                      text: currenciesJSON[currencyKey]?["CountryName"] ??
-                          (currenciesJSON[currencyKey]["Currency"])
-                              .toString()
-                              .capitalizeFirst ??
-                          "",
+                      text: extraName,
                       fontSize: 10,
                       maxLines: 2,
                       textAlign: TextAlign.center,

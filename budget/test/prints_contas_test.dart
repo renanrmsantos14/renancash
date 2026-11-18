@@ -193,6 +193,7 @@ Widget _linhaConta({
     Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: EditRowEntry(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 6, 12),
         index: index,
         canReorder: true,
         canDelete: false,
@@ -439,8 +440,10 @@ void main() {
         ),
         altura: 960,
       );
-      await t.enterText(find.byType(TextFormField).first, 'Reserva Itaú');
-      await t.pump(const Duration(milliseconds: 300));
+      await t.enterText(find.byType(EditableText).first, 'Reserva Itaú');
+      for (var i = 0; i < 6; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(

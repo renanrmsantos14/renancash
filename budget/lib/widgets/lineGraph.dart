@@ -1,6 +1,8 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/currencyFunctions.dart';
+import 'package:budget/struct/editorial.dart' show cores;
+import 'package:budget/struct/mbSync/estadoInicio.dart' show diaMes;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -18,6 +20,7 @@ class _LineChart extends StatefulWidget {
     required this.color,
     this.isCurved = false,
     this.endDate,
+    this.rotulosX,
     this.verticalLineAt,
     this.horizontalLineAt,
     required this.enableTouch,
@@ -34,6 +37,7 @@ class _LineChart extends StatefulWidget {
   final List<Color> colors;
   final bool isCurved;
   final DateTime? endDate;
+  final List<String>? rotulosX;
   final double? verticalLineAt;
   final double? horizontalLineAt;
   final bool enableTouch;
@@ -164,46 +168,56 @@ class _LineChartState extends State<_LineChart> with WidgetsBindingObserver {
               if (value == widget.maxPair.x + 1) {
                 return SizedBox.shrink();
               }
-              DateTime currentDate =
-                  widget.endDate == null ? DateTime.now() : widget.endDate!;
-              // double valueBefore = value - titleMeta.appliedInterval;
-              // print(valueBefore);
-              // print(value);
-              // print(titleMeta.max);
-
-              String text = getWordedDateShort(
-                currentDate.justDay(
-                    dayOffset: -widget.maxPair.x.toInt() + value.round()),
-                showTodayTomorrow: false,
-              );
-
-              // String textBefore = getWordedDateShort(
-              //   currentDate.justDay(
-              //       dayOffset: -widget.maxPair.x.toInt() + valueBefore.round()),
-              //   showTodayTomorrow: false,
-              // );
+              String text;
+              EdgeInsets padding = const EdgeInsets.only(top: 8.0);
+              if (widget.rotulosX != null) {
+                final idx = value.round();
+                if ((value - idx).abs() > 0.01 ||
+                    idx < 0 ||
+                    idx >= widget.rotulosX!.length) {
+                  return const SizedBox.shrink();
+                }
+                text = widget.rotulosX![idx];
+                if (idx == 0) {
+                  padding = const EdgeInsets.only(top: 8.0, left: 16.0);
+                } else if (idx == widget.rotulosX!.length - 1) {
+                  padding = const EdgeInsets.only(top: 8.0, right: 16.0);
+                }
+              } else {
+                DateTime currentDate =
+                    widget.endDate == null ? DateTime.now() : widget.endDate!;
+                final d = currentDate.justDay(
+                    dayOffset: -widget.maxPair.x.toInt() + value.round());
+                text = appStateSettings["locale"] == "pt"
+                    ? diaMes(d)
+                    : getWordedDateShort(d, showTodayTomorrow: false);
+              }
 
               return MediaQuery(
                 data: MediaQuery.of(context)
                     .copyWith(textScaler: TextScaler.linear(1.0)),
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
+                  padding: padding,
                   child: TextFont(
                     maxLines: 1,
                     textAlign: TextAlign.center,
                     fontSize: 13,
                     text: text,
-                    textColor: dynamicPastel(context, widget.color,
-                            amount: 0.8, inverse: true)
-                        .withOpacity(0.5),
+                    textColor: cores(context).mu,
                   ),
                 ),
               );
             },
             reservedSize: 28,
-            interval: widget.maxPair.x / (getIsFullScreen(context) ? 6 : 4) == 0
-                ? 5
-                : widget.maxPair.x / (getIsFullScreen(context) ? 6 : 4),
+            interval: widget.rotulosX != null
+                ? (widget.rotulosX!.length <= 6
+                    ? 1
+                    : (widget.rotulosX!.length /
+                            (getIsFullScreen(context) ? 6 : 4))
+                        .ceilToDouble())
+                : (widget.maxPair.x / (getIsFullScreen(context) ? 6 : 4) == 0
+                    ? 5
+                    : widget.maxPair.x / (getIsFullScreen(context) ? 6 : 4)),
           ),
         ),
         leftTitles: AxisTitles(
@@ -230,6 +244,15 @@ class _LineChartState extends State<_LineChart> with WidgetsBindingObserver {
                 return SizedBox.shrink();
               }
 
+              String labelY = getWordedNumber(context,
+                  Provider.of<AllWallets>(context, listen: false), value);
+              if (appStateSettings["locale"] == "pt") {
+                labelY = labelY
+                    .replaceFirst(RegExp(r'^R\$(?=\d)'), 'R\$ ')
+                    .replaceAllMapped(RegExp(r'(\d)\.(\d+[KMB])'),
+                        (m) => '${m[1]},${m[2]}');
+              }
+
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: MediaQuery(
@@ -240,11 +263,8 @@ class _LineChartState extends State<_LineChart> with WidgetsBindingObserver {
                     maxLines: 1,
                     softWrap: false,
                     textAlign: TextAlign.end,
-                    text: getWordedNumber(context,
-                        Provider.of<AllWallets>(context, listen: false), value),
-                    textColor: dynamicPastel(context, widget.color,
-                            amount: 0.5, inverse: true)
-                        .withOpacity(0.3),
+                    text: labelY,
+                    textColor: cores(context).mu,
                     fontSize: 13,
                   ),
                 ),
@@ -370,15 +390,27 @@ class _LineChartState extends State<_LineChart> with WidgetsBindingObserver {
                   lightenPastel(widget.color, amount: 0.3)) {
                 return null;
               }
-              DateTime currentDate =
-                  widget.endDate == null ? DateTime.now() : widget.endDate!;
-              DateTime tooltipDate = currentDate.justDay(
-                  dayOffset: -widget.maxPair.x.toInt() + lineBarSpot.x.toInt());
+              String header;
+              if (widget.rotulosX != null) {
+                final idx = lineBarSpot.x.round();
+                header = (idx >= 0 && idx < widget.rotulosX!.length)
+                    ? widget.rotulosX![idx]
+                    : '';
+              } else {
+                DateTime currentDate =
+                    widget.endDate == null ? DateTime.now() : widget.endDate!;
+                DateTime tooltipDate = currentDate.justDay(
+                    dayOffset:
+                        -widget.maxPair.x.toInt() + lineBarSpot.x.toInt());
+                header = appStateSettings["locale"] == "pt"
+                    ? diaMes(tooltipDate)
+                    : getWordedDateShort(
+                        tooltipDate,
+                        includeYear: DateTime.now().year != tooltipDate.year,
+                      );
+              }
               return LineTooltipItem(
-                getWordedDateShort(
-                      tooltipDate,
-                      includeYear: DateTime.now().year != tooltipDate.year,
-                    ) +
+                header +
                     "\n" +
                     convertToMoney(
                         Provider.of<AllWallets>(context, listen: false),
@@ -405,14 +437,20 @@ class _LineChartState extends State<_LineChart> with WidgetsBindingObserver {
   FlGridData get gridData => FlGridData(
         show: true,
         // If the interval is equal to a really small number (almost 0, it freezes the app!)
-        verticalInterval: double.parse(
-                    (((widget.maxPair.x).abs() + (widget.minPair.x).abs()) /
-                            (getIsFullScreen(context) ? 6 : 4))
-                        .toStringAsFixed(5)) ==
-                0
-            ? 5
-            : ((widget.maxPair.x).abs() + (widget.minPair.x).abs()) /
-                (getIsFullScreen(context) ? 6 : 4),
+        verticalInterval: widget.rotulosX != null
+            ? (widget.rotulosX!.length <= 6
+                ? 1
+                : (widget.rotulosX!.length /
+                        (getIsFullScreen(context) ? 6 : 4))
+                    .ceilToDouble())
+            : double.parse(
+                        (((widget.maxPair.x).abs() + (widget.minPair.x).abs()) /
+                                (getIsFullScreen(context) ? 6 : 4))
+                            .toStringAsFixed(5)) ==
+                    0
+                ? 5
+                : ((widget.maxPair.x).abs() + (widget.minPair.x).abs()) /
+                    (getIsFullScreen(context) ? 6 : 4),
         // This interval needs more work, maybe follow the one from budgetHistoryLineGraph.dart
         // horizontalInterval:
         //     ((widget.maxPair.y).abs() + (widget.minPair.y).abs()) /
@@ -546,6 +584,7 @@ class LineChartWrapper extends StatelessWidget {
     this.isCurved = false,
     this.color,
     this.endDate,
+    this.rotulosX,
     this.verticalLineAt,
     this.horizontalLineAt,
     this.enableTouch = true,
@@ -560,6 +599,7 @@ class LineChartWrapper extends StatelessWidget {
   final bool isCurved;
   final Color? color;
   final DateTime? endDate;
+  final List<String>? rotulosX;
   final double? verticalLineAt;
   final double? horizontalLineAt;
   final bool enableTouch;
@@ -699,6 +739,7 @@ class LineChartWrapper extends StatelessWidget {
           color: color == null ? Theme.of(context).colorScheme.primary : color!,
           isCurved: isCurved,
           endDate: endDate,
+          rotulosX: rotulosX,
           verticalLineAt: verticalLineAt,
           horizontalLineAt: horizontalLineAt,
           enableTouch: enableTouch,

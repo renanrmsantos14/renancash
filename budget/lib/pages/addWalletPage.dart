@@ -33,7 +33,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:budget/colors.dart';
 import 'package:provider/provider.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 class AddWalletPage extends StatefulWidget {
   AddWalletPage({
@@ -76,7 +75,9 @@ class _AddWalletPageState extends State<AddWalletPage> {
   }
 
   void setSelectedColor(Color? color) {
-    selectedColor = color;
+    setState(() {
+      selectedColor = color;
+    });
     determineBottomButton();
     return;
   }
@@ -138,10 +139,9 @@ class _AddWalletPageState extends State<AddWalletPage> {
   void populateCurrencies() {
     Future.delayed(Duration.zero, () async {
       setState(() {
-        //Set to false because we can't save until we made some changes
-        canAddWallet = false;
         currencies = currenciesJSON;
       });
+      determineBottomButton();
     });
   }
 
@@ -260,8 +260,8 @@ class _AddWalletPageState extends State<AddWalletPage> {
           title: "maximum-precision".tr(),
           description: "maximum-precision-description".tr(),
           icon: appStateSettings["outlinedIcons"]
-              ? Symbols.decimal_increase_sharp
-              : Symbols.decimal_increase_rounded,
+              ? Icons.pin_outlined
+              : Icons.pin_rounded,
         ),
       );
     determineBottomButton();
@@ -479,16 +479,21 @@ class _AddWalletPageState extends State<AddWalletPage> {
                         currencyKey: selectedCurrency,
                         initialBalance,
                         decimals: selectedDecimals,
+                        allDecimals: true,
                       ),
                       placeholder: convertToMoney(
                         Provider.of<AllWallets>(context),
                         currencyKey: selectedCurrency,
                         initialBalance,
+                        decimals: selectedDecimals,
+                        allDecimals: true,
                       ),
                       showPlaceHolderWhenTextEquals: convertToMoney(
                         Provider.of<AllWallets>(context),
                         currencyKey: selectedCurrency,
                         0,
+                        decimals: selectedDecimals,
+                        allDecimals: true,
                       ),
                       onTap: () {
                         openEnterInitialBalanceBottomSheet();
@@ -583,12 +588,11 @@ class _AddWalletPageState extends State<AddWalletPage> {
                     openDecimalPrecisionPopup();
                   },
                   title: "decimal-precision".tr(),
-                  description: selectedDecimals == 2
-                      ? null
-                      : "$selectedDecimals casas decimais",
+                  description:
+                      "$selectedDecimals ${selectedDecimals == 1 ? 'casa decimal' : 'casas decimais'}",
                   icon: appStateSettings["outlinedIcons"]
-                      ? Symbols.decimal_increase_sharp
-                      : Symbols.decimal_increase_rounded,
+                      ? Icons.pin_outlined
+                      : Icons.pin_rounded,
                 ),
               ],
             ),
@@ -1001,6 +1005,7 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
           color: getColor(context, "lightDarkAccentHeavyLight"),
           borderRadius: 12,
           child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
             decoration: BoxDecoration(
               border: Border.all(
                 color: HexColor(wallet?.colour,
@@ -1012,16 +1017,19 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
             ),
             padding: const EdgeInsetsDirectional.symmetric(
                 horizontal: 12, vertical: 8),
-            child: Padding(
-              padding: const EdgeInsetsDirectional.only(bottom: 2),
-              child: TextFont(
-                text: (wallet?.name ?? "select-account".tr()) +
-                    (wallet != null
-                        ? "\n" + (wallet.currency ?? "").toUpperCase()
-                        : ""),
-                fontSize: 17,
-                textAlign: TextAlign.center,
-                maxLines: 3,
+            child: Center(
+              widthFactor: 1,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(bottom: 2),
+                child: TextFont(
+                  text: (wallet?.name ?? "select-account".tr()) +
+                      (wallet != null
+                          ? "\n" + (wallet.currency ?? "").toUpperCase()
+                          : ""),
+                  fontSize: 17,
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                ),
               ),
             ),
           ),
@@ -1263,7 +1271,7 @@ class _TransferBalancePopupState extends State<TransferBalancePopup> {
                     });
                   },
                   child: Padding(
-                    padding: const EdgeInsetsDirectional.all(8.0),
+                    padding: const EdgeInsetsDirectional.all(10.0),
                     child: AnimatedRotation(
                       duration: Duration(milliseconds: 1200),
                       turns: isNegative ? 0.5 : 1,

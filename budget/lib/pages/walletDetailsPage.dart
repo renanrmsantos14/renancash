@@ -325,7 +325,7 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
             saldo: _saldosReais[widget.wallet?.walletPk] ?? s.data?.total ?? 0,
             entradas: (en.data?.total ?? 0).abs(),
             saidas: (sa.data?.total ?? 0).abs(),
-            formatar: (v) => convertToMoney(allWallets, v),
+            formatar: (v) => convertToMoney(allWallets, v, allDecimals: true),
             periodo: getLabelOfSelectedCustomPeriod(""),
             onPeriodo: selectAllSpendingPeriod,
             onSaldo: () => abrir(null),
@@ -2859,6 +2859,7 @@ class AmountSpentEntryRow extends StatelessWidget {
                           Provider.of<AllWallets>(context),
                           x,
                           finalNumber: totalSpent.abs(),
+                          allDecimals: true,
                         ));
                 // Linha plana de 56 px: rótulo e quantidade à esquerda, valor à direita.
                 return Tappable(
