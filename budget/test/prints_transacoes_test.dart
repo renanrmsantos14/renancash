@@ -281,14 +281,20 @@ Future<void> _montarBanco({bool comDados = true}) async {
 }
 
 Future<void> _fecharBanco(WidgetTester t) async {
+  _diag('fecharBanco inicio');
   await t.pumpWidget(const SizedBox());
   await t.pump();
+  _diag('fecharBanco pump ok');
   await t.runAsync(() async {
     if (_bancoAberto) {
-      await database.close();
+      // Uma consulta que a página deixou aberta faz o close() esperar para sempre.
+      await database.close().timeout(const Duration(seconds: 5), onTimeout: () {
+        _diag('close() estourou 5s');
+      });
       _bancoAberto = false;
     }
   });
+  _diag('fecharBanco fim');
 }
 
 Future<void> _assentar(WidgetTester t) async {
