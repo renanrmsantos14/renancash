@@ -17,7 +17,17 @@ import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 
 class MeuBancoPage extends StatefulWidget {
-  const MeuBancoPage({Key? key}) : super(key: key);
+  const MeuBancoPage({
+    Key? key,
+    this.urlInicial,
+    this.pareadoInicial,
+    this.contasConectadas,
+  }) : super(key: key);
+
+  // Injetáveis para os testes de UI não dependerem de token/URL reais nem de rede.
+  final String? urlInicial;
+  final bool? pareadoInicial;
+  final Widget? contasConectadas;
 
   @override
   State<MeuBancoPage> createState() => _MeuBancoPageState();
@@ -35,8 +45,13 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
   @override
   void initState() {
     super.initState();
-    _carregar();
-    meuBancoAtualizarFila();
+    if (widget.urlInicial != null || widget.pareadoInicial != null) {
+      _url.text = widget.urlInicial ?? meuBancoUrlPadrao;
+      _temToken = widget.pareadoInicial ?? false;
+    } else {
+      _carregar();
+      meuBancoAtualizarFila();
+    }
   }
 
   Future<void> _carregar() async {
@@ -278,7 +293,8 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
             padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
             child: _status(),
           ),
-          _secao("Contas conectadas", [const ContasConectadas()]),
+          _secao("Contas conectadas",
+              [widget.contasConectadas ?? const ContasConectadas()]),
           if (!kIsWeb)
             _secao("Pareamento", [
               _campos(),

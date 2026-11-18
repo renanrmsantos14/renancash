@@ -9,7 +9,16 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class MeuBancoParearPage extends StatefulWidget {
-  const MeuBancoParearPage({Key? key}) : super(key: key);
+  const MeuBancoParearPage({
+    Key? key,
+    this.erroCameraParaTeste = false,
+    this.visorParaTeste,
+    this.linkInicial,
+  }) : super(key: key);
+
+  final bool erroCameraParaTeste;
+  final Widget? visorParaTeste;
+  final String? linkInicial;
 
   @override
   State<MeuBancoParearPage> createState() => _MeuBancoParearPageState();
@@ -18,6 +27,12 @@ class MeuBancoParearPage extends StatefulWidget {
 class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
   final TextEditingController _link = TextEditingController();
   bool _concluido = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.linkInicial != null) _link.text = widget.linkInicial!;
+  }
 
   @override
   void dispose() {
@@ -60,6 +75,20 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
     _usar(p);
   }
 
+  Widget _erroCamera(BuildContext context) => ColoredBox(
+        color: cores(context).surf,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+                "Não foi possível abrir a câmera. Confira a permissão ou cole o link abaixo.",
+                textAlign: TextAlign.center,
+                style: EdTexto.corpo(context)
+                    .copyWith(color: cores(context).mu)),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return PageFramework(
@@ -80,22 +109,14 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
             borderRadius: BorderRadius.circular(12),
             child: SizedBox(
               height: 320,
-              child: MobileScanner(
-                onDetect: _aoDetectar,
-                errorBuilder: (context, erro, _) => ColoredBox(
-                  color: cores(context).surf,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                          "Não foi possível abrir a câmera. Confira a permissão ou cole o link abaixo.",
-                          textAlign: TextAlign.center,
-                          style: EdTexto.corpo(context)
-                              .copyWith(color: cores(context).mu)),
-                    ),
-                  ),
-                ),
-              ),
+              child: widget.visorParaTeste ??
+                  (widget.erroCameraParaTeste
+                      ? _erroCamera(context)
+                      : MobileScanner(
+                          onDetect: _aoDetectar,
+                          errorBuilder: (context, erro, _) =>
+                              _erroCamera(context),
+                        )),
             ),
           ),
         ),

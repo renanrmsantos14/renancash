@@ -12,16 +12,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class ArrumarDadosPage extends StatelessWidget {
-  const ArrumarDadosPage({super.key});
+  const ArrumarDadosPage({super.key, this.conteudo});
+  final Widget? conteudo;
 
   @override
-  Widget build(BuildContext context) => const PageFramework(
+  Widget build(BuildContext context) => PageFramework(
         dragDownToDismiss: true,
         title: "Arrumar dados",
         listWidgets: [
           Padding(
-            padding: EdgeInsetsDirectional.fromSTEB(20, 0, 20, 24),
-            child: ArrumarDados(),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 24),
+            child: conteudo ?? const ArrumarDados(),
           ),
         ],
       );
