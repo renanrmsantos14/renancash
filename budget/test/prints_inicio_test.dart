@@ -603,6 +603,7 @@ void main() {
           (nome: 'Dinheiro na carteira', saldo: 185.00),
           (nome: 'Caixinha viagem', saldo: 450.00),
         ],
+        bancos: const <BancoInicio>[],
         semDados: false,
       );
       await t.pumpWidget(MaterialApp(

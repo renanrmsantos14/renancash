@@ -5,8 +5,6 @@
 import 'dart:io';
 
 import 'package:budget/pages/pendenciasPage.dart';
-import 'package:budget/struct/editorial.dart';
-import 'package:budget/struct/mbSync/casosComuns.dart';
 import 'package:budget/struct/mbSync/classificar.dart';
 import 'package:budget/struct/mbSync/classificarDados.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
