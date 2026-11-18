@@ -161,42 +161,12 @@ AllWallets _allWallets({bool incluirArquivadaNaLista = true}) => AllWallets(
       indexedByPk: {for (final w in _todasCarteiras) w.walletPk: w},
     );
 
-bool _bancoAberto = false;
-
-// DIAGNOSTICO (remover): o stdout do teste so aparece no fim, entao o progresso vai para arquivo.
-void _diag(String m) => File('/tmp/prints_diag.log').writeAsStringSync(
-    '${DateTime.now().toIso8601String()} $m\n',
-    mode: FileMode.append);
-
-const _variante = String.fromEnvironment('VARIANTE');
-
-bool _bancoQuebrado = false;
-
-/// Um banco que travou uma vez trava as próximas: falha logo, com o passo no log.
+/// Banco em memória novo por teste. Não é fechado: o `close()` espera para sempre uma consulta
+/// que a AddTransactionPage deixa aberta e travava o `flutter test` no fim do teste.
 Future<void> _prepararBanco({bool comDados = true}) async {
-  _diag('prepararBanco inicio');
-  if (_bancoQuebrado) throw StateError('banco travou em teste anterior');
-  try {
-    await _montarBanco(comDados: comDados).timeout(const Duration(seconds: 25));
-  } on TimeoutException {
-    _bancoQuebrado = true;
-    rethrow;
-  }
-}
-
-Future<void> _montarBanco({bool comDados = true}) async {
-  if (_bancoAberto) {
-    _diag('fechando banco');
-    await database.close();
-    _diag('banco fechado');
-    _bancoAberto = false;
-  }
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   database = FinanceDatabase(NativeDatabase.memory());
-  _bancoAberto = true;
-  print('>>> db: tabelas');
-  _diag('db tabelas');
   await mbCriarTabelas();
-  print('>>> db: estado');
   await mbGravarEstado({
     'contas': jsonEncode([
       {
@@ -213,20 +183,16 @@ Future<void> _montarBanco({bool comDados = true}) async {
       },
     ]),
   });
-  print('>>> db: carteiras');
   for (final w in _todasCarteiras) {
     await database.into(database.wallets).insert(w);
   }
   for (final c in _cats.values) {
     await database.into(database.categories).insert(c);
   }
-  print('>>> db: categorias ok');
   final agora = DateTime.now();
   final hoje = DateTime(agora.year, agora.month, agora.day, 12);
   final ontem = hoje.subtract(const Duration(days: 1));
-  print('>>> db: orcamento');
   await mbGarantirOrcamentoGeral(agora: hoje);
-  print('>>> db: meta');
   await database.into(database.objectives).insert(ObjectivesCompanion.insert(
         objectivePk: const Value('meta1'),
         name: 'Reserva de Emergência',
@@ -238,8 +204,6 @@ Future<void> _montarBanco({bool comDados = true}) async {
         archived: const Value(false),
         type: const Value(ObjectiveType.goal),
       ));
-  print('>>> db: transacoes');
-  _diag('db transacoes');
   if (!comDados) return;
   final lista = [
     _tx('t1', 'Pão de Açúcar', -182.30, hoje,
@@ -280,26 +244,8 @@ Future<void> _montarBanco({bool comDados = true}) async {
   }
 }
 
-Future<void> _fecharBanco(WidgetTester t) async {
-  _diag('fecharBanco inicio');
-  await t.pumpWidget(const SizedBox());
-  await t.pump();
-  _diag('fecharBanco pump ok');
-  await t.runAsync(() async {
-    if (_bancoAberto) {
-      // Uma consulta que a página deixou aberta faz o close() esperar para sempre.
-      await database.close().timeout(const Duration(seconds: 5), onTimeout: () {
-        _diag('close() estourou 5s');
-      });
-      _bancoAberto = false;
-    }
-  });
-  _diag('fecharBanco fim');
-}
-
 Future<void> _assentar(WidgetTester t) async {
   for (var i = 0; i < 8; i++) {
-    _diag('assentar $i');
     await t.runAsync(() => Future.delayed(const Duration(milliseconds: 80)));
     await t.pump(const Duration(milliseconds: 100));
   }
@@ -334,56 +280,26 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
     Future<void> Function(WidgetTester)? aposMontar}) async {
   // ignore: avoid_print
   print('>>> PRINT $nome $modo');
-  _diag('PRINT $nome $modo');
-  WidgetsBinding.instance.addPersistentFrameCallback((_) => _diag('quadro'));
   appStateSettings = _ajustes(modo);
   t.view.physicalSize = Size(largura * 2, altura * 2);
   t.view.devicePixelRatio = 2;
   addTearDown(t.view.reset);
-  _diag('pumpWidget');
   await t.pumpWidget(_envolverApp(modo, corpo,
       scaffold: scaffold, versaoCanto: versaoCanto));
-  _diag('assentar');
   await _assentar(t);
-  _diag('assentado');
   if (aposMontar != null) {
     await aposMontar(t);
     await _assentar(t);
   }
-  _diag('golden');
   await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
           '../../.verificacao/prints/transacoes_${nome}_$modo.png'));
-  _diag('golden ok');
+  // Desmonta a página e deixa os Future.delayed dela terminarem antes de o teste fechar.
   await t.pumpWidget(const SizedBox.shrink());
-  _diag('desmontado');
-  // Deixa os Future.delayed da página e as consultas do banco terminarem antes de o teste fechar.
   await t.pump(const Duration(seconds: 5));
-  _diag('pump final');
   await t.runAsync(() => Future.delayed(const Duration(milliseconds: 200)));
-  _diag('runAsync final');
   await t.pump();
-  _diag('b2 pump');
-  await t.idle();
-  _diag('b3 idle');
-  await t.pumpWidget(Container(key: UniqueKey()));
-  _diag('b4 pumpWidget vazio');
-  await t.pump(const Duration(seconds: 1));
-  _diag('b5 pump 1s micro=${t.binding.microtaskCount} frame=${t.binding.hasScheduledFrame}');
-  // ignore: invalid_use_of_protected_member
-  t.binding.asyncBarrier();
-  _diag('b6 barrier');
-  await t.pumpWidget(const Text('fim', textDirection: TextDirection.ltr));
-  _diag('b7 texto final');
-  await t.pump(const Duration(seconds: 10));
-  _diag('b8 pump 10s');
-  if (_variante == 'A' && _bancoAberto) {
-    await t.runAsync(() => database.close());
-    _bancoAberto = false;
-    _diag('banco fechado no fim');
-  }
-  await _fecharBanco(t);
 }
 
 Future<DetalheModelo?> _detalheFalso(String pk) async => DetalheModelo(
@@ -404,7 +320,6 @@ Future<DetalheModelo?> _detalheFalso(String pk) async => DetalheModelo(
     );
 
 void main() {
-  tearDown(() => _diag('tearDown'));
   setUpAll(() async {
     if (Platform.isLinux) {
       open.overrideFor(
@@ -537,16 +452,14 @@ void main() {
       );
     });
 
-    testWidgets('print AddTransactionPage nova $modo',
-        skip: _pular, semanticsEnabled: _variante != 'B', (t) async {
+    testWidgets('print AddTransactionPage nova $modo', skip: _pular,
+        (t) async {
       await t.runAsync(() => _prepararBanco(comDados: true));
       await _print(
         t,
         modo,
         'add_nova',
-        _variante == 'E'
-            ? const Text('ok')
-            : AddTransactionPage(
+        AddTransactionPage(
           startInitialAddTransactionSequence: false,
           routesToPopAfterDelete: RoutesToPopAfterDelete.None,
         ),

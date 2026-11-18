@@ -43,30 +43,11 @@ jobs:
       - name: Testes
         run: flutter test
 
-      - name: Diagnóstico de variantes
-        if: always()
-        run: |
-          for v in Z; do
-            rm -f /tmp/prints_diag.log
-            PRINTS=1 timeout 70 flutter test test/prints_transacoes_test.dart --plain-name "print AddTransactionPage nova claro" --update-goldens --reporter expanded --dart-define=VARIANTE=$v > /tmp/var_$v.log 2>&1 || echo "variante $v rc=$?"
-            tail -5 /tmp/prints_diag.log || true
-            grep -v 'Easy Localization' /tmp/var_$v.log | tail -70 | cut -c1-200 || true
-          done
-
       - name: Prints visuais
         if: always()
         run: |
           mkdir -p ../.verificacao/prints
-          # Um arquivo por vez e com limite de tempo: um print travado não derruba o runner.
-          rc=0
-          for f in $(ls test/prints_*_test.dart); do
-            PRINTS=1 timeout 100 flutter test "$f" --update-goldens || rc=$?
-          done
-          exit $rc
-
-      - name: Diagnóstico dos prints
-        if: always()
-        run: tail -60 /tmp/prints_diag.log || true
+          PRINTS=1 flutter test $(ls test/prints_*_test.dart) --update-goldens
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
