@@ -199,7 +199,7 @@ Future<void> _prepararBanco({bool comDados = true}) async {
         name: 'Reserva de Emergência',
         amount: 10000,
         order: 0,
-        dateCreated: DateTime(2026, 1, 1),
+        dateCreated: Value(DateTime(2026, 1, 1)),
         income: const Value(true),
         pinned: const Value(false),
         archived: const Value(false),
