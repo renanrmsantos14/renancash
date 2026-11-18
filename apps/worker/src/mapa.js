@@ -58,7 +58,24 @@ export function mapearConta(c, banco, itemId, ts) {
 
 // Sinal pelo tipo (não confia no sinal da API): conta corrente, saída negativa e entrada positiva;
 // cartão, compra positiva e estorno/pagamento negativo. Data depois de hoje = parcela futura (scheduled).
-export function mapearTransacao(t, conta, hoje, ts) {
+const soDigitos = (v) => (v ? String(v).replace(/\D/g, "") : "");
+
+// Outra ponta da transação (paymentData): quem recebeu numa saída, quem pagou numa entrada. `entre_minhas` = 1 quando o
+// documento dela é o do titular (CPF/CNPJ completo dos dois lados), 0 quando é outro, null quando não dá para saber.
+export function contraparteDe(t, docTitular) {
+  const pd = t.paymentData;
+  if (!pd) return { contraparte: null, metodo: null, entre_minhas: null };
+  const outra = t.type === "DEBIT" ? pd.receiver : pd.payer;
+  const doc = soDigitos(outra?.documentNumber?.value);
+  const meu = soDigitos(docTitular);
+  return {
+    contraparte: outra?.name?.trim() || null,
+    metodo: pd.paymentMethod ?? null,
+    entre_minhas: doc.length >= 11 && meu.length >= 11 ? (doc === meu ? 1 : 0) : null,
+  };
+}
+
+export function mapearTransacao(t, conta, hoje, ts, docTitular = null) {
   const abs = Math.abs(num(t.amount) ?? 0);
   const saida = t.type === "DEBIT";
   const date = dia(t.date);
@@ -76,6 +93,10 @@ export function mapearTransacao(t, conta, hoje, ts) {
     category: t.category ?? null,
     merchant: t.merchant?.name || t.merchant?.businessName || null,
     scheduled: date > hoje ? 1 : 0,
+    bill_id: m?.billId ?? null,
+    bill_month: /^\d{4}-\d{2}/.test(m?.billForecastDate ?? "") ? m.billForecastDate.slice(0, 7) : null,
+    ...contraparteDe(t, docTitular),
+    tipo_credito: m?.otherCreditsType || m?.feeType || null,
     updated_at: ts,
   };
 }
@@ -107,13 +128,29 @@ export function mapearFaturas(contaPluggy, bills) {
 
 // Investimentos de uma conexão, para o app somar no patrimônio. Resgate total (TOTAL_WITHDRAWAL) e sem saldo ficam fora.
 // `banco`: o da conexão ou, no Meu Pluggy, o nome da conta corrente da mesma conexão sem o final do número.
-export function mapearInvestimentos(lista, banco, contasDaConexao) {
+export function mapearInvestimentos(lista, banco, contasDaConexao, aplicadoPorId = new Map()) {
   const nomeBanco = banco || contasDaConexao.find((c) => c.type === "BANK")?.name?.replace(/\s*[·#].*$/, "") || null;
   // Saldo bruto (amount), o mesmo que o app do banco mostra; o balance é o líquido.
   return lista
     .map((i) => ({ i, saldo: typeof i.amount === "number" && Number.isFinite(i.amount) ? i.amount : num(i.balance) }))
     .filter(({ i, saldo }) => i.status !== "TOTAL_WITHDRAWAL" && saldo != null)
-    .map(({ i, saldo }) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo, banco: nomeBanco, ...detalhesInvestimento(i, saldo) }));
+    .map(({ i, saldo }) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo, banco: nomeBanco, ...detalhesInvestimento(aplicadoPorId.has(String(i.id)) && num(i.amountOriginal) == null ? { ...i, amountOriginal: aplicadoPorId.get(String(i.id)) } : i, saldo) }));
+}
+
+// Investimentos sem amountOriginal (comum no Open Finance) que valem a consulta das movimentações.
+export const semAplicado = (lista) => lista.filter((i) => i.status !== "TOTAL_WITHDRAWAL" && num(i.amountOriginal) == null && i.id != null);
+
+// Aplicado pelas movimentações: compras (BUY) menos resgates (SELL). O resgate inclui o que já rendeu, então depois de um
+// resgate parcial o valor fica abaixo do real; resultado <= 0 ou sem compra nenhuma = null (não dá para saber).
+export function aplicadoPelasMovimentacoes(movs) {
+  let compras = 0, resgates = 0, temCompra = false;
+  for (const m of movs || []) {
+    const v = Math.abs(num(m.amount) ?? num(m.netAmount) ?? 0);
+    if (m.type === "BUY") { compras += v; temCompra = true; }
+    else if (m.type === "SELL") resgates += v;
+  }
+  const aplicado = Math.round((compras - resgates) * 100) / 100;
+  return temCompra && aplicado > 0 ? aplicado : null;
 }
 
 // O que o Pluggy informa além do saldo (objeto Investment). Campo que o banco não manda fica null e o app esconde.

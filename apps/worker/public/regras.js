@@ -40,7 +40,8 @@ export const traduzir = (c) => (c ? CATEGORIAS[c] || c : "Sem categoria");
 // Não é gasto: pagamento de fatura, investimentos/poupança e transferência entre minhas contas.
 export const CAT_FORA = /credit card payment|same person transfer|investment|fixed income|mutual funds|variable income|savings|pension|margin/i;
 export const DESC_FORA = /pagamento (de |da )?fatura|pgto\.? ?fatura|pagamento recebido|aplica[cç][aã]o|resgate|\bcdb\b|\blci\b|\blca\b|poupan[cç]a|porquinho|tesouro direto/i;
-export const regraAuto = (t) => CAT_FORA.test(t.category || "") || DESC_FORA.test(t.description || "");
+// entre_minhas = 1: o Pluggy mostra que a outra ponta é o próprio titular (CPF igual ao do /identity).
+export const regraAuto = (t) => t.entre_minhas === 1 || CAT_FORA.test(t.category || "") || DESC_FORA.test(t.description || "");
 // O ajuste feito no painel (gasto = 1 ou 0) vale mais que a regra automática, nos dois sentidos.
 export const naoEhGasto = (t) => (t.ajuste_gasto == null ? regraAuto(t) : !t.ajuste_gasto);
 

@@ -57,7 +57,7 @@ jobs:
       - run: pnpm -r typecheck
 
       - name: Migração do D1 (idempotente)
-        run: pnpm --filter @meu-banco/worker migrar:fase2 -- --remote
+        run: pnpm --filter @meu-banco/worker migrar -- --remote
 
       # O Worker foi renomeado de meu-banco para renancash no painel (os secrets vão junto).
       # Sem o rename, o deploy criaria um "renancash" vazio e o redirecionamento tomaria o lugar do antigo.

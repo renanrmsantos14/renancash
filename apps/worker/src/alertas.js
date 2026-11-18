@@ -98,6 +98,26 @@ export function alertasFatura({ contas, hoje }) {
   return out;
 }
 
+// ---------- Crédito do cartão: rotativo, fatura parcelada, anuidade ----------
+
+const DIAS_CREDITO = 10;
+const AVISO_CREDITO = {
+  REVOLVING_CREDIT: ["Cartão no rotativo", "Parte da fatura não foi paga e entrou no crédito rotativo, que tem os juros mais altos."],
+  BILL_INSTALLMENT: ["Fatura parcelada", "A fatura do cartão foi parcelada; as parcelas têm juros."],
+  ANNUAL_FEE: ["Anuidade cobrada", "O cartão cobrou anuidade. Vale pedir isenção ao banco."],
+};
+
+// Um aviso por lançamento recente que o banco marca como rotativo, fatura parcelada ou anuidade (creditCardMetadata).
+export function alertasCredito({ transacoes, hoje }) {
+  const desde = somarDias(hoje, -DIAS_CREDITO);
+  return transacoes
+    .filter((t) => AVISO_CREDITO[t.tipo_credito] && t.date >= desde && !t.scheduled)
+    .map((t) => {
+      const [titulo, texto] = AVISO_CREDITO[t.tipo_credito];
+      return { chave: `credito:${t.id}`, titulo, corpo: `${brl.format(Math.abs(t.amount))} em ${dm(t.date)}. ${texto}` };
+    });
+}
+
 // ---------- Queda de conexão ----------
 
 // Uma notificação por queda: `avisos` = conexões com problema agora, `avisadas` = ids já notificados (o app limpa o id quando volta).

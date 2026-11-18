@@ -11,6 +11,7 @@ import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
+import 'package:budget/struct/mbSync/extrasTransacao.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/projetarLocal.dart';
 import 'package:budget/struct/mbSync/registro.dart';
@@ -318,7 +319,12 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     // Uma transação só: 1 commit em vez de N e 1 notificação aos streams (as telas recarregavam a cada insert).
     await database.transaction(() => _aplicar(resultado));
 
+    final extras = mbMesclarExtras(
+        mbExtrasDeTexto(await mbLerEstado(chaveExtrasTransacao)),
+        json['transacoes'] as List? ?? const [],
+        completo: json['completo'] == true);
     final estado = <String, String>{
+      chaveExtrasTransacao: jsonEncode(extras),
       'contas': jsonEncode([
         for (final c in mbHerdarBanco(json['contas'] as List? ?? const []))
           // Conta de conexão removida segue no pull (mapeia transações antigas), mas não aparece.

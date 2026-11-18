@@ -35,3 +35,26 @@ test("investimentos sem permissão (403) não viram aviso nem derrubam a sincron
   const log = await amb.env.DB.prepare("SELECT ok, message FROM sync_log").first();
   assert.deepEqual([log.ok, log.message], [1, "OK"]);
 });
+
+test("investimento sem amountOriginal busca as movimentações e manda o aplicado", async () => {
+  const pedidos = [];
+  const amb = criarAmbiente(ENV);
+  await registrarItem(amb.env.DB, ID, new Date(Date.now() - 100 * 60_000).toISOString());
+  const token = await criarAparelho(amb.env);
+  simularPluggy((u) => {
+    pedidos.push(u.pathname);
+    if (u.pathname.startsWith("/items/")) return { id: ID, status: "UPDATED", connector: { name: "Meu Pluggy" } };
+    if (u.pathname === "/accounts") return { results: [{ id: "cc", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Inter", balance: 10 }] };
+    if (u.pathname === "/investments") return { totalPages: 1, results: [
+      { id: "com", name: "CDB A", type: "FIXED_INCOME", amount: 1100, amountOriginal: 1000, status: "ACTIVE" },
+      { id: "sem", name: "CDB B", type: "FIXED_INCOME", amount: 2050, status: "ACTIVE" },
+    ] };
+    if (u.pathname === "/investments/sem/transactions") return { results: [{ type: "BUY", amount: 2000 }] };
+    return { results: [] };
+  });
+  await amb.worker.scheduled({ scheduledTime: Date.UTC(2026, 10, 9, 12, 7) }, amb.env, amb.ctx);
+  await amb.esperar();
+  const corpo = await (await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
+  assert.deepEqual(corpo.investimentos.map((i) => [i.id, i.aplicado, i.rendimento]), [["com", 1000, 100], ["sem", 2000, 50]]);
+  assert.ok(!pedidos.includes("/investments/com/transactions")); // com amountOriginal não consulta
+});

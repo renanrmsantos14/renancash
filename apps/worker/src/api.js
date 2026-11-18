@@ -122,6 +122,12 @@ export class ApiCliente {
   // Apaga a conexão no Pluggy (credenciais e dados do item).
   removerItem(id) { return this.#autenticado("DELETE", `/items/${encodeURIComponent(id)}`); }
 
+  // CPF/CNPJ do titular da conexão (só para reconhecer transferência entre as próprias contas; não é guardado).
+  async documentoTitular(itemId) {
+    const r = await this.obter("/identity", { itemId });
+    return r?.document || r?.taxNumber || null;
+  }
+
   async contas(itemId) { return (await this.obter("/accounts", { itemId }))?.results || []; }
 
   // Investimentos da conexão (CDB, fundos, ações...). Página de 500; para depois de `maxPaginas`.
@@ -133,6 +139,11 @@ export class ApiCliente {
       if (!r?.results?.length || page >= (r.totalPages || 1)) break;
     }
     return todos;
+  }
+
+  // Movimentações de um investimento (BUY, SELL, TAX, TRANSFER). Uma página de 500 basta para uso pessoal.
+  async movimentosInvestimento(id) {
+    return (await this.obter(`/investments/${encodeURIComponent(id)}/transactions`, { pageSize: 500 }))?.results || [];
   }
 
   async faturas(accountId) { return (await this.obter("/bills", { accountId, pageSize: 24 }))?.results || []; }

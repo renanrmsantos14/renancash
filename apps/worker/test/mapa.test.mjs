@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, detalhesInvestimento } from "../src/mapa.js";
+import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, detalhesInvestimento, aplicadoPelasMovimentacoes, contraparteDe } from "../src/mapa.js";
 import { valorGasto, valorParcela } from "../public/regras.js";
 
 const HOJE = "2026-11-08", TS = "2026-11-08T12:00:00.000Z";
@@ -139,4 +139,40 @@ test("investimento sem amountOriginal usa amountProfit; sem nada fica null; pref
   assert.equal(d.rentabilidade_12m, 11.2);
   const vazio = detalhesInvestimento({ balance: 10 }, 10);
   assert.deepEqual([vazio.aplicado, vazio.rendimento, vazio.impostos, vazio.taxa, vazio.vencimento], [null, null, null, null, null]);
+});
+
+test("aplicado pelas movimentações: compras menos resgates; sem compra ou <= 0 é null", () => {
+  assert.equal(aplicadoPelasMovimentacoes([{ type: "BUY", amount: 1000 }, { type: "BUY", amount: 500 }, { type: "SELL", amount: 200 }, { type: "TAX", amount: 3 }]), 1300);
+  assert.equal(aplicadoPelasMovimentacoes([{ type: "SELL", amount: 10 }]), null);
+  assert.equal(aplicadoPelasMovimentacoes([{ type: "BUY", amount: 100 }, { type: "SELL", amount: 150 }]), null);
+  assert.equal(aplicadoPelasMovimentacoes(null), null);
+  // amountOriginal do Pluggy vence; o das movimentações só entra quando ele falta
+  const lista = [{ id: "a", name: "CDB", amount: 1100, amountOriginal: 1000 }, { id: "b", name: "LCI", amount: 520 }];
+  const m = mapearInvestimentos(lista, "Inter", [], new Map([["a", 1], ["b", 500]]));
+  assert.deepEqual(m.map((i) => [i.aplicado, i.rendimento]), [[1000, 100], [500, 20]]);
+});
+
+test("transação: contraparte do Pix, entre minhas contas, fatura prevista e tipo de crédito", () => {
+  const conta = { id: "cc", type: "BANK" };
+  const pix = {
+    id: "p", date: "2026-11-10", description: "PIX ENVIADO", amount: 50, type: "DEBIT", status: "POSTED",
+    paymentData: { paymentMethod: "PIX", payer: { name: "Eu" }, receiver: { name: " Maria Souza ", documentNumber: { type: "CPF", value: "111.222.333-44" } } },
+  };
+  const t = mapearTransacao(pix, conta, "2026-11-18", "ts", "11122233355");
+  assert.deepEqual([t.contraparte, t.metodo, t.entre_minhas], ["Maria Souza", "PIX", 0]);
+  assert.equal(contraparteDe(pix, "111.222.333-44").entre_minhas, 1);
+  assert.equal(contraparteDe(pix, null).entre_minhas, null); // sem /identity
+  const recebido = { ...pix, type: "CREDIT", paymentData: { payer: { name: "João", documentNumber: { value: "***.222.333-**" } } } };
+  assert.deepEqual(Object.values(contraparteDe(recebido, "11122233344")), ["João", null, null]); // CPF mascarado: não dá para saber
+  const cartao = mapearTransacao({ id: "c", date: "2026-11-10", amount: 30, type: "DEBIT", creditCardMetadata: { billId: "b1", billForecastDate: "2026-12", otherCreditsType: "REVOLVING_CREDIT" } }, { id: "k", type: "CREDIT" }, "2026-11-18", "ts");
+  assert.deepEqual([cartao.bill_id, cartao.bill_month, cartao.tipo_credito, cartao.contraparte], ["b1", "2026-12", "REVOLVING_CREDIT", null]);
+});
+
+test("transferência para o próprio titular não é gasto", async () => {
+  const { naoEhGasto, valorGasto } = await import("../public/regras.js");
+  const t = { amount: -100, description: "PIX ENVIADO JOSE", entre_minhas: 1, ajuste_gasto: null };
+  assert.equal(naoEhGasto(t), true);
+  assert.equal(valorGasto(t, false), 0);
+  assert.equal(naoEhGasto({ ...t, ajuste_gasto: 1 }), false); // o usuário manda
+  assert.equal(naoEhGasto({ ...t, entre_minhas: 0 }), false);
 });

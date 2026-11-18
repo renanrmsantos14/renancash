@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   available_limit REAL,
   due_date        TEXT,
   closing_date    TEXT,
+  minimum_payment REAL,                   -- pagamento mínimo da fatura aberta
+  overdraft_limit REAL,                   -- cheque especial contratado
+  overdraft_used  REAL,                   -- cheque especial em uso
+  auto_invested   REAL,                   -- saldo aplicado automaticamente
   bank            TEXT,
   item_id         TEXT,
   updated_at      TEXT NOT NULL
@@ -27,6 +31,12 @@ CREATE TABLE IF NOT EXISTS transactions (
   category    TEXT,
   merchant    TEXT,
   scheduled   INTEGER NOT NULL DEFAULT 0, -- 1 = parcela futura
+  bill_id     TEXT,                       -- fatura do Pluggy (creditCardMetadata.billId)
+  bill_month  TEXT,                       -- AAAA-MM da fatura em que a compra cai (billForecastDate)
+  contraparte TEXT,                       -- nome de quem recebeu/pagou (paymentData)
+  metodo      TEXT,                       -- PIX, TED, BOLETO...
+  entre_minhas INTEGER,                   -- 1 = a outra ponta é o próprio titular
+  tipo_credito TEXT,                      -- REVOLVING_CREDIT, BILL_INSTALLMENT, ANNUAL_FEE...
   updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
@@ -76,6 +86,8 @@ CREATE TABLE IF NOT EXISTS pluggy_items (
   status     TEXT,                        -- status do item no Pluggy (UPDATED, LOGIN_ERROR, ...)
   criado     TEXT NOT NULL,
   atualizado TEXT,
+  proximo_sync TEXT,                      -- nextAutoSyncAt
+  consentimento_expira TEXT,              -- consentExpiresAt (Open Finance)
   removido   TEXT
 );
 

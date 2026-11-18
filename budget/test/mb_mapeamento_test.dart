@@ -5,6 +5,7 @@ import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/registro.dart';
+import 'package:budget/struct/mbSync/revisao.dart' show mbTipoDeRevisao;
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -269,5 +270,14 @@ void main() {
       expect(r.sincronizadoEm, '2026-11-09T09:00:00.000Z');
       expect(r.contasBrutas.single['id'], 'cc');
     });
+  });
+
+  test('Pix para o próprio titular (entre_minhas = 1) não é gasto nem vai para a fila; o ajuste do usuário manda', () {
+    final pix = {'description': 'PIX ENVIADO JOSE', 'category': 'Transfer - PIX', 'amount': -300.0, 'entre_minhas': 1};
+    expect(_pull(_json(pix), []).transacoes, isEmpty);
+    expect(_pull(_json({...pix, 'entre_minhas': 0}), []).transacoes.length, 1);
+    expect(_pull(_json(pix), [_reg('ajustes', 't1', {'gasto': 1})]).transacoes.length, 1);
+    expect(mbTipoDeRevisao(descricao: 'PIX ENVIADO JOSE', valor: -300, entreMinhas: true), isNull);
+    expect(mbTipoDeRevisao(descricao: 'PIX ENVIADO JOSE', valor: -300)?.tipo, 'pix_enviado');
   });
 }

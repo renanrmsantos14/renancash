@@ -1,10 +1,10 @@
 import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
-import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "./mapa.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
-import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
+import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
@@ -200,7 +200,7 @@ const decodificar = (segmento) => { try { return decodeURIComponent(segmento); }
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
-const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
+const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, t.entre_minhas, t.tipo_credito, t.contraparte, t.bill_month, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
 const DE_TX = "FROM transactions t LEFT JOIN v_ajustes a ON a.transaction_id = t.id";
 
 async function dados(env, url) {
@@ -372,6 +372,7 @@ async function avaliarAlertas(env) {
     ...alertasGeral(geral),
     ...alertaCompras({ compras: novas, contas: b.contas, geral, agora: ts }),
     ...alertasFatura(b),
+    ...alertasCredito(b),
     ...alertasRevisao(b),
   ];
   await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);
@@ -641,6 +642,7 @@ async function sincronizar(env, origem) {
     const brutas = new Map(); // id da conta → conta do Pluggy (faturas)
     const reconectar = [];
     const lidas = new Set(); // conexões cujos investimentos foram lidos com sucesso nesta rodada
+    const titulares = new Map(); // conexão → CPF/CNPJ do titular (só em memória, para `entre_minhas`)
     for (const id of ids) {
       try {
         const [item, contas] = await Promise.all([api.item(id), api.contas(id)]);
@@ -651,9 +653,12 @@ async function sincronizar(env, origem) {
         const daConexao = contas.map((c) => mapearConta(c, banco, id, ts));
         for (const c of contas) brutas.set(String(c.id), c);
         linhasContas.push(...daConexao);
+        // Sem o produto identidade (403/404) ou com erro, a transação só fica sem `entre_minhas`.
+        titulares.set(id, await api.documentoTitular(id).catch(() => null));
         // Erro nos investimentos mantém o snapshot anterior; 403/404 (produto não liberado na conexão) não vira aviso.
         try {
-          await salvarSnapshot(db, "investimentos:" + id, mapearInvestimentos(await api.investimentos(id), banco, daConexao));
+          const invs = await api.investimentos(id);
+          await salvarSnapshot(db, "investimentos:" + id, mapearInvestimentos(invs, banco, daConexao, await aplicadoDasMovimentacoes(api, invs)));
           lidas.add(id);
         } catch (e) {
           if (![403, 404].includes(e.status)) avisos.push(`Investimentos da conexão ${id}: ${e.message}`);
@@ -675,7 +680,7 @@ async function sincronizar(env, origem) {
     const diasImport = parseInt(env.IMPORT_DAYS, 10) || 180;
     for (const conta of linhasContas) {
       try {
-        const n = await sincronizarConta(db, api, conta, hoje, diasImport);
+        const n = await sincronizarConta(db, api, conta, hoje, diasImport, titulares.get(conta.item_id));
         console.log(`Conta ${conta.name}: ${n} transações`);
       } catch (e) {
         avisos.push(`Transações de ${conta.name}: ${e.message}`);
@@ -708,7 +713,7 @@ async function sincronizar(env, origem) {
   return { ok: !!ok, mensagem };
 }
 
-async function sincronizarConta(db, api, conta, hoje, diasImport) {
+async function sincronizarConta(db, api, conta, hoje, diasImport, docTitular) {
   const ultima = await db
     .prepare(
       "SELECT MAX(CASE WHEN scheduled = 0 AND date <= ?2 THEN date END) AS d, MIN(CASE WHEN status = 'PENDING' AND scheduled = 0 THEN date END) AS p FROM transactions WHERE account_id = ?1"
@@ -720,7 +725,7 @@ async function sincronizarConta(db, api, conta, hoje, diasImport) {
   // Cartão sem "to" para trazer parcelas futuras.
   const todas = await api.transacoes(conta.id, de, conta.type === "CREDIT" ? undefined : hoje, MAX_PAGINAS);
   const ts = agora();
-  const linhas = todas.map((t) => mapearTransacao(t, conta, hoje, ts));
+  const linhas = todas.map((t) => mapearTransacao(t, conta, hoje, ts, docTitular));
 
   // Apaga parcelas futuras e pendentes da janela (podem mudar de id) e regrava tudo num lote atômico.
   const comandos = [
@@ -742,6 +747,22 @@ function upsertSql(tabela, colunas) {
   const sel = colunas.map((c) => `json_extract(value, '$.${c}')`).join(", ");
   const upd = colunas.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ");
   return `INSERT INTO ${tabela} (${colunas.join(", ")}) SELECT ${sel} FROM json_each(?1) WHERE true ON CONFLICT(id) DO UPDATE SET ${upd}`;
+}
+
+// Para os investimentos sem amountOriginal, o aplicado vem das movimentações (no máximo MAX_MOVIMENTOS consultas por
+// conexão). Falha numa consulta só deixa aquele investimento sem aplicado.
+const MAX_MOVIMENTOS = 20;
+async function aplicadoDasMovimentacoes(api, invs) {
+  const out = new Map();
+  for (const i of semAplicado(invs).slice(0, MAX_MOVIMENTOS)) {
+    try {
+      const v = aplicadoPelasMovimentacoes(await api.movimentosInvestimento(i.id));
+      if (v != null) out.set(String(i.id), v);
+    } catch (e) {
+      console.warn("Movimentações do investimento indisponíveis", i.id, e.message);
+    }
+  }
+  return out;
 }
 
 // Retrato do mês corrente a partir dos snapshots de investimentos (Inter e Santander juntos). Nunca derruba a sincronização.
