@@ -574,18 +574,32 @@ Future<Projetado?> _ajuste(
   }
 
   final nome = texto('nome'), nota = texto('nota');
+  // Empréstimo escolhido no outro aparelho; empréstimo que ainda não chegou fica como está.
+  Future<Value<String?>> divida() async {
+    if (!d.containsKey('divida_id')) return const Value.absent();
+    final id = d['divida_id'];
+    if (id is! String) return const Value(null);
+    final pk = pkDoId(id);
+    return await (database.select(database.objectives)..where((o) => o.objectivePk.equals(pk)))
+                .getSingleOrNull() ==
+            null
+        ? const Value.absent()
+        : Value(pk);
+  }
+
   await (database.update(database.transactions)
         ..where((t) => t.transactionPk.equals(txPk)))
       .write(TransactionsCompanion(
           name: nome == null ? const Value.absent() : Value(nome),
           note: nota == null ? const Value.absent() : Value(nota),
+          objectiveLoanFk: await divida(),
           dateTimeModified: modificado));
   final dados = <String, dynamic>{};
   final tx = await (database.select(database.transactions)
         ..where((t) => t.transactionPk.equals(txPk)))
       .getSingleOrNull();
   // Mesma projeção que o aparelho gera sozinho (mbTextosEditados), senão o ajuste voltaria como edição.
-  if (tx != null) dados.addAll(mbTextosEditados(tx));
+  if (tx != null) dados.addAll({...mbTextosEditados(tx), ...mbDivida(tx, d)});
   final categoriaId = d['categoria_id'];
   if (categoriaId is String && categoriaId.isNotEmpty) {
     final c = await database.getCategoryInstanceOrNull(pkDoId(categoriaId));

@@ -229,6 +229,41 @@ void main() {
     expect((await mbLerFila()).pendentes, 0);
   });
 
+  test('empréstimo ligado a transação mb: sobe no ajuste e é aplicado no outro aparelho', () async {
+    final t = DateTime.now().subtract(const Duration(days: 1)).toUtc().toIso8601String();
+    cliente.servidor.add(Registro('dividas', 'cashew:d1',
+        {'tipo': 'emprestimo', 'nome': 'Mãe', 'sentido': 'me_devem', 'valor_total': 0}, t, null));
+    cliente.extra = banco();
+    await sync();
+    await (database.update(database.transactions)..where((x) => x.transactionPk.equals('mb:t1'))).write(
+        TransactionsCompanion(
+            objectiveLoanFk: const Value('d1'),
+            dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.singleWhere((r) => r.tabela == 'ajustes').dados!['divida_id'], 'cashew:d1');
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+
+    // Outro aparelho desfaz o vínculo: aqui a transação volta a contar no orçamento, sem ping-pong.
+    cliente.servidor.add(Registro('ajustes', 't1', {'nome': 'Padaria', 'divida_id': null}, _futuro(), null));
+    cliente.enviados.clear();
+    await sync();
+    expect((await _txs()).single.objectiveLoanFk, isNull);
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+
+    // E liga de novo.
+    cliente.servidor.add(Registro('ajustes', 't1', {'nome': 'Padaria', 'divida_id': 'cashew:d1'}, _futuro(), null));
+    await sync();
+    expect((await _txs()).single.objectiveLoanFk, 'd1');
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+  });
+
   test('categoria apagada remotamente com transações fica e não ressuscita',
       () async {
     await _categoria('c1', 'Mercado');
