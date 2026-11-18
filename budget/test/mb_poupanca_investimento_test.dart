@@ -8,6 +8,7 @@ import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
+import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';

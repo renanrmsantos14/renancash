@@ -7,7 +7,7 @@ import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
 import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
 import 'package:budget/struct/meuBancoMapping.dart'
-    show mbCarteiraInvestimentos, mbPkConta, mbPrefixo, mbSemPoupancas;
+    show mbCarteiraInvestimentos, mbHerdarBanco, mbPkConta, mbPrefixo, mbSemPoupancas;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:intl/intl.dart' show NumberFormat;
