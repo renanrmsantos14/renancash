@@ -595,10 +595,19 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         categoriaId = revisoes.categoriaId(id, rev!);
       }
     }
+    // Todo lançamento do ciclo atual espera a validação do usuário na fila "Para validar": até lá fica em "A classificar"
+    // (conta no total do ciclo, fora das categorias). Só o ajuste sincronizado ou a decisão da fila validam; regra, Pluggy,
+    // nome, mapa e memória do destinatário apenas sugerem. O envio ao Santander tem fluxo próprio (acima).
+    final aValidar = noCiclo && !envioSantander && ef.fonte != 'ajuste' && !revisoes.decisoes.containsKey(id);
+    if (aValidar) {
+      nomeCategoria = mbCategoriaAClassificar;
+      categoriaId = null;
+    }
     // Mapa do usuário (mbMapaCategorias): só para categoria automática (sem ajuste, regra, Pluggy do painel nem
     // resposta da fila). Vale primeiro a categoria do banco; a do envio ao Santander é a de ajuda.
     final especial = envioSantander || rev?.tipo == 'pix_enviado';
-    final peloMapa = (ef.fonte == 'nome' || ef.fonte == 'banco') &&
+    final peloMapa = !aValidar &&
+        (ef.fonte == 'nome' || ef.fonte == 'banco') &&
         !(especial && categoriaId != null);
     final destino = !peloMapa
         ? null
@@ -608,8 +617,7 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     final nome = descricao.trim().isEmpty ? "Sem descrição" : descricao.trim();
     // Reembolso e renda decididos na fila não são estorno automático (reembolso abate abaixo, renda é receita).
     final decidida = resposta == 'reembolso' || resposta == 'renda';
-    final automatica =
-        receita && ef.fonte != 'ajuste' && ef.fonte != 'regra' && !decidida;
+    final automatica = receita && !aValidar && ef.fonte != 'ajuste' && ef.fonte != 'regra' && !decidida;
     final cashback = automatica && mbEhCashback(categoria, descricao, valor);
     if (automatica && !cashback) estornos.add(mbPkTransacao(id));
     final tx = MbTransacao(

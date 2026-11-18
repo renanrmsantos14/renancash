@@ -38,7 +38,7 @@ Future<String> _pkDaCategoria(String nome) async {
   return mbPkCategoria(nome, false);
 }
 
-/// Cartão "Para revisar" da Início: some quando a fila está vazia; cada item tem os botões das opções.
+/// Cartão "Para validar" da Início: some quando a fila está vazia; cada item tem os botões das opções.
 class HomePageParaRevisar extends StatefulWidget {
   const HomePageParaRevisar({super.key, this.atualizar = true});
   final bool atualizar;
@@ -77,7 +77,7 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
               children: [
                 Row(children: [
                   Expanded(
-                    child: Text('Para revisar',
+                    child: Text('Para validar',
                         style: EdTexto.corpo(context).copyWith(
                             fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
@@ -118,7 +118,7 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
                       onPressed: () => openBottomSheet(
                           context,
                           PopupFramework(
-                              title: 'Para revisar',
+                              title: 'Para validar',
                               child: ValueListenableBuilder<List<MbItemRevisao>>(
                                 valueListenable: meuBancoRevisar,
                                 builder: (context, todos, _) =>

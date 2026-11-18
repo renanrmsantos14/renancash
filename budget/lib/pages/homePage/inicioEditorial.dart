@@ -730,8 +730,8 @@ class BancosPorBanco extends StatelessWidget {
       : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir, recolher: recolher);
 }
 
-/// "N para classificar · R$ total" com atalho para as Pendências. Some sem itens na fila
-/// (Para revisar + Para classificar, a mesma contagem do selo, sem bancos desconectados nem contas vencidas).
+/// "N para validar · R$ total" com atalho para as Pendências. Some sem itens na fila
+/// (Para validar, a mesma contagem do selo, sem bancos desconectados nem contas vencidas).
 class AlertaPendenciasInicio extends StatelessWidget {
   const AlertaPendenciasInicio({super.key});
 
@@ -752,7 +752,7 @@ class AlertaPendenciasInicio extends StatelessWidget {
             padding: const EdgeInsets.only(top: 14),
             child: Semantics(
               button: true,
-              label: '$n para classificar, revisar',
+              label: '$n para validar',
               excludeSemantics: true,
               onTap: abrir,
               child: ToqueEscala(
@@ -767,7 +767,7 @@ class AlertaPendenciasInicio extends StatelessWidget {
                       child: Text.rich(
                         TextSpan(children: [
                           TextSpan(
-                              text: '$n para classificar',
+                              text: '$n para validar',
                               style: const TextStyle(fontWeight: FontWeight.w600)),
                           if (total > 0) TextSpan(text: ' · ${brl(total)}'),
                         ]),

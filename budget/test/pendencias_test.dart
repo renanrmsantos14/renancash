@@ -44,13 +44,13 @@ void main() {
     meuBancoAvisos.value = const [];
   });
 
-  testWidgets('sem nada: Tudo em dia e total zero', (t) async {
+  testWidgets('sem nada: Tudo validado e total zero', (t) async {
     await _abrir(t);
-    expect(find.text('Tudo em dia'), findsOneWidget);
+    expect(find.text('Tudo validado'), findsOneWidget);
     expect(mbTotalPendencias(), 0);
   });
 
-  testWidgets('carregando: mostra indicador e não pisca Tudo em dia', (t) async {
+  testWidgets('carregando: mostra indicador e não pisca Tudo validado', (t) async {
     appStateSettings = {
       'materialYou': false,
       'accentSystemColor': false,
@@ -64,7 +64,7 @@ void main() {
     ));
     await t.pump();
     expect(find.text('Carregando pendências…'), findsOneWidget);
-    expect(find.text('Tudo em dia'), findsNothing);
+    expect(find.text('Tudo validado'), findsNothing);
   });
 
   testWidgets('Pix recebido mostra o nome do pagador e alvos >= 44 px', (t) async {
@@ -87,7 +87,7 @@ void main() {
     expect(mbTotalPendencias(), 3);
     expect(find.text('Inter desconectado'), findsOneWidget);
     expect(find.text('Reconectar'), findsOneWidget);
-    expect(find.text('Tudo em dia'), findsNothing);
+    expect(find.text('Tudo validado'), findsNothing);
   });
 
   testWidgets('só banco desconectado: faixa e "Nada na fila"', (t) async {

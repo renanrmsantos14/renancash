@@ -1,5 +1,5 @@
 // Fila "Para classificar" (ver classificar.dart): leitura do Drift, sugestões da IA do Meu Banco e confirmação.
-// Estado local em mb_estado: `ia_novos_desde` (quando a fila foi instalada), `ia_revisados` (pks já decididos) e
+// Estado local em mb_estado: `ia_revisados` (pks já decididos) e
 // `ia_padroes` (confirmações por favorecido). Nada disso sobe para o servidor; a categoria confirmada sobe como ajuste.
 import 'dart:async';
 import 'dart:convert';
@@ -19,8 +19,6 @@ import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nome
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
-const String _chaveDesde = 'ia_novos_desde';
-const String _chaveDesdeAntiga = 'ia_desde'; // v5.4.41: primeira abertura − 7 dias (pegava histórico)
 const String _chaveRevisados = 'ia_revisados';
 const String _chavePadroes = 'ia_padroes';
 final DateTime _editadoDesde = DateTime.utc(2001); // igual a meuBancoSync: antes disso é "sem edição"
@@ -52,16 +50,6 @@ Future<Set<String>> _lerRevisados() async {
   } catch (_) {
     return {};
   }
-}
-
-/// Marco dos "novos", gravado na primeira execução. Quem já tinha o marco antigo volta ao dia da instalação.
-Future<DateTime> _lerDesde() async {
-  final salvo = DateTime.tryParse(await mbLerEstado(_chaveDesde) ?? '');
-  if (salvo != null) return salvo;
-  final antigo = DateTime.tryParse(await mbLerEstado(_chaveDesdeAntiga) ?? '');
-  final desde = mbMarcoNovos(antigo, DateTime.now());
-  await mbGravarEstado({_chaveDesde: desde.toIso8601String()});
-  return desde;
 }
 
 Future<MbOpcoes> _carregarOpcoes(List<TransactionCategory> cats) async {
@@ -123,8 +111,7 @@ Future<void> mbAtualizarClassificar() async {
         revisao: revisao,
       ));
     }
-    final fila = mbFilaClassificar(lancamentos,
-        desde: await _lerDesde(), revisados: await _lerRevisados());
+    final fila = mbFilaClassificar(lancamentos, revisados: await _lerRevisados());
     meuBancoClassificar.value = fila;
     _preencherLocais(fila);
   } catch (e) {

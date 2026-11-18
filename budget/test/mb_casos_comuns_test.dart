@@ -198,26 +198,6 @@ void main() {
       meuBancoReembolsos.value = const [];
     });
 
-    testWidgets('iguais: "Aplicar a todos os N iguais" mostra a lista antes de confirmar', (t) async {
-      await abrir(t, [
-        _l('mb:1', 'UBER TRIP', -9.96),
-        _l('mb:2', 'UBER TRIP', -12.4, data: _diasAtras(1)),
-        _l('mb:3', 'IFOOD', -30),
-      ], sugestoes: {
-        'mb:1': const MbSugestao('mb:1', 'transp', subPk: 'uber', confianca: .9, fonte: MbFonteSugestao.padrao),
-      });
-      expect(find.text('Aplicar a todos os 2 iguais'), findsOneWidget);
-      await t.tap(find.text('Aplicar a todos os 2 iguais'));
-      for (var i = 0; i < 20; i++) {
-        await t.pump(const Duration(milliseconds: 50));
-      }
-      expect(find.text('Aplicar a 2 iguais'), findsOneWidget);
-      expect(find.text('−R\$ 12,40'), findsOneWidget); // o outro Uber na lista
-      expect(find.text('Confirmar 2'), findsOneWidget);
-      await t.pumpWidget(const SizedBox());
-      await t.pump(const Duration(seconds: 2));
-    });
-
     testWidgets('rendimentos de poupança: um cartão só com Confirmar todos, contado uma vez', (t) async {
       await abrir(t, [
         _l('mb:j1', 'JUROS TAXA', .01, conta: 'Poupança'),
@@ -256,13 +236,12 @@ void main() {
       addTearDown(() => mbBuscarCandidatosReembolso = original);
       await abrir(t, [_l('mb:e', 'Estorno Uber', 16.95)]);
       await t.pump();
-      await t.pump(); // o destaque avisa o cartão depois do quadro: a caixa "Sem sugestão" sai no seguinte
       expect(find.text('Estorno de uma compra'), findsOneWidget);
       expect(find.text('Uber — compra estornada'), findsOneWidget);
       expect(find.text('Abater da compra'), findsOneWidget);
       expect(find.text('É de outra compra'), findsOneWidget);
-      // Com o destaque do estorno, "Sem sugestão" só competiria com ele; as categorias seguem abaixo.
-      expect(find.textContaining('Sem sugestão para este'), findsNothing);
+      // Sem sugestão da IA, o cartão pede a categoria certa em chips; o estorno segue na caixa dele.
+      expect(find.textContaining('Sem sugestão para este'), findsOneWidget);
       expect(find.text('Qual é a categoria?'), findsOneWidget);
     });
 
@@ -282,7 +261,7 @@ void main() {
       expect(find.text('Junior Silva já mandou a parte de 2 contas'), findsOneWidget);
       expect(find.text('RESTAURANTE DO ZE'), findsOneWidget);
       expect(find.text('É de outra conta'), findsOneWidget);
-      expect(find.textContaining('Sem sugestão para este'), findsNothing);
+      expect(find.textContaining('Sem sugestão para este'), findsOneWidget);
       expect(find.text('Qual é a categoria?'), findsOneWidget);
     });
 

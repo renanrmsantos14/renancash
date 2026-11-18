@@ -70,6 +70,9 @@ class PendenciasPage extends StatefulWidget {
 
 class _PendenciasPageState extends State<PendenciasPage> {
   final List<String> _pulados = [];
+  // "3 de 10" e a barra de progresso andam com as validações: o total cresce quando chegam itens novos e a fila
+  // encolhe quando alguém valida. Zera com a fila vazia.
+  int _total = 0, _anterior = 0;
   late bool _carregando = widget.carregando ||
       (widget.atualizar &&
           meuBancoRevisar.value.isEmpty &&
@@ -100,21 +103,21 @@ class _PendenciasPageState extends State<PendenciasPage> {
         if (!viaIa.contains(i.id))
           (
             id: i.id,
-            rotulo: 'Para revisar',
+            rotulo: 'Para validar',
             conteudo: () => ItemParaRevisar(item: i)
           ),
       for (final l in classificar)
         if (!rendimentos.contains(l))
           (
             id: 'cls:${l.pk}',
-            rotulo: 'Para classificar',
+            rotulo: 'Para validar',
             conteudo: () => ItemClassificar(lancamento: l, pedirSugestoes: widget.atualizar)
           )
         else if (l == rendimentos.first)
           // Juros de centavos da poupança: um cartão só, no lugar do primeiro.
           (
             id: 'cls:rendimentos',
-            rotulo: 'Para classificar',
+            rotulo: 'Para validar',
             conteudo: () => RendimentosPoupanca(itens: rendimentos)
           ),
       if (AjustesInicio.vencidas)
@@ -153,6 +156,8 @@ class _PendenciasPageState extends State<PendenciasPage> {
                 AjustesInicio.bancos ? meuBancoAvisos.value : const [];
             final itens = _itens();
             final fila = ordenarPulados(itens, _pulados, (i) => i.id);
+            _total = itens.isEmpty ? 0 : _total + (itens.length > _anterior ? itens.length - _anterior : 0);
+            _anterior = itens.length;
             return ListView(
               // Folga no fim: o "Pular" do último cartão nunca encosta na faixa da versão.
               padding: const EdgeInsets.fromLTRB(
@@ -179,10 +184,12 @@ class _PendenciasPageState extends State<PendenciasPage> {
                             Expanded(
                                 child: Text(fila.first.rotulo,
                                     style: EdTexto.rotulo(context))),
-                            Text(
-                                '${itens.indexOf(fila.first) + 1} de ${fila.length}',
+                            Text('${_total - itens.length + itens.indexOf(fila.first) + 1} de $_total',
                                 style: EdTexto.rotulo(context)),
                           ]),
+                          const SizedBox(height: 8),
+                          _BarraProgresso(
+                              feitas: _total - itens.length, total: _total),
                           const SizedBox(height: 10),
                           _CartaoTriagem(
                             key: ValueKey(fila.first.id),
@@ -281,6 +288,26 @@ class _FaixaDesconectado extends StatelessWidget {
   }
 }
 
+/// Barra fina de progresso da sessão: validadas / total.
+class _BarraProgresso extends StatelessWidget {
+  const _BarraProgresso({required this.feitas, required this.total});
+  final int feitas, total;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: LinearProgressIndicator(
+        minHeight: 4,
+        value: total <= 0 ? 0 : (feitas / total).clamp(0.0, 1.0),
+        backgroundColor: e.line,
+        color: e.pos,
+      ),
+    );
+  }
+}
+
 class _CarregandoPendencias extends StatelessWidget {
   const _CarregandoPendencias();
 
@@ -317,7 +344,7 @@ class _NadaNaFila extends StatelessWidget {
             style: EdTexto.corpo(context).copyWith(
                 fontSize: 16, fontWeight: FontWeight.w600, color: e.tx)),
         const SizedBox(height: 4),
-        Text('Nenhuma transação pendente para revisar ou classificar.',
+        Text('Nenhuma transação esperando validação.',
             textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
       ]),
     );
@@ -335,11 +362,11 @@ class _TudoEmDia extends StatelessWidget {
       child: Column(children: [
         Icon(Icons.check_circle_outline_rounded, size: 36, color: e.mu),
         const SizedBox(height: 12),
-        Text('Tudo em dia',
+        Text('Tudo validado',
             style: EdTexto.corpo(context).copyWith(
                 fontSize: 18, fontWeight: FontWeight.w600, color: e.tx)),
         const SizedBox(height: 4),
-        Text('Nada para resolver por aqui.',
+        Text('Nada esperando a sua validação.',
             textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
       ]),
     );
