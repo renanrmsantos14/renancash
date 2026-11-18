@@ -50,6 +50,36 @@ void main() {
     expect(mbTotalPendencias(), 0);
   });
 
+  testWidgets('carregando: mostra indicador e não pisca Tudo em dia', (t) async {
+    appStateSettings = {
+      'materialYou': false,
+      'accentSystemColor': false,
+      'batterySaver': false,
+      'increaseTextContrast': false,
+      'forceFullDarkBackground': false,
+    };
+    await t.pumpWidget(MaterialApp(
+      theme: temaEditorial(Brightness.light),
+      home: const Scaffold(body: PendenciasPage(atualizar: false, carregando: true)),
+    ));
+    await t.pump();
+    expect(find.text('Carregando pendências…'), findsOneWidget);
+    expect(find.text('Tudo em dia'), findsNothing);
+  });
+
+  testWidgets('Pix recebido mostra o nome do pagador e alvos >= 44 px', (t) async {
+    await _abrir(t, itens: [
+      _pix('a', 'MARIA SILVA'),
+      _pix('b', 'JOAO COSTA'),
+    ]);
+    expect(find.text('Pix recebido de Maria Silva'), findsOneWidget);
+    // TextButton.icon é subclasse de TextButton; widgetWithText compara o tipo exato.
+    final pular = find.ancestor(
+        of: find.text('Pular'), matching: find.byWidgetPredicate((w) => w is TextButton));
+    expect(t.getSize(pular.first).height, greaterThanOrEqualTo(44));
+    expect(t.getSize(find.text('Reembolso')).height, greaterThan(0));
+  });
+
   testWidgets('total soma itens e bancos desconectados', (t) async {
     await _abrir(t, itens: [_pix('a', 'X'), _pix('b', 'Y')], avisos: [
       {'banco': 'Inter', 'item_id': 'i1'}

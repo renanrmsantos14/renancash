@@ -129,7 +129,7 @@ class _ItemClassificarState extends State<ItemClassificar> {
       context,
       PopupFramework(
         title: 'Categoria',
-        subtitle: _l.descricao,
+        subtitle: nomeSemEspacosRepetidos(_l.descricao),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           for (final c in op.categorias)
             if (c.receita == (_l.valor > 0))
@@ -244,7 +244,7 @@ class _ItemClassificarState extends State<ItemClassificar> {
             const SizedBox(height: 6),
             Text([diaMes(_l.data), if (_l.conta.isNotEmpty) _l.conta].join(' · '), style: EdTexto.rotulo(context)),
             const SizedBox(height: 2),
-            Text(_l.descricao,
+            Text(nomeSemEspacosRepetidos(_l.descricao),
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: EdTexto.corpo(context).copyWith(color: e.mu)),
             if (situacaoIa != null) ...[
               const SizedBox(height: 10),
@@ -501,8 +501,8 @@ class _ParteDeContaState extends State<ParteDeConta> {
             ]),
             if (destaque != null) ...[
               const SizedBox(height: 8),
-              Text(destaque.nome,
-                  maxLines: 1,
+              Text(nomeSemEspacosRepetidos(destaque.nome),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
               Text(
@@ -583,7 +583,7 @@ class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
             const SizedBox(height: 6),
             Text(['${itens.length} rendimentos de poupança', ...contas].join(' · '), style: EdTexto.rotulo(context)),
             const SizedBox(height: 2),
-            Text('${diaMes(itens.last.data)} a ${diaMes(itens.first.data)} · ${itens.first.descricao}',
+            Text('${diaMes(itens.last.data)} a ${diaMes(itens.first.data)} · ${nomeSemEspacosRepetidos(itens.first.descricao)}',
                 maxLines: 2, overflow: TextOverflow.ellipsis, style: EdTexto.corpo(context).copyWith(color: e.mu)),
             const SizedBox(height: 16),
             Container(
@@ -592,7 +592,28 @@ class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
               child: escolha == null || cat == null
                   ? Text('Escolha a categoria abaixo.', style: EdTexto.rotulo(context))
                   : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text(_rotuloFonte[escolha.fonte]!, style: EdTexto.rotulo(context)),
+                      Row(children: [
+                        if (escolha.fonte == MbFonteSugestao.ia ||
+                            escolha.fonte == MbFonteSugestao.mesPassado) ...[
+                          Icon(
+                              escolha.fonte == MbFonteSugestao.ia
+                                  ? Icons.auto_awesome_rounded
+                                  : Icons.history_rounded,
+                              size: 14,
+                              color: e.acc),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: Text(
+                            _rotuloFonte[escolha.fonte]!,
+                            style: EdTexto.rotulo(context).copyWith(
+                              color: escolha.fonte == MbFonteSugestao.mesPassado
+                                  ? e.acc
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ]),
                       const SizedBox(height: 8),
                       Text(cat.nome,
                           style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
@@ -663,16 +684,28 @@ class _ChipSub extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: marcado ? e.tx : e.bg,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: marcado ? e.tx : e.line),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: marcado ? e.tx : e.bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: marcado ? e.tx : e.line),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(rotulo,
+                        style: EdTexto.corpo(context)
+                            .copyWith(fontSize: 13, color: marcado ? e.bg : e.tx)),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Text(rotulo,
-              style: EdTexto.corpo(context).copyWith(fontSize: 13, color: marcado ? e.bg : e.tx)),
         ),
       ),
     );
@@ -694,7 +727,7 @@ class _Linha extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 40),
+        constraints: const BoxConstraints(minHeight: 44),
         child: Row(children: [
           Icon(icone, size: 16, color: e.mu),
           const SizedBox(width: 8),
