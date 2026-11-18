@@ -18,12 +18,7 @@ Future<void> mbGravarAjuste(String chave, Object valor) async {
 abstract final class AjustesInicio {
   // Início e cartão de saldo
   static bool get ritmoDiario => appStateSettings['inicioRitmoDiario'] != false;
-  static bool get saldoContas => appStateSettings['inicioSaldoContas'] != false;
   static bool get atalhos => appStateSettings['inicioAtalhos'] != false;
-  static bool get lancamentoRapido =>
-      appStateSettings['inicioLancamentoRapido'] != false;
-  static bool get poupancasJuntas =>
-      appStateSettings['inicioPoupancasJuntas'] != false;
 
   /// Linhas de metas e de empréstimos na Início (1 a 4).
   static int get linhasMetas =>

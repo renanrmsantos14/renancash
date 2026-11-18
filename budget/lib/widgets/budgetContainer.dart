@@ -30,6 +30,17 @@ String textoPeriodoOrcamento(DateTimeRange p, {bool ano = false}) {
   return a == b ? a : '$a – $b';
 }
 
+/// Formata dinheiro fora do Provider de carteiras (a Início e os prints): `inteiro` pede sem centavos.
+typedef FormatarDinheiro = String Function(double valor, {bool inteiro});
+
+/// Sem [formatar], usa a moeda da carteira selecionada (precisa do Provider de carteiras).
+String _dinheiro(BuildContext context, FormatarDinheiro? formatar, double v,
+    {bool inteiro = false, bool todasCasas = false}) {
+  if (formatar != null) return formatar(v, inteiro: inteiro);
+  return convertToMoney(Provider.of<AllWallets>(context), v,
+      decimals: inteiro ? 0 : null, allDecimals: todasCasas ? true : null);
+}
+
 /// Barra do orçamento (a mesma na Início, na lista e no detalhe): gasto,
 /// faixa das contas a vencer e marca de "hoje", com rótulo de leitor de tela.
 class BarraOrcamento extends StatelessWidget {
@@ -75,9 +86,28 @@ class ResumoOrcamento extends StatelessWidget {
     this.mostrarGasto = false,
     this.onTapValor,
     this.periodo,
+    this.formatar,
+    this.rotulo,
+    this.selo,
+    this.rodape,
+    this.corEstouro,
   });
 
   final double gasto, limite;
+
+  /// Formatação sem Provider de carteiras (Início); nulo usa a moeda da carteira.
+  final FormatarDinheiro? formatar;
+
+  /// Troca o rótulo acima do valor ("Para gastar no ciclo"); [selo] vai à direita dele.
+  final String? rotulo;
+  final Widget? selo;
+
+  /// Texto pronto da linha de baixo (ex.: "06 nov – 05 dez · R$ 35,32/dia"): substitui período e limite,
+  /// e o ritmo diário da versão grande já vem nele.
+  final String? rodape;
+
+  /// Cor do valor quando passa do limite; padrão: a de gasto estourado do tema.
+  final Color? corEstouro;
 
   /// Datas do período, no rodapé ("5 nov – 4 dez · limite R$ 4.630").
   final String? periodo;
@@ -104,10 +134,9 @@ class ResumoOrcamento extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final carteiras = Provider.of<AllWallets>(context);
-    String dinheiro(double v) => convertToMoney(carteiras, v);
+    String dinheiro(double v) => _dinheiro(context, formatar, v);
     // Sempre com centavos: o número não muda de formato ao terminar de contar.
-    String contando(double v) => convertToMoney(carteiras, v, allDecimals: true);
+    String contando(double v) => _dinheiro(context, formatar, v, todasCasas: true);
     final restante = limite - gasto;
     final passou = restante < 0;
     final entrou = renda ? 'Guardado' : 'Gasto';
@@ -116,14 +145,14 @@ class ResumoOrcamento extends StatelessWidget {
         : (passou ? 'Acima do limite' : 'Resta');
     // Estouro de gasto em vermelho; poupança acima da meta em verde.
     final cor = passou
-        ? (renda ? e.pos : getColor(context, "overspentAmount"))
+        ? (renda ? e.pos : corEstouro ?? getColor(context, "overspentAmount"))
         : null;
     final base = EdTexto.numeroGrande(context);
     final estilo = (grande
             ? base
             : base.copyWith(fontSize: 28, letterSpacing: -.84))
         .copyWith(color: mostrarGasto ? null : cor);
-    final rotulo = EdTexto.rotulo(context);
+    final rotuloEstilo = EdTexto.rotulo(context);
     final dias = diasRestantes;
     Widget numero = ContagemValor(
       valor: mostrarGasto ? gasto : restante.abs(),
@@ -145,7 +174,18 @@ class ResumoOrcamento extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(mostrarGasto ? entrou : falta, style: rotulo),
+        if (selo == null)
+          Text(this.rotulo ?? (mostrarGasto ? entrou : falta), style: rotuloEstilo)
+        else
+          Row(children: [
+            Expanded(
+                child: Text(this.rotulo ?? (mostrarGasto ? entrou : falta),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: rotuloEstilo)),
+            const SizedBox(width: 8),
+            selo!,
+          ]),
         SizedBox(height: grande ? 8 : 4),
         numero,
         SizedBox(height: grande ? 14 : 12),
@@ -162,27 +202,32 @@ class ResumoOrcamento extends StatelessWidget {
         if (limite > 0) ...[
           const SizedBox(height: 12),
           _TresBlocos(
-              gasto: gasto, limite: limite, aVencer: aVencer, renda: renda),
+              gasto: gasto,
+              limite: limite,
+              aVencer: aVencer,
+              renda: renda,
+              formatar: formatar),
         ],
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: Text(
-                [if (periodo != null) periodo!, 'limite ${dinheiro(limite)}']
-                    .join(' · '),
+                rodape ??
+                    [if (periodo != null) periodo!, 'limite ${dinheiro(limite)}']
+                        .join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: rotulo,
+                style: rotuloEstilo,
               ),
             ),
             if (dias != null) ...[
               const SizedBox(width: 8),
-              Text(dias <= 1 ? 'último dia' : '$dias dias', style: rotulo),
+              Text(dias <= 1 ? 'último dia' : '$dias dias', style: rotuloEstilo),
             ],
           ],
         ),
-        if (grande && dias != null && restante > 0) ...[
+        if (grande && rodape == null && dias != null && restante > 0) ...[
           const SizedBox(height: 10),
           Text(
             '${renda ? 'Guarde' : 'Pode gastar'} ${dinheiro(restante / dias)}/dia',
@@ -203,11 +248,13 @@ class SeloRitmo extends StatelessWidget {
     required this.limite,
     required this.hoje,
     this.renda = false,
+    this.formatar,
   });
 
   final double gasto, limite;
   final double? hoje;
   final bool renda;
+  final FormatarDinheiro? formatar;
 
   @override
   Widget build(BuildContext context) {
@@ -217,8 +264,7 @@ class SeloRitmo extends StatelessWidget {
     final dif = gasto - idealAteHoje(limite, fracao);
     final noRitmo = dif.abs() < .5;
     final acima = dif > 0;
-    final valor = convertToMoney(Provider.of<AllWallets>(context), dif.abs(),
-        decimals: 0);
+    final valor = _dinheiro(context, formatar, dif.abs(), inteiro: true);
     final texto = noRitmo
         ? 'No ritmo'
         : '${acima ? '▲' : '▼'} $valor '
@@ -254,16 +300,17 @@ class _TresBlocos extends StatelessWidget {
     required this.limite,
     required this.aVencer,
     required this.renda,
+    this.formatar,
   });
 
   final double gasto, limite, aVencer;
   final bool renda;
+  final FormatarDinheiro? formatar;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final carteiras = Provider.of<AllWallets>(context);
-    String dinheiro(double v) => convertToMoney(carteiras, v);
+    String dinheiro(double v) => _dinheiro(context, formatar, v);
     final livre = (limite - gasto - aVencer).clamp(0.0, double.infinity);
     final estourou = gasto > limite && !renda;
     final blocos = [

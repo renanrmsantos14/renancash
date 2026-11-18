@@ -4,7 +4,6 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
-import 'package:budget/struct/mbSync/casosComuns.dart' show MbAtalhoRapido;
 import 'package:budget/struct/mbSync/emprestimos.dart' show meuBancoEmprestimos;
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbMudouGeral;
@@ -32,27 +31,23 @@ class PainelDesktop extends StatefulWidget {
       : _modelo = null,
         _transacoes = const [],
         _metas = null,
-        _atalhos = null,
         _patrimonio = null,
         _limites = null;
   const PainelDesktop.comDados(ModeloInicio modelo,
       {super.key,
       List<TransacaoInicio> transacoes = const [],
       List<({String nome, double total, double alvo})>? metas,
-      List<MbAtalhoRapido>? atalhos,
       PatrimonioInicio? patrimonio,
       List<LimiteInicio>? limites})
       : _modelo = modelo,
         _transacoes = transacoes,
         _metas = metas,
-        _atalhos = atalhos,
         _patrimonio = patrimonio,
         _limites = limites;
 
   final ModeloInicio? _modelo;
   final List<TransacaoInicio> _transacoes;
   final List<({String nome, double total, double alvo})>? _metas;
-  final List<MbAtalhoRapido>? _atalhos; // prints: sem banco
   final PatrimonioInicio? _patrimonio;
   final List<LimiteInicio>? _limites;
 
@@ -155,7 +150,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
                     atualizando: _atualizando,
                     onAtualizar: _atualizar),
                 const SizedBox(height: 28),
-                // Mesmas seções do celular em duas colunas: ciclo e lançamentos à esquerda,
+                // Mesmas seções do celular em duas colunas: ciclo, atalhos, gráfico e "Seu dinheiro" à esquerda,
                 // limites, metas, empréstimos e transações à direita.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,23 +173,18 @@ class _PainelDesktopState extends State<PainelDesktop> {
                               onDefinirLimite: () =>
                                   mbAbrirOrcamentoCiclo(context, editar: true),
                             ),
-                          if (!m.semDados) ...[
-                            const AlertaPendenciasInicio(),
-                            if (real || widget._patrimonio != null)
-                              ResumoInicio(modelo: m, fixo: widget._patrimonio),
-                          ],
-                          if (real || widget._atalhos != null)
-                            LancamentoRapidoInicio(atalhos: widget._atalhos),
+                          if (!m.semDados) const AlertaPendenciasInicio(),
                           if (real || meuBancoPareadoConferido.value)
                             const AtalhosInicio(),
                           GastoPorDiaInicio(modelo: m),
-                          if (m.contas.isNotEmpty)
-                            ContasInicio(
-                                modelo: m,
-                                onGerenciar: () =>
-                                    pushRoute(context, const MeuBancoPage()),
-                                onAbrirConta:
-                                    real ? (c) => mbAbrirConta(context, c) : null),
+                          // Empilhado na coluna estreita e sempre aberto.
+                          if (!m.semDados && (real || widget._patrimonio != null))
+                            BancosPorBanco(
+                                fixo: widget._patrimonio,
+                                recolher: false,
+                                onAbrir: real
+                                    ? (c) => mbAbrirCarteiras(context, c)
+                                    : null),
                         ],
                       ),
                     ),

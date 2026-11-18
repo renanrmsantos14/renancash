@@ -45,7 +45,6 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 - Chip de carteira na busca: o desempate de nome olha todas as carteiras do app (`mbRotulosPorPk`), então a poupança "BANCO INTER ·69-6" filtrada sozinha mostra "· Poupança".
 - Valor com centavos menores (ex.: 0,05 em outra moeda ou sem nome de moeda): `ContagemValor` reduz os centavos; `currencyName` vazio vira nulo para não deixar espaço final que quebrava a regex (A3).
 - Formulário do computador (`painelTransacao.dart`): Subcategoria só aparece quando a categoria tem subs ("Nenhuma" por padrão); categorias e subs de mesmo nome ganham " (2)"; contas arquivadas ficam fora (exceto a da transação editada) e contas de mesmo nome ganham o tipo (A6).
-- Lançamento rápido (`lancamentoRapido.dart`): com 2+ contas aparecem chips para escolher a conta (começa na conta selecionada); o lançamento grava nela (M7).
 - Versão no desktop (`VersaoCanto`): fica no canto inferior esquerdo e só aparece com página empilhada; não pode cobrir o "Salvar" do canto direito (B3).
 
 ## Acabamento

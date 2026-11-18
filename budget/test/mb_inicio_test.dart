@@ -1,5 +1,6 @@
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/ajustesInicio.dart' show mbAjustesMudaram;
 import 'package:budget/struct/meuBancoSync.dart'
@@ -148,33 +149,37 @@ void main() {
         {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Inter', 'balance': 1000.0}
       ], faturas: {}, sincronizadoEm: null, nome: 'Renan', agora: _agora);
 
-  testWidgets('Configurações › Início: sem ritmo diário e sem saldo nas contas', (t) async {
+  testWidgets('Configurações › Início: sem ritmo diário', (t) async {
     await abrir(t, _montar());
     appStateSettings['inicioRitmoDiario'] = false;
-    appStateSettings['inicioSaldoContas'] = false;
     await t.pumpWidget(MaterialApp(
       theme: temaEditorial(Brightness.light),
       home: Scaffold(body: InicioEditorial.comModelo(_montar())),
     ));
     await t.pump(const Duration(seconds: 2));
     expect(find.textContaining('/dia'), findsNothing);
-    expect(find.textContaining('Nas contas'), findsNothing);
     expect(find.text('Para gastar no ciclo'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('cartão mostra o restante do ciclo e o ritmo diário', (t) async {
+  testWidgets('cartão no formato do orçamento: selo, três blocos e rodapé', (t) async {
     await abrir(t, _montar());
     expect(find.text('Para gastar no ciclo'), findsOneWidget);
-    expect(find.text('R\$ 3.700,00'), findsOneWidget);
-    expect(find.text('Gasto R\$ 1.300,00 de R\$ 5.000,00'), findsOneWidget);
-    // Hoje conta, como no cartão do orçamento: 16 dias depois de hoje + hoje.
-    expect(find.text('faltam 17 dias'), findsOneWidget);
-    // 3.700 / 17 dias (hoje conta).
-    expect(find.text('Pode gastar R\$ 217,65/dia'), findsOneWidget);
-    expect(find.text('Contas'), findsOneWidget);
+    // Valor grande e bloco "Livre" mostram o mesmo restante.
+    expect(find.text('R\$ 3.700,00'), findsWidgets);
+    expect(find.text('Gasto'), findsOneWidget);
+    expect(find.text('Livre'), findsOneWidget);
+    expect(find.text('R\$ 1.300,00'), findsOneWidget);
+    expect(find.text('A vencer'), findsNothing); // sem contas a vencer, o bloco some
+    expect(find.textContaining('abaixo do ritmo'), findsOneWidget);
+    // Hoje conta: 16 dias depois de hoje + hoje. 3.700 / 17 dias.
+    expect(find.text('17 dias'), findsOneWidget);
+    expect(find.text('26 out – 25 nov · R\$ 217,65/dia'), findsOneWidget);
+    // Saiu: "Gasto X de Y", "Ideal até hoje" e "Nas contas" duplicado.
+    expect(find.textContaining('Gasto R\$'), findsNothing);
+    expect(find.textContaining('Ideal até hoje'), findsNothing);
+    expect(find.textContaining('Nas contas'), findsNothing);
     expect(find.text('Ciclo 26 out – 25 nov'), findsNothing);
-    expect(find.text('26 out – 25 nov'), findsOneWidget);
     expect(find.text('Últimas'), findsNothing);
     await t.pumpWidget(const SizedBox());
   });
@@ -196,13 +201,171 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  testWidgets('InicioEditorial mostra Contas e não mostra cartões', (t) async {
+  testWidgets('InicioEditorial não mostra Contas, Resumo nem Lançar rápido', (t) async {
     await abrir(t, _montar());
-    expect(find.text('Contas'), findsOneWidget);
+    expect(find.text('Contas'), findsNothing);
+    expect(find.text('Resumo'), findsNothing);
+    expect(find.textContaining('Lançar'), findsNothing);
     expect(find.text('Cartões'), findsNothing);
     expect(find.textContaining('Cartão Gold'), findsNothing);
     expect(find.text('Olá, Renan'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
+  });
+
+  group('Seu dinheiro', () {
+    final contas = <Map<String, dynamic>>[
+      {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'BANCO INTER ·69-6', 'balance': 893.47},
+      {'id': 'n', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Nu', 'bank': 'Nu Pagamentos S.A.', 'balance': 50.0},
+      {'id': 'c', 'type': 'CREDIT', 'name': 'Inter Black ·1234', 'balance': 569.0, 'due_date': '2026-11-10'},
+      {'id': 'z', 'type': 'CREDIT', 'name': 'Zero ·9999', 'bank': 'Banco Zeta', 'balance': 0.0, 'due_date': '2026-11-20'},
+      {'id': 'e', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poup Zeta', 'bank': 'Banco Zeta', 'balance': 10.0},
+    ];
+    const invest = <InvestimentoBanco>[
+      (nome: 'CDB - BANCO INTER', banco: 'BANCO INTER', saldo: 1049.0),
+      (nome: 'CDB - BANCO INTER', banco: 'BANCO INTER', saldo: 951.0),
+      (nome: 'Tesouro Selic', banco: null, saldo: 300.0),
+      (nome: 'Fundo DI', banco: 'XP Investimentos', saldo: 7000.0),
+    ];
+    List<BancoInicio> agrupar() => mbAgruparPorBanco(
+        contas: contas,
+        faturas: const {},
+        investimentos: invest,
+        sincronizadoEm: _agora.toUtc().toIso8601String(),
+        agora: _agora);
+
+    test('reconhece o banco pelo nome normalizado', () {
+      expect(mbBancoConhecido('BANCO INTER ·69-6')?.id, 'inter');
+      expect(mbBancoConhecido('Nu Pagamentos S.A.')?.id, 'nubank');
+      expect(mbBancoConhecido('Itaú Unibanco')?.id, 'itau');
+      expect(mbBancoConhecido('Banco do Brasil')?.id, 'bb');
+      expect(mbBancoConhecido('Banco Pan'), isNull);
+      expect(mbBancoConhecido('International Bank'), isNull);
+      expect(mbBancoConhecido(null), isNull);
+    });
+
+    test('agrupa conta, aplicação e fatura no mesmo banco; ordena pelo maior total', () {
+      final b = agrupar();
+      expect(b.map((x) => x.id), ['xp', 'inter', 'nubank', 'banco zeta', 'outros']);
+      final inter = b.firstWhere((x) => x.id == 'inter');
+      expect(inter.nome, 'Banco Inter');
+      expect(inter.logo, 'inter');
+      expect(inter.subtitulo, 'sincronizado agora');
+      // Conta + 2 CDBs somados em uma linha − fatura (o cartão sem `bank` cai pelo nome "Inter Black").
+      expect(inter.itens.map((i) => i.rotulo),
+          ['Conta corrente', 'CDB · 2 aplicações', 'Fatura · vence 10/11']);
+      expect(inter.itens.map((i) => i.valor), [893.47, 2000.0, -569.0]);
+      expect(inter.total, closeTo(893.47 + 2000 - 569, .001));
+      expect(inter.itens.last.fatura, true);
+      expect(inter.itens.last.destaque, true); // vence em 1 dia
+    });
+
+    test('só investimentos, sem banco (Outros) e banco desconhecido sem logo', () {
+      final b = agrupar();
+      final xp = b.firstWhere((x) => x.id == 'xp');
+      expect(xp.subtitulo, 'só investimentos');
+      expect(xp.itens.single.rotulo, 'Fundo DI');
+      final outros = b.last;
+      expect(outros.nome, 'Outros');
+      expect(outros.logo, isNull);
+      expect(outros.itens.single.rotulo, 'Tesouro Selic');
+      final zeta = b.firstWhere((x) => x.id == 'banco zeta');
+      expect(zeta.logo, isNull);
+      expect(zeta.nome, 'Banco Zeta');
+      // Fatura de R$ 0 não vira linha.
+      expect(zeta.itens.map((i) => i.rotulo), ['Poupança']);
+    });
+
+    test('a soma dos bancos fecha com o patrimônio (contas + aplicações − faturas)', () {
+      final total = agrupar().fold<double>(0, (s, b) => s + b.total);
+      expect(total, closeTo(893.47 + 50 + 10 + 2000 + 300 + 7000 - 569, .001));
+    });
+
+    testWidgets('seção mostra totais, bancos recolhidos (menos o da fatura em destaque) e abre pelo toque', (t) async {
+      appStateSettings = {
+        'materialYou': false,
+        'accentSystemColor': false,
+        'batterySaver': false,
+        'increaseTextContrast': false,
+        'forceFullDarkBackground': false,
+      };
+      t.view.physicalSize = const Size(390 * 2, 3000 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final dados = (
+        patrimonio: mbPatrimonio(correntes: 943.47, poupancas: 10, investimentos: 9300, fatura: 569),
+        faturas: const <FaturaAberta>[],
+        carteiras: const <CarteiraInicio>[],
+        bancos: agrupar(),
+        semDados: false,
+      );
+      String? aberto;
+      await t.pumpWidget(MaterialApp(
+        theme: temaEditorial(Brightness.light),
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: BancosPorBanco(fixo: dados, onAbrir: (c) => aberto = c))),
+      ));
+      await t.pump();
+      expect(find.text('Seu dinheiro'), findsOneWidget);
+      expect(find.text('Nas contas'), findsOneWidget);
+      expect(find.text('R\$ 953,47'), findsOneWidget);
+      expect(find.text('Investido'), findsOneWidget);
+      expect(find.text('R\$ 9.300,00'), findsOneWidget);
+      expect(find.text('Banco Inter'), findsOneWidget);
+      expect(find.text('Fatura · vence 10/11'), findsOneWidget);
+      expect(find.text('−R\$ 569,00'), findsOneWidget);
+      await t.tap(find.text('Fatura · vence 10/11'));
+      await t.pump();
+      expect(aberto, mbPkConta('c'));
+      await t.tap(find.text('Conta corrente'));
+      await t.pump();
+      expect(aberto, mbPkConta('a'));
+      // Só o Inter (fatura vence em 1 dia) começa aberto; os outros mostram só o cabeçalho.
+      expect(find.text('Fundo DI'), findsNothing);
+      expect(find.text('Tesouro Selic'), findsNothing);
+      expect(find.text('Poupança'), findsNothing);
+      await t.tap(find.text('XP'));
+      await t.pumpAndSettle();
+      expect(find.text('Fundo DI'), findsOneWidget);
+      await t.tap(find.text('XP'));
+      await t.pumpAndSettle();
+      expect(find.text('Fundo DI'), findsNothing);
+      await t.tap(find.text('Banco Inter'));
+      await t.pumpAndSettle();
+      expect(find.text('Conta corrente'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('sem recolher (desktop) todos os bancos ficam abertos', (t) async {
+      appStateSettings = {
+        'materialYou': false,
+        'accentSystemColor': false,
+        'batterySaver': false,
+        'increaseTextContrast': false,
+        'forceFullDarkBackground': false,
+      };
+      t.view.physicalSize = const Size(390 * 2, 3000 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final dados = (
+        patrimonio: mbPatrimonio(correntes: 943.47, poupancas: 10, investimentos: 9300, fatura: 569),
+        faturas: const <FaturaAberta>[],
+        carteiras: const <CarteiraInicio>[],
+        bancos: agrupar(),
+        semDados: false,
+      );
+      await t.pumpWidget(MaterialApp(
+        theme: temaEditorial(Brightness.light),
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: BancosPorBanco(fixo: dados, recolher: false))),
+      ));
+      await t.pump();
+      expect(find.text('Fundo DI'), findsOneWidget);
+      expect(find.text('Tesouro Selic'), findsOneWidget);
+      expect(find.text('Poupança'), findsWidgets);
+      await t.pumpWidget(const SizedBox());
+    });
   });
 
   testWidgets('sem banco conectado: convite para conectar em vez da Início vazia', (t) async {

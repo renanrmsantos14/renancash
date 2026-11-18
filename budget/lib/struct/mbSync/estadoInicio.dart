@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
 import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
 import 'package:budget/struct/meuBancoMapping.dart'
@@ -365,7 +365,6 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
   final txs = await mbUltimasTransacoes();
   final modelo = montarModeloInicio(
     geral: await mbLerCicloGeral(agora),
-    agruparPoupancas: AjustesInicio.poupancasJuntas,
     ciclo: ((mapa['ciclo'] as Map?) ?? const {}).cast<String, dynamic>(),
     contas: [
       for (final c in (mapa['contas'] as List? ?? const []))
@@ -440,6 +439,7 @@ typedef PatrimonioInicio = ({
   Patrimonio patrimonio,
   List<FaturaAberta> faturas,
   List<CarteiraInicio> carteiras,
+  List<BancoInicio> bancos,
   bool semDados
 });
 
@@ -479,8 +479,178 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
         fatura: abertas.fold<double>(0, (s, f) => s + f.valor)),
     faturas: abertas,
     carteiras: carteiras,
+    bancos: mbAgruparPorBanco(
+        contas: contas,
+        faturas: faturas,
+        investimentos: await _investimentosSalvos(),
+        sincronizadoEm: await mbLerEstado('sincronizado_em'),
+        agora: agora),
     semDados: contas.isEmpty
   );
+}
+
+Future<List<InvestimentoBanco>> _investimentosSalvos() async {
+  final txs = await (database.select(database.transactions)
+        ..where((t) =>
+            t.walletFk.equals(mbCarteiraInvestimentos) &
+            t.transactionPk.like('mb:inv:%'))
+        ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+      .get();
+  return [
+    for (final t in txs)
+      (nome: t.name, banco: t.note.isEmpty ? null : t.note, saldo: t.amount)
+  ];
+}
+
+/// Aplicação da carteira Investimentos: `banco` vem do Worker (campo `banco`, gravado em `note`).
+typedef InvestimentoBanco = ({String nome, String? banco, double saldo});
+
+/// Linha de um banco na Início. `valor` da fatura é negativo (sai do total do banco).
+typedef ItemBanco = ({String rotulo, double valor, bool fatura, bool destaque, String carteiras});
+
+/// Um banco com tudo dele: contas, aplicações e fatura. `logo` é o arquivo em `assets/bancos`
+/// (null: selo com iniciais na cor `cor`). `id` 'outros' agrupa o que não tem banco identificável.
+typedef BancoInicio = ({
+  String id,
+  String nome,
+  String? logo,
+  int? cor,
+  String subtitulo,
+  double total,
+  List<ItemBanco> itens
+});
+
+class _GrupoBanco {
+  _GrupoBanco(this.id, this.nome, this.logo, this.cor);
+  final String id, nome;
+  final String? logo;
+  final int? cor;
+  final contas = <ItemBanco>[];
+  final aplicacoes = <ItemBanco>[];
+  final faturas = <({FaturaAberta f, String carteira})>[];
+  bool sincronizado = false;
+}
+
+String _dd(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+
+/// Agrupa por banco as contas (corrente e poupança), as aplicações e as faturas abertas.
+/// O banco vem do campo `bank` da conta (ou do nome dela, no cartão) e do `banco` da aplicação;
+/// quem não tem nenhum vai para "Outros". Não calcula saldo novo: só reparte os mesmos valores.
+/// Ordem: maior total primeiro, "Outros" por último.
+List<BancoInicio> mbAgruparPorBanco({
+  required List<Map<String, dynamic>> contas,
+  required Map<String, dynamic> faturas,
+  required List<InvestimentoBanco> investimentos,
+  required String? sincronizadoEm,
+  required DateTime agora,
+}) {
+  final grupos = <String, _GrupoBanco>{};
+  _GrupoBanco grupo(Object? bruto) {
+    final texto = bruto == null ? '' : '$bruto'.trim();
+    final conhecido = mbBancoConhecido(texto);
+    final limpo = texto.isEmpty ? '' : mbNomeDoBancoLimpo(texto);
+    final id = conhecido?.id ?? (limpo.isEmpty ? 'outros' : mbNormalizarBanco(limpo));
+    return grupos.putIfAbsent(
+        id,
+        () => _GrupoBanco(id, conhecido?.nome ?? (limpo.isEmpty ? 'Outros' : limpo),
+            conhecido?.logo, conhecido?.cor));
+  }
+
+  for (final c in contas.where((c) => c['type'] == 'BANK')) {
+    final g = grupo(c['bank'] ?? c['name'])..sincronizado = true;
+    g.contas.add((
+      rotulo: c['subtype'] == 'SAVINGS_ACCOUNT' ? 'Poupança' : 'Conta corrente',
+      valor: _num(c['balance']),
+      fatura: false,
+      destaque: false,
+      carteiras: mbPkConta('${c['id']}')
+    ));
+  }
+
+  final cartoes = contas.where((c) => c['type'] == 'CREDIT').toList();
+  final abertas = mbFaturasAbertas(contas: contas, faturas: faturas, agora: agora);
+  for (var i = 0; i < cartoes.length; i++) {
+    if (abertas[i].valor.abs() < 0.005) continue;
+    grupo(cartoes[i]['bank'] ?? cartoes[i]['name'])
+      ..sincronizado = true
+      ..faturas.add((f: abertas[i], carteira: mbPkConta('${cartoes[i]['id']}')));
+  }
+
+  // "CDB - BANCO INTER" no banco Inter vira "CDB"; aplicações de mesmo nome somam numa linha.
+  final somadas = <String, ({String nome, double saldo, int n})>{};
+  for (final inv in investimentos) {
+    final g = grupo(inv.banco);
+    var nome = inv.nome.trim();
+    final m = RegExp(r'^(.*?)\s+[-–]\s+([^-–]+)$').firstMatch(nome);
+    if (m != null && inv.banco != null) {
+      final a = mbBancoConhecido(m.group(2)), b = mbBancoConhecido(inv.banco);
+      if (mbNormalizarBanco(m.group(2)!) == mbNormalizarBanco(inv.banco!) ||
+          (a != null && a.id == b?.id)) {
+        nome = m.group(1)!.trim();
+      }
+    }
+    final chave = '${g.id}\u0000$nome';
+    final ant = somadas[chave];
+    somadas[chave] = (nome: nome, saldo: (ant?.saldo ?? 0) + inv.saldo, n: (ant?.n ?? 0) + 1);
+    if (ant == null) g.aplicacoes.add((
+      rotulo: chave, // trocado abaixo pelo rótulo final
+      valor: 0,
+      fatura: false,
+      destaque: false,
+      carteiras: mbCarteiraInvestimentos
+    ));
+  }
+  for (final g in grupos.values) {
+    for (var i = 0; i < g.aplicacoes.length; i++) {
+      final s = somadas[g.aplicacoes[i].rotulo]!;
+      g.aplicacoes[i] = (
+        rotulo: s.n > 1 ? '${s.nome} · ${s.n} aplicações' : s.nome,
+        valor: s.saldo,
+        fatura: false,
+        destaque: false,
+        carteiras: mbCarteiraInvestimentos
+      );
+    }
+  }
+
+  final quando = _lerData(sincronizadoEm);
+  final out = <BancoInicio>[];
+  for (final g in grupos.values) {
+    final itens = [
+      ...g.contas,
+      ...g.aplicacoes,
+      for (final x in g.faturas)
+        (
+          rotulo: 'Fatura${g.faturas.length > 1 ? ' ${x.f.nome}' : ''}'
+              '${x.f.vence == null ? '' : ' · vence ${_dd(x.f.vence!)}'}',
+          valor: -x.f.valor.abs(),
+          fatura: true,
+          destaque: x.f.destaque,
+          carteiras: x.carteira
+        ),
+    ];
+    if (itens.isEmpty) continue;
+    out.add((
+      id: g.id,
+      nome: g.nome,
+      logo: g.logo,
+      cor: g.cor,
+      subtitulo: g.id == 'outros'
+          ? 'sem banco identificado'
+          : g.sincronizado
+              ? (quando == null ? 'conectado' : 'sincronizado ${haQuanto(quando, agora)}')
+              : 'só investimentos',
+      total: itens.fold<double>(0, (s, i) => s + i.valor),
+      itens: itens
+    ));
+  }
+  out.sort((a, b) => a.id == 'outros'
+      ? 1
+      : b.id == 'outros'
+          ? -1
+          : b.total.compareTo(a.total));
+  return out;
 }
 
 // Junta gatilhos de recarga em rajada (uma sync dispara o listener da sync e vários eventos

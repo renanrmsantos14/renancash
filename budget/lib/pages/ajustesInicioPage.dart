@@ -15,7 +15,7 @@ List<Widget> ajustesInicioEntradas() => const [
       SettingsContainerOpenPage(
         openPage: AjustesInicioPage(),
         title: 'Início',
-        description: 'Atalhos, lançar rápido, cartão de saldo, metas e contas',
+        description: 'Atalhos, cartão de saldo e metas',
         icon: Icons.home_outlined,
       ),
       SettingsContainerOpenPage(
@@ -57,19 +57,11 @@ class AjustesInicioPage extends StatelessWidget {
               titulo: 'Mostrar atalhos sem banco',
               descricao:
                   'Nova transação, Contas, Orçamentos e Metas enquanto o banco não estiver conectado'),
-          const SettingsHeader(title: 'Lançar rápido'),
-          _chave('inicioLancamentoRapido', AjustesInicio.lancamentoRapido,
-              titulo: 'Mostrar lançamento rápido',
-              descricao:
-                  'Os gastos que você mais repete (últimos 90 dias) para lançar com um toque'),
           const SettingsHeader(title: 'Cartão de saldo'),
           _chave('inicioRitmoDiario', AjustesInicio.ritmoDiario,
               titulo: 'Mostrar ritmo diário',
               descricao: '"Pode gastar R\$ X/dia" abaixo da barra'),
-          _chave('inicioSaldoContas', AjustesInicio.saldoContas,
-              titulo: 'Mostrar saldo nas contas',
-              descricao: '"Nas contas R\$ X" no fim do cartão'),
-          const SettingsHeader(title: 'Metas e contas'),
+          const SettingsHeader(title: 'Metas'),
           SettingsContainerDropdown(
             title: 'Linhas de metas e de empréstimos',
             description:
@@ -78,9 +70,6 @@ class AjustesInicioPage extends StatelessWidget {
             items: const ['1', '2', '3', '4'],
             onChanged: (v) => _gravar('inicioLinhasMetas', int.parse(v)),
           ),
-          _chave('inicioPoupancasJuntas', AjustesInicio.poupancasJuntas,
-              titulo: 'Juntar as poupanças',
-              descricao: 'Uma linha "Poupanças" em vez de uma por conta'),
         ],
       );
 }
