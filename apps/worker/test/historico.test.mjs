@@ -21,7 +21,7 @@ test("o retrato do mês é refeito a cada leitura e os meses anteriores ficam co
   h = registrarRetrato(h, [item("a", "CDB", 120), item("b", "LCI", 55, "Santander")], "2026-11");
   h = registrarRetrato(h, [item("a", "CDB", 130)], "2026-11"); // "b" foi resgatada em novembro
   assert.deepEqual(h["2026-10"].map((i) => i.saldo), [100, 50]);
-  assert.deepEqual(h["2026-11"], [item("a", "CDB", 130)]);
+  assert.deepEqual(h["2026-11"], [{ ...item("a", "CDB", 130), aplicado: null }]);
   assert.deepEqual(serieMensal(h).map((m) => m.mes), ["2026-10", "2026-11"]);
 });
 

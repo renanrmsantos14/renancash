@@ -53,6 +53,7 @@ class InvestimentosEvolucaoPage extends StatefulWidget {
 class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
   List<MbAplicacao> aplicacoes = const [];
   List<MbRetratoMes> serie = const [];
+  Map<String, MbDetalheInvestimento> detalhes = const {};
   Map<String, String> nomesDasMetas = {};
   bool carregou = false;
 
@@ -72,11 +73,13 @@ class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
   Future<void> _carregar() async {
     final a = await mbAplicacoes();
     final s = await mbLerSerieMensal();
+    final d = await mbLerDetalhesInvestimentos();
     final metas = await database.select(database.objectives).get();
     if (!mounted) return;
     setState(() {
       aplicacoes = a;
       serie = s;
+      detalhes = d;
       nomesDasMetas = {for (final m in metas) m.objectivePk: m.name};
       carregou = true;
     });
@@ -96,6 +99,7 @@ class _InvestimentosEvolucaoPageState extends State<InvestimentosEvolucaoPage> {
               : InvestimentosConteudo(
                   aplicacoes: aplicacoes,
                   serie: serie,
+                  detalhes: detalhes,
                   nomesDasMetas: nomesDasMetas,
                   hoje: DateTime.now(),
                   onAbrirMeuBanco: () =>
@@ -116,11 +120,14 @@ class InvestimentosConteudo extends StatelessWidget {
     required this.serie,
     required this.nomesDasMetas,
     required this.hoje,
+    this.detalhes = const {},
     this.onAbrirMeuBanco,
   });
 
   final List<MbAplicacao> aplicacoes;
   final List<MbRetratoMes> serie;
+  /// Por id da aplicação: aplicado, rendimento, taxa, vencimento (o que o banco informar).
+  final Map<String, MbDetalheInvestimento> detalhes;
   final Map<String, String> nomesDasMetas;
   final DateTime hoje;
   final VoidCallback? onAbrirMeuBanco;
@@ -212,18 +219,75 @@ class InvestimentosConteudo extends StatelessWidget {
               ),
             ]),
           ),
+        _investidoERendeu(context),
         if (aplicacoes.isNotEmpty) const SizedBox(height: 12),
         for (final a in aplicacoes) _linhaAplicacao(context, a),
       ]),
     );
   }
 
+  /// "Você investiu" e "Rendeu" somando as aplicações em que o banco informa o valor aplicado.
+  Widget _investidoERendeu(BuildContext context) {
+    final comAplicado = [
+      for (final a in aplicacoes)
+        if (detalhes[a.id]?.aplicado != null) (a, detalhes[a.id]!)
+    ];
+    if (comAplicado.isEmpty) return const SizedBox.shrink();
+    final investido = comAplicado.fold(0.0, (s, x) => s + x.$2.aplicado!);
+    final rendeu = comAplicado.fold(0.0, (s, x) => s + (x.$1.saldo - x.$2.aplicado!));
+    final faltam = aplicacoes.length - comAplicado.length;
+    final e = cores(context);
+    Widget coluna(String rotulo, Widget valor) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(rotulo, style: EdTexto.rotulo(context)),
+            const SizedBox(height: 2),
+            valor,
+          ]),
+        );
+    final pct = investido > 0 ? rendeu / investido * 100 : null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          coluna(
+              'Você investiu',
+              Text(brl(investido),
+                  style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500))),
+          coluna(
+              'Rendeu',
+              Wrap(crossAxisAlignment: WrapCrossAlignment.end, children: [
+                _variacao(context, rendeu, fontSize: 15),
+                if (pct != null)
+                  Text(' (${_percentual(pct)})', style: EdTexto.rotulo(context)),
+              ])),
+        ]),
+        if (faltam > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+                faltam == 1
+                    ? 'Uma aplicação fica de fora: o banco não informa quanto foi aplicado nela.'
+                    : '$faltam aplicações ficam de fora: o banco não informa quanto foi aplicado nelas.',
+                style: EdTexto.rotulo(context).copyWith(color: e.mu)),
+          ),
+      ]),
+    );
+  }
+
   Widget _linhaAplicacao(BuildContext context, MbAplicacao a) {
+    final d = detalhes[a.id];
     final detalhe = [
       if (a.banco != null) a.banco!,
       if (a.metaPk != null && nomesDasMetas[a.metaPk] != null)
         'Meta ${nomesDasMetas[a.metaPk]}',
     ].join(' · ');
+    final contrato = d == null
+        ? ''
+        : [
+            if (mbRotuloTaxa(d.taxa) != null) mbRotuloTaxa(d.taxa)!,
+            if (d.vencimento != null) 'vence em ${_data(d.vencimento!)}',
+          ].join(' · ');
+    final aplicado = d?.aplicado;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 52),
       child: Row(children: [
@@ -239,15 +303,29 @@ class InvestimentosConteudo extends StatelessWidget {
                         .copyWith(fontWeight: FontWeight.w500)),
                 if (detalhe.isNotEmpty)
                   Text(detalhe, style: EdTexto.rotulo(context)),
+                if (contrato.isNotEmpty)
+                  Text(contrato, style: EdTexto.rotulo(context)),
               ]),
         ),
         const SizedBox(width: 8),
-        Text(brl(a.saldo),
-            style:
-                EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(brl(a.saldo),
+              style:
+                  EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w500)),
+          if (aplicado != null) ...[
+            Text('aplicou ${brl(aplicado)}', style: EdTexto.rotulo(context)),
+            _variacao(context, a.saldo - aplicado, fontSize: 12.5),
+          ],
+        ]),
       ]),
     );
   }
+
+  static String _data(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  static String _percentual(double p) =>
+      '${p >= 0 ? '+' : ''}${p.toStringAsFixed(2).replaceAll('.', ',')}%';
 
   Widget _grafico(BuildContext context) {
     if (serie.length < 2) {
@@ -312,6 +390,9 @@ class InvestimentosConteudo extends StatelessWidget {
                       style: EdTexto.corpo(context)
                           .copyWith(fontWeight: FontWeight.w500)),
                   _variacao(context, m.variacao, fontSize: 12.5),
+                  if (m.rendimento != null)
+                    Text('rendeu ${comSinal(m.rendimento!, brl, mais: true)}',
+                        style: EdTexto.rotulo(context)),
                 ]),
               ]),
               children: [

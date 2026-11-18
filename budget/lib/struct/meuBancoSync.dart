@@ -332,6 +332,8 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
       // Worker antigo não manda a série: fica a que já temos.
       if (json['investimentos_mensal'] is List)
         chaveSerieMensal: jsonEncode(json['investimentos_mensal']),
+      if (json['investimentos'] is List)
+        chaveDetalhesInvestimentos: jsonEncode(json['investimentos']),
     };
     if (resultado.agora.isNotEmpty) estado['cursor'] = resultado.agora;
     estado[_chaveConversao] = '1';

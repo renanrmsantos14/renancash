@@ -113,5 +113,30 @@ export function mapearInvestimentos(lista, banco, contasDaConexao) {
   return lista
     .map((i) => ({ i, saldo: typeof i.amount === "number" && Number.isFinite(i.amount) ? i.amount : num(i.balance) }))
     .filter(({ i, saldo }) => i.status !== "TOTAL_WITHDRAWAL" && saldo != null)
-    .map(({ i, saldo }) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo, banco: nomeBanco }));
+    .map(({ i, saldo }) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo, banco: nomeBanco, ...detalhesInvestimento(i, saldo) }));
+}
+
+// O que o Pluggy informa além do saldo (objeto Investment). Campo que o banco não manda fica null e o app esconde.
+// `aplicado` = amountOriginal. `rendimento` = saldo bruto − aplicado (o mesmo critério do saldo, que é o bruto);
+// sem `aplicado`, usa amountProfit. `liquido` = balance (já sem IR e IOF). Taxas em %, como o Pluggy manda.
+export function detalhesInvestimento(i, saldo) {
+  const aplicado = num(i.amountOriginal);
+  const ir = num(i.taxes), iof = num(i.taxes2);
+  const centavos = (v) => Math.round(v * 100) / 100;
+  return {
+    subtipo: i.subtype ?? null,
+    aplicado,
+    rendimento: aplicado != null ? centavos(saldo - aplicado) : num(i.amountProfit),
+    liquido: num(i.balance),
+    impostos: ir == null && iof == null ? null : centavos((ir ?? 0) + (iof ?? 0)),
+    // "110% do CDI" (rate + rateType) ou prefixada ("12,5% a.a.", fixedAnnualRate).
+    taxa: num(i.rate) != null ? { valor: num(i.rate), indexador: i.rateType || null }
+      : num(i.fixedAnnualRate) != null ? { valor: num(i.fixedAnnualRate), indexador: "PRE" } : null,
+    rentabilidade_mes: num(i.lastMonthRate),
+    rentabilidade_12m: num(i.lastTwelveMonthsRate),
+    vencimento: dia(i.dueDate),
+    aplicado_em: dia(i.purchaseDate) ?? dia(i.issueDate),
+    emissor: i.issuer ?? null,
+    isento_ir: typeof i.taxExempt === "boolean" ? i.taxExempt : null,
+  };
 }

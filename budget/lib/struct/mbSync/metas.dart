@@ -242,7 +242,9 @@ class MbAplicacaoMes {
   final String id, nome;
   final String? banco;
   final double saldo;
-  const MbAplicacaoMes(this.id, this.nome, this.banco, this.saldo);
+  /// Valor aplicado (amountOriginal do Pluggy) no fim do mês; null em retratos antigos ou quando o banco não informa.
+  final double? aplicado;
+  const MbAplicacaoMes(this.id, this.nome, this.banco, this.saldo, {this.aplicado});
 }
 
 /// Lê a série do JSON do Worker. Resposta sem o campo (Worker antigo) ou inválida = lista vazia.
@@ -256,18 +258,49 @@ List<MbRetratoMes> mbSerieDeJson(Object? json) {
       for (final i in m['itens'] as List)
         if (i is Map && i['id'] is String && i['saldo'] is num)
           MbAplicacaoMes(i['id'] as String, '${i['nome'] ?? ''}',
-              i['banco'] is String ? i['banco'] as String : null, (i['saldo'] as num).toDouble())
+              i['banco'] is String ? i['banco'] as String : null, (i['saldo'] as num).toDouble(),
+              aplicado: i['aplicado'] is num ? (i['aplicado'] as num).toDouble() : null)
     ]));
   }
   out.sort((a, b) => a.mes.compareTo(b.mes));
   return out;
 }
 
-/// Total de cada mês e a variação sobre o mês anterior (null no primeiro).
-List<({MbRetratoMes mes, double? variacao})> mbSerieComVariacao(List<MbRetratoMes> serie) => [
+/// Total de cada mês, a variação sobre o mês anterior (null no primeiro) e quanto dela foi rendimento.
+/// `rendimento` = soma, por aplicação, da variação de (saldo − aplicado): aporte e resgate mexem nos dois e se anulam.
+/// Aplicação nova no mês conta o que rendeu desde a compra; a que saiu (resgate total) não entra. Null quando alguma
+/// aplicação do mês não tem `aplicado` (retrato antigo ou banco que não informa) ou no primeiro mês.
+List<({MbRetratoMes mes, double? variacao, double? rendimento})> mbSerieComVariacao(
+        List<MbRetratoMes> serie) =>
+    [
       for (var i = 0; i < serie.length; i++)
-        (mes: serie[i], variacao: i == 0 ? null : serie[i].total - serie[i - 1].total)
+        (
+          mes: serie[i],
+          variacao: i == 0 ? null : serie[i].total - serie[i - 1].total,
+          rendimento: i == 0 ? null : _rendimentoDoMes(serie[i - 1], serie[i]),
+        )
     ];
+
+double? _rendimentoDoMes(MbRetratoMes antes, MbRetratoMes agora) {
+  final ganhoAntes = {
+    for (final a in antes.itens)
+      if (a.aplicado != null) a.id: a.saldo - a.aplicado!
+  };
+  final idsAntes = {for (final a in antes.itens) a.id};
+  var total = 0.0;
+  for (final a in agora.itens) {
+    if (a.aplicado == null) return null;
+    final ganho = a.saldo - a.aplicado!;
+    if (!idsAntes.contains(a.id)) {
+      total += ganho; // aplicação nova no mês
+    } else if (ganhoAntes.containsKey(a.id)) {
+      total += ganho - ganhoAntes[a.id]!;
+    } else {
+      return null; // existia sem `aplicado`: não dá para separar
+    }
+  }
+  return total;
+}
 
 Future<List<MbRetratoMes>> mbLerSerieMensal() async {
   final texto = await mbLerEstado(chaveSerieMensal);
@@ -280,6 +313,87 @@ Future<List<MbRetratoMes>> mbLerSerieMensal() async {
 }
 
 const String chaveSerieMensal = 'investimentos_mensal';
+
+// ---------------------------------------------------------------------------------------------
+// Detalhes de cada aplicação (Worker: campos extras de `investimentos`, tirados do objeto Investment do Pluggy)
+
+class MbDetalheInvestimento {
+  /// Aplicado (amountOriginal) e rendimento bruto (saldo − aplicado, ou amountProfit). Null: o banco não informa.
+  final double? aplicado, rendimento, liquido, impostos;
+  final ({double valor, String? indexador})? taxa;
+  final double? rentabilidadeMes, rentabilidade12m;
+  final DateTime? vencimento, aplicadoEm;
+  final String? emissor, subtipo;
+  const MbDetalheInvestimento({
+    this.aplicado,
+    this.rendimento,
+    this.liquido,
+    this.impostos,
+    this.taxa,
+    this.rentabilidadeMes,
+    this.rentabilidade12m,
+    this.vencimento,
+    this.aplicadoEm,
+    this.emissor,
+    this.subtipo,
+  });
+
+  /// Rendimento sobre o aplicado, em %. Null sem os dois valores.
+  double? get percentual =>
+      aplicado == null || rendimento == null || aplicado! <= 0 ? null : rendimento! / aplicado! * 100;
+}
+
+const String chaveDetalhesInvestimentos = 'investimentos_detalhes';
+
+double? _numOuNull(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
+DateTime? _diaOuNull(Object? v) => v is String ? DateTime.tryParse(v) : null;
+
+/// Detalhes por id da aplicação (o mesmo de [MbAplicacao.id]). Worker antigo (sem os campos) = detalhes vazios.
+Map<String, MbDetalheInvestimento> mbDetalhesDeJson(Object? json) {
+  if (json is! List) return const {};
+  return {
+    for (final i in json)
+      if (i is Map && i['id'] != null)
+        i['id'].toString(): MbDetalheInvestimento(
+          aplicado: _numOuNull(i['aplicado']),
+          rendimento: _numOuNull(i['rendimento']),
+          liquido: _numOuNull(i['liquido']),
+          impostos: _numOuNull(i['impostos']),
+          taxa: i['taxa'] is Map && _numOuNull((i['taxa'] as Map)['valor']) != null
+              ? (
+                  valor: _numOuNull((i['taxa'] as Map)['valor'])!,
+                  indexador: (i['taxa'] as Map)['indexador']?.toString()
+                )
+              : null,
+          rentabilidadeMes: _numOuNull(i['rentabilidade_mes']),
+          rentabilidade12m: _numOuNull(i['rentabilidade_12m']),
+          vencimento: _diaOuNull(i['vencimento']),
+          aplicadoEm: _diaOuNull(i['aplicado_em']),
+          emissor: i['emissor']?.toString(),
+          subtipo: i['subtipo']?.toString(),
+        )
+  };
+}
+
+Future<Map<String, MbDetalheInvestimento>> mbLerDetalhesInvestimentos() async {
+  final texto = await mbLerEstado(chaveDetalhesInvestimentos);
+  if (texto == null) return const {};
+  try {
+    return mbDetalhesDeJson(jsonDecode(texto));
+  } catch (_) {
+    return const {};
+  }
+}
+
+/// "110% do CDI", "IPCA + 6,5%", "12,5% a.a." (prefixada). Null sem taxa.
+String? mbRotuloTaxa(({double valor, String? indexador})? t) {
+  if (t == null) return null;
+  final v = t.valor.toStringAsFixed(t.valor % 1 == 0 ? 0 : 2).replaceAll('.', ',');
+  final ix = t.indexador?.toUpperCase();
+  if (ix == null || ix == 'PRE') return '$v% a.a.';
+  if (ix == 'IPCA' || ix == 'IGPM') return '${ix == 'IGPM' ? 'IGP-M' : ix} + $v%';
+  return '$v% do ${ix == 'DOLAR' ? 'dólar' : ix}';
+}
 
 // ---------------------------------------------------------------------------------------------
 // Resumo (função pura; o resumo semanal do PR 7 usa a mesma)

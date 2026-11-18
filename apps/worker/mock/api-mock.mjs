@@ -105,7 +105,7 @@ function rota(caminho, q) {
   }
   if (caminho === "/investments") {
     const r = q.get("itemId") === "item-santander"
-      ? [{ id: "inv-cdb", name: "CDB Santander", type: "FIXED_INCOME", balance: 15230.4, status: "ACTIVE" }, { id: "inv-velho", name: "Fundo resgatado", type: "MUTUAL_FUND", balance: 0, status: "TOTAL_WITHDRAWAL" }]
+      ? [{ id: "inv-cdb", name: "CDB Santander", type: "FIXED_INCOME", subtype: "CDB", amount: 15480.9, balance: 15230.4, amountOriginal: 14000, taxes: 248.5, taxes2: 2, rate: 102, rateType: "CDI", dueDate: "2028-05-02T00:00:00.000Z", purchaseDate: "2025-05-02T00:00:00.000Z", issuer: "Banco Santander", status: "ACTIVE" }, { id: "inv-velho", name: "Fundo resgatado", type: "MUTUAL_FUND", balance: 0, status: "TOTAL_WITHDRAWAL" }]
       : [];
     return [200, { total: r.length, totalPages: 1, page: 1, results: r }];
   }

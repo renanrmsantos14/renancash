@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos } from "../src/mapa.js";
+import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, detalhesInvestimento } from "../src/mapa.js";
 import { valorGasto, valorParcela } from "../public/regras.js";
 
 const HOJE = "2026-11-08", TS = "2026-11-08T12:00:00.000Z";
@@ -83,7 +83,7 @@ test("investimentos: resgate total fica fora; banco vem da conta corrente no Meu
     { id: 3, type: "EQUITY", balance: null },
   ];
   const contas = [{ type: "CREDIT", name: "GOLD" }, { type: "BANK", name: "Banco Santander Pessoa Física ·57-2" }];
-  assert.deepEqual(mapearInvestimentos(lista, null, contas), [
+  assert.deepEqual(mapearInvestimentos(lista, null, contas).map(({ id, nome, tipo, saldo, banco }) => ({ id, nome, tipo, saldo, banco })), [
     { id: "1", nome: "CDB", tipo: "FIXED_INCOME", saldo: 1500.5, banco: "Banco Santander Pessoa Física" },
   ]);
   assert.equal(mapearInvestimentos(lista, "Santander", contas)[0].banco, "Santander");
@@ -109,4 +109,34 @@ test("investimentos usam amount (bruto) quando numérico, senão balance; manté
     { id: "e", name: "Sem saldo" },
   ], "Inter", []);
   assert.deepEqual(r.map((x) => [x.id, x.saldo]), [["a", 7.45], ["b", 431.3119], ["c", 20]]);
+});
+
+test("investimento: aplicado, rendimento, líquido, impostos e taxa vêm do objeto Investment do Pluggy", () => {
+  const cdb = {
+    id: "c", name: "CDB Inter", type: "FIXED_INCOME", subtype: "CDB", status: "ACTIVE",
+    amount: 11234.56, balance: 11050.1, amountOriginal: 10000, amountProfit: 1050.1,
+    taxes: 180.2, taxes2: 4.26, rate: 110, rateType: "CDI", dueDate: "2028-03-01T00:00:00.000Z",
+    purchaseDate: "2025-03-01T00:00:00.000Z", issuer: "Banco Inter", taxExempt: false,
+  };
+  const [m] = mapearInvestimentos([cdb], "Inter", []);
+  assert.equal(m.saldo, 11234.56);
+  assert.equal(m.aplicado, 10000);
+  assert.equal(m.rendimento, 1234.56); // bruto, como o saldo
+  assert.equal(m.liquido, 11050.1);
+  assert.equal(m.impostos, 184.46);
+  assert.deepEqual(m.taxa, { valor: 110, indexador: "CDI" });
+  assert.equal(m.vencimento, "2028-03-01");
+  assert.equal(m.aplicado_em, "2025-03-01");
+  assert.equal(m.subtipo, "CDB");
+  assert.equal(m.isento_ir, false);
+});
+
+test("investimento sem amountOriginal usa amountProfit; sem nada fica null; prefixada vira PRE", () => {
+  const d = detalhesInvestimento({ amountProfit: "12.5", fixedAnnualRate: 12.5, lastTwelveMonthsRate: 11.2 }, 500);
+  assert.equal(d.aplicado, null);
+  assert.equal(d.rendimento, 12.5);
+  assert.deepEqual(d.taxa, { valor: 12.5, indexador: "PRE" });
+  assert.equal(d.rentabilidade_12m, 11.2);
+  const vazio = detalhesInvestimento({ balance: 10 }, 10);
+  assert.deepEqual([vazio.aplicado, vazio.rendimento, vazio.impostos, vazio.taxa, vazio.vencimento], [null, null, null, null, null]);
 });

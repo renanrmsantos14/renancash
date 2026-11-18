@@ -25,7 +25,7 @@ async function sincronizarCom(investimentos) {
 
 test("investimentos do Pluggy chegam ao app com banco e subtipo da conta", async () => {
   const { corpo } = await sincronizarCom(() => ({ totalPages: 1, results: [{ id: "i1", name: "CDB", type: "FIXED_INCOME", balance: 1500, status: "ACTIVE" }] }));
-  assert.deepEqual(corpo.investimentos, [{ id: "i1", nome: "CDB", tipo: "FIXED_INCOME", saldo: 1500, banco: "Banco Santander Pessoa Física" }]);
+  assert.deepEqual(corpo.investimentos.map(({ id, nome, tipo, saldo, banco }) => ({ id, nome, tipo, saldo, banco })), [{ id: "i1", nome: "CDB", tipo: "FIXED_INCOME", saldo: 1500, banco: "Banco Santander Pessoa Física" }]);
   assert.equal(corpo.contas[0].subtype, "CHECKING_ACCOUNT");
 });
 
