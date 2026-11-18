@@ -1,10 +1,9 @@
-// Prints dos casos comuns (iguais, rendimentos, estorno, mês passado, rachar recorrente e lançar rápido) para revisão.
+// Prints dos casos comuns (iguais, rendimentos, estorno, mês passado e rachar recorrente) para revisão.
 // Só roda com PRINTS=1:
 //   PRINTS=1 flutter test test/prints_casos_comuns_test.dart --update-goldens
 // Os PNGs vão para .verificacao/prints/casos_*.png (fora do git).
 import 'dart:io';
 
-import 'package:budget/pages/homePage/inicioEditorial.dart' show LancamentoRapidoInicio;
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/casosComuns.dart';
@@ -157,37 +156,5 @@ void main() {
             find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/casos_${nome}_$modo.png'));
       });
     }
-
-    testWidgets('print casos lançar rápido $modo', skip: _pular, (t) async {
-      appStateSettings = {...ajustes};
-      t.view.physicalSize = const Size(390 * 2, 300 * 2);
-      t.view.devicePixelRatio = 2;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: temaFlutter(temaAtivo(b)),
-        home: Scaffold(
-          body: Builder(
-            builder: (c) => ColoredBox(
-              color: cores(c).bg,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: LancamentoRapidoInicio(atalhos: [
-                  MbAtalhoRapido('Almoço Betinhos', 'alim', 'Alimentação', 20.98, vezes: 26),
-                  MbAtalhoRapido('Uber', 'transp', 'Transporte', 10.08, subPk: 'uber', subNome: 'Uber', vezes: 16),
-                  MbAtalhoRapido('salgado', 'alim', 'Alimentação', 7, subPk: 'normal', subNome: 'Normal', vezes: 11),
-                  MbAtalhoRapido('combustivel', 'transp', 'Transporte', 20, subPk: 'comb', vezes: 6),
-                  MbAtalhoRapido('mercado', 'alim', 'Alimentação', 29.9, vezes: 5),
-                  MbAtalhoRapido('energetico', 'alim', 'Alimentação', 7.29, vezes: 5),
-                ]),
-              ),
-            ),
-          ),
-        ),
-      ));
-      await t.pump(const Duration(seconds: 1));
-      await expectLater(
-          find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/casos_lancar_rapido_$modo.png'));
-    });
   }
 }

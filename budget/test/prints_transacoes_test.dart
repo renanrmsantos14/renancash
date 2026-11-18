@@ -18,13 +18,11 @@ import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
-import 'package:budget/struct/mbSync/casosComuns.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/widgets/dateDivider.dart';
 import 'package:budget/widgets/editorial/detalheTransacao.dart';
-import 'package:budget/widgets/editorial/lancamentoRapido.dart';
 import 'package:budget/widgets/editorial/lateralEditorial.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
@@ -611,34 +609,6 @@ void main() {
         'emprestimos_vazio',
         const CreditDebtTransactions(isCredit: null),
         scaffold: false,
-      );
-    });
-
-    testWidgets('print LancamentoRapido folha $modo', skip: _pular, (t) async {
-      await t.runAsync(() => _prepararBanco(comDados: true));
-      const atalho = MbAtalhoRapido(
-        'almoço executivo',
-        'c1',
-        'Mercado',
-        45.90,
-        subPk: 'sub2',
-        subNome: 'Padaria',
-      );
-      await _print(
-        t,
-        modo,
-        'lancar_rapido',
-        Builder(
-          builder: (c) => Center(
-            child: TextButton(
-              onPressed: () => mbLancarRapido(c, atalho),
-              child: const Text('Abrir rápido'),
-            ),
-          ),
-        ),
-        aposMontar: (tester) async {
-          await tester.tap(find.text('Abrir rápido'));
-        },
       );
     });
   }

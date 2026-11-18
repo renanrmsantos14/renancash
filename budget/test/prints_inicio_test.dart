@@ -11,7 +11,6 @@ import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/avisos.dart' show meuBancoAvisos;
-import 'package:budget/struct/mbSync/casosComuns.dart' show MbAtalhoRapido;
 import 'package:budget/struct/mbSync/classificar.dart' show MbLancamentoIa;
 import 'package:budget/struct/mbSync/classificarDados.dart' show meuBancoClassificar;
 import 'package:budget/struct/mbSync/emprestimos.dart';
@@ -51,18 +50,6 @@ Map<String, dynamic> _ajustes(String modo) => {
       'temaPronto': modo == 'claro' ? 'padrao-claro' : 'padrao-escuro',
     };
 
-const _atalhosExemplo = [
-  MbAtalhoRapido('Almoço Betinhos', 'alim', 'Alimentação', 20.98, vezes: 26),
-  MbAtalhoRapido('Uber', 'transp', 'Transporte', 10.08,
-      subPk: 'uber', subNome: 'Uber', vezes: 16),
-  MbAtalhoRapido('salgado', 'alim', 'Alimentação', 7,
-      subPk: 'normal', subNome: 'Normal', vezes: 11),
-  MbAtalhoRapido('combustível', 'transp', 'Transporte', 20,
-      subPk: 'comb', vezes: 6),
-  MbAtalhoRapido('mercado', 'alim', 'Alimentação', 29.9, vezes: 5),
-  MbAtalhoRapido('energético', 'alim', 'Alimentação', 7.29, vezes: 5),
-];
-
 const _metasExemplo = [
   (nome: 'Reserva de emergência', total: 7649.50, alvo: 10000.0),
   (nome: 'Viagem 2027', total: 2400.00, alvo: 6000.0),
@@ -75,25 +62,72 @@ const _limitesExemplo = [
   (nome: 'Lazer', gasto: 140.0, limite: 400.0),
 ];
 
-final _patrimonioExemplo = (
-  patrimonio: mbPatrimonio(
-      correntes: 4338.0, poupancas: 500.0, investimentos: 18430.0, fatura: 1240.0),
-  faturas: mbFaturasAbertas(
-    contas: [
-      {
-        'id': 'd',
-        'type': 'CREDIT',
-        'name': 'Ultravioleta ·4412',
-        'balance': 1240.0,
-        'due_date': '2026-11-22',
-      },
-    ],
-    faturas: const {},
-    agora: _agora,
-  ),
-  carteiras: const <CarteiraInicio>[],
-  semDados: false,
-);
+// Contas, cartões e aplicações do print: Inter e Nubank com logo, um banco sem logo (Pan: selo com
+// iniciais) com fatura vencendo em 2 dias (destaque), XP só com investimentos e aplicações sem banco (Outros).
+final _contasBancos = <Map<String, dynamic>>[
+  {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Banco Inter ·69-6', 'balance': 893.47},
+  {'id': 'p1', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança Inter', 'bank': 'Banco Inter', 'balance': 500.0},
+  {'id': 'b', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Nubank', 'bank': 'Nubank', 'balance': 1115.50},
+  {'id': 'd', 'type': 'CREDIT', 'name': 'Ultravioleta ·4412', 'bank': 'Nubank', 'balance': 1240.0, 'due_date': '2026-11-22'},
+  {'id': 'p2', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança Santander', 'bank': 'Banco Santander', 'balance': 120.0},
+  {'id': 'e', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Pan', 'bank': 'Banco Pan', 'balance': 215.40},
+  {'id': 'f', 'type': 'CREDIT', 'name': 'Pan Mastercard ·7788', 'bank': 'Banco Pan', 'balance': 569.0, 'due_date': '2026-11-14'},
+];
+
+const _investimentosBancos = <InvestimentoBanco>[
+  (nome: 'CDB - BANCO INTER', banco: 'BANCO INTER', saldo: 1049.0),
+  (nome: 'CDB - BANCO INTER', banco: 'BANCO INTER', saldo: 5200.0),
+  (nome: 'LCI - BANCO INTER', banco: 'BANCO INTER', saldo: 3100.0),
+  (nome: 'Fundo DI', banco: 'XP Investimentos', saldo: 7000.0),
+  (nome: 'Tesouro Selic', banco: null, saldo: 2081.0),
+];
+
+PatrimonioInicio _patrimonioDe(List<Map<String, dynamic>> contas,
+    List<InvestimentoBanco> invest) {
+  double soma(bool poup) => contas
+      .where((c) =>
+          c['type'] == 'BANK' && (c['subtype'] == 'SAVINGS_ACCOUNT') == poup)
+      .fold<double>(0, (s, c) => s + (c['balance'] as double));
+  final faturas =
+      mbFaturasAbertas(contas: contas, faturas: const {}, agora: _agora);
+  return (
+    patrimonio: mbPatrimonio(
+        correntes: soma(false),
+        poupancas: soma(true),
+        investimentos: invest.fold<double>(0, (s, i) => s + i.saldo),
+        fatura: faturas.fold<double>(0, (s, f) => s + f.valor)),
+    faturas: faturas,
+    carteiras: const <CarteiraInicio>[],
+    bancos: mbAgruparPorBanco(
+        contas: contas,
+        faturas: const {},
+        investimentos: invest,
+        sincronizadoEm:
+            _agora.toUtc().toIso8601String(),
+        agora: _agora),
+    semDados: false,
+  );
+}
+
+final _patrimonioExemplo = _patrimonioDe(_contasBancos, _investimentosBancos);
+
+// Sem investimentos e com um banco desconhecido: só conta, e a fatura em destaque.
+final _patrimonioSemInvestimentos = _patrimonioDe([
+  _contasBancos[0],
+  _contasBancos[5],
+  _contasBancos[6],
+], const []);
+
+/// Imagens de `assets/` só carregam fora do relógio falso do teste: decodifica antes do print.
+Future<void> _logos(WidgetTester t) async {
+  await t.runAsync(() async {
+    final contexto = t.element(find.byType(MaterialApp));
+    for (final img in t.widgetList<Image>(find.byType(Image))) {
+      await precacheImage(img.image, contexto);
+    }
+  });
+  await t.pump(const Duration(milliseconds: 100));
+}
 
 /// Fila "Para classificar" de exemplo (3 itens, R$ 212,40) e sincronização "há 4 min".
 void _pendenciasExemplo() {
@@ -352,7 +386,6 @@ void main() {
         home: Scaffold(
           body: InicioEditorial.comModelo(
             _modeloCompleto(),
-            atalhos: _atalhosExemplo,
             metas: _metasExemplo,
             patrimonio: _patrimonioExemplo,
             limites: _limitesExemplo,
@@ -361,6 +394,7 @@ void main() {
         ),
       ));
       await t.pump(const Duration(seconds: 3));
+      await _logos(t);
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
@@ -387,6 +421,7 @@ void main() {
         ),
       ));
       await t.pump(const Duration(seconds: 3));
+      await _logos(t);
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
@@ -412,10 +447,36 @@ void main() {
         ),
       ));
       await t.pump(const Duration(seconds: 3));
+      await _logos(t);
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
               '../../.verificacao/prints/inicio_editorial_metas_contas_$modo.png'));
+    });
+
+    // Sem investimentos, banco sem logo (selo com iniciais) e fatura vencendo em 2 dias em destaque.
+    testWidgets('print inicio bancos sem logo e sem investimentos $modo',
+        skip: _pular, (t) async {
+      appStateSettings = _ajustes(modo);
+      t.view.physicalSize = const Size(390 * 2, 1500 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: temaFlutter(temaAtivo(b)),
+        home: Scaffold(
+          body: InicioEditorial.comModelo(
+            _modeloCompleto(),
+            patrimonio: _patrimonioSemInvestimentos,
+          ),
+        ),
+      ));
+      await t.pump(const Duration(seconds: 3));
+      await _logos(t);
+      await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+              '../../.verificacao/prints/inicio_bancos_sem_logo_$modo.png'));
     });
 
     testWidgets('print inicio sem limite e estourado $modo', skip: _pular,
@@ -445,10 +506,7 @@ void main() {
                   const SizedBox(height: 16),
                   CartaoSaldoCiclo(modelo: estourado),
                   const MetasEmprestimosInicio(metas: []),
-                  ContasInicio(
-                    modelo: semLimite,
-                    onGerenciar: () {},
-                  ),
+                  BancosPorBanco(fixo: _patrimonioSemInvestimentos),
                 ],
               ),
             ),
@@ -456,6 +514,7 @@ void main() {
         ),
       ));
       await t.pump(const Duration(seconds: 3));
+      await _logos(t);
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
@@ -497,7 +556,6 @@ void main() {
         home: Scaffold(
           body: InicioEditorial.comModelo(
             _modeloVazio(),
-            atalhos: _atalhosExemplo,
           ),
         ),
       ));
@@ -625,7 +683,6 @@ void main() {
           conteudo: PainelDesktop.comDados(
             _modeloCompleto(),
             metas: _metasExemplo,
-            atalhos: _atalhosExemplo,
             patrimonio: _patrimonioExemplo,
             limites: _limitesExemplo,
             transacoes: _ultimasExemplo,
@@ -633,6 +690,7 @@ void main() {
         ),
       ));
       await t.pump(const Duration(seconds: 3));
+      await _logos(t);
       await expectLater(
           find.byType(MaterialApp),
           matchesGoldenFile(
