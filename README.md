@@ -16,6 +16,7 @@ O RenanCash é distribuído por GitHub Releases, não pela Play Store.
 
 - Primeira instalação: baixe o `.apk` mais recente em [Releases](https://github.com/renanrmsantos14/renancash/releases/latest) e instale manualmente (permita "instalar apps desconhecidos" para o navegador/gerenciador de arquivos).
 - Depois disso o app avisa quando houver versão nova ao abrir, e há o botão "Procurar atualização" em Configurações > Meu Banco.
+- Integridade: o workflow publica junto do APK o arquivo `renancash-<versão>.apk.sha256` (saída do `sha256sum`). O app baixa esse hash, calcula o SHA-256 do APK e só abre o instalador se baterem; sem hash (Releases antigas) ou com hash diferente, recusa e pede o download manual em Releases. O download é cancelado após 30 s sem receber dados.
 - Publicar versão: automático. Cada merge na `main` que mexe em `budget/` incrementa PATCH e build (commit `Versão X [skip ci]` do bot), cria a tag, publica a Release com o APK assinado e pede ao meu-banco para republicar o web. Para mudar MAJOR/MINOR, rode `scripts/nova-versao.sh 5.5.0+430` no PR; o merge publica essa versão.
 - Compilar localmente: `scripts/compilar.sh apk|apk-debug|web <destino>`; grava data/hora (America/Sao_Paulo) no build e o app mostra `vX.Y.Z · dd/mm/aaaa HH:mm` no canto de todas as telas.
 - Secrets necessários no repositório: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
