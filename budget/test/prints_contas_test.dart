@@ -11,7 +11,6 @@ import 'dart:io';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/accountsPage.dart';
-import 'package:budget/pages/addTransactionPage.dart' show RoutesToPopAfterDelete;
 import 'package:budget/pages/addWalletPage.dart';
 import 'package:budget/pages/investimentosEvolucaoPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart' show AmountSpentEntryRow;
@@ -27,6 +26,7 @@ import 'package:budget/widgets/accountAndBackup.dart' show googleUser;
 import 'package:budget/widgets/editRowEntry.dart';
 import 'package:budget/widgets/editorial/contas.dart';
 import 'package:budget/widgets/noResults.dart';
+import 'package:budget/widgets/openPopup.dart' show RoutesToPopAfterDelete;
 // ignore: implementation_imports
 import 'package:easy_localization/src/localization.dart';
 // ignore: implementation_imports
