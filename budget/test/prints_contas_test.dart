@@ -119,7 +119,7 @@ Widget _envolverApp(String modo, Widget tela, {AllWallets? carteiras}) {
   return MultiProvider(
     providers: [
       Provider<AllWallets>.value(value: carteiras ?? _carteirasPadrao),
-      Provider<SelectedWalletPk>.value(
+      ChangeNotifierProvider<SelectedWalletPk>.value(
           value: SelectedWalletPk(selectedWalletPk: '0')),
     ],
     child: MaterialApp(
