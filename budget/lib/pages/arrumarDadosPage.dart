@@ -53,6 +53,7 @@ class ArrumarDados extends StatefulWidget {
     this.backup = _backupPadrao,
     this.arquivadas = _arquivadasPadrao,
     this.desarquivar = arrumarDesarquivar,
+    this.aplicadoInicial,
   });
 
   // Injetáveis para os testes não precisarem do banco nem do arquivo.
@@ -60,6 +61,7 @@ class ArrumarDados extends StatefulWidget {
   final Future<bool> Function(BuildContext context) backup;
   final Future<List<TransactionWallet>> Function() arquivadas;
   final Future<void> Function(String walletPk) desarquivar;
+  final ArrumarPlano? aplicadoInicial;
 
   @override
   State<ArrumarDados> createState() => _ArrumarDadosState();
@@ -74,6 +76,7 @@ class _ArrumarDadosState extends State<ArrumarDados> {
   @override
   void initState() {
     super.initState();
+    _aplicado = widget.aplicadoInicial;
     _carregar();
   }
 

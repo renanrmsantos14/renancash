@@ -66,10 +66,7 @@ Widget _app(String modo, Widget tela) {
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: temaFlutter(temaAtivo(b)),
-      onGenerateInitialRoutes: (_) => [
-        MaterialPageRoute(builder: (_) => const SizedBox()),
-        MaterialPageRoute(builder: (_) => tela),
-      ],
+      home: tela,
     ),
   );
 }
@@ -430,32 +427,21 @@ void main() {
 
     testWidgets('print arrumar dados aplicado $modo', skip: _pular, (t) async {
       final plano = _planoExemplo();
-      appStateSettings = _ajustes(modo);
-      t.view.physicalSize = const Size(390 * 2, 844 * 2);
-      t.view.devicePixelRatio = 2;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(_app(
+      await _print(
+        t,
         modo,
+        'arrumar_dados_aplicado',
         ArrumarDadosPage(
           conteudo: ArrumarDados(
             calcular: () async => plano,
             aplicar: () async => plano,
+            aplicadoInicial: plano,
             backup: (_) async => true,
             arquivadas: () async => [_carteira('st', 'Santander')],
             desarquivar: (_) async {},
           ),
         ),
-      ));
-      await t.pump(const Duration(milliseconds: 500));
-      await t.ensureVisible(find.text('Aplicar'));
-      await t.tap(find.text('Aplicar'));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Aplicar').last);
-      await t.pumpAndSettle();
-      await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile(
-              '../../.verificacao/prints/arrumar_dados_aplicado_$modo.png'));
+      );
     });
   }
 
