@@ -1,4 +1,4 @@
-name = "meu-banco"
+name = "renancash"
 main = "src/index.js"
 compatibility_date = "2025-10-01"
 workers_dev = true
@@ -36,7 +36,7 @@ enabled = true
 # Se o Pluggy não listar suas conexões, defina também o secret PLUGGY_ITEM_IDS (ids do Meu Pluggy, separados por vírgula).
 [vars]
 IMPORT_DAYS = "180"
-VAPID_ASSUNTO = "https://meu-banco.renanrmsantos14.workers.dev"
+VAPID_ASSUNTO = "https://renancash.renanrmsantos14.workers.dev"
 VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"
 
 # Limite de tentativas de login por IP (5 por minuto).

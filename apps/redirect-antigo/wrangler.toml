@@ -1,0 +1,5 @@
+# Ocupa o nome antigo só para redirecionar. Publicado pelo deploy.yml depois do Worker principal.
+name = "meu-banco"
+main = "index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true

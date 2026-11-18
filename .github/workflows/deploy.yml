@@ -60,8 +60,22 @@ jobs:
       - name: Migração do D1 (idempotente)
         run: pnpm --filter @meu-banco/worker migrar:fase2 -- --remote
 
+      # O Worker foi renomeado de meu-banco para renancash no painel (os secrets vão junto).
+      # Sem o rename, o deploy criaria um "renancash" vazio e o redirecionamento tomaria o lugar do antigo.
+      - name: Conferir o Worker renancash com secrets
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/renancash/secrets"
+          if ! curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" | grep -Eq '"name": ?"APP_PASSWORD"'; then
+            echo "::error::Renomeie o Worker meu-banco para renancash no painel da Cloudflare antes do deploy."
+            exit 1
+          fi
+
       - name: Publicar
         run: pnpm push
+
+      - name: Redirecionar o endereço antigo
+        working-directory: apps/worker
+        run: pnpm exec wrangler deploy --config ../redirect-antigo/wrangler.toml
 
       - name: Gravar a versão publicada
         run: |
