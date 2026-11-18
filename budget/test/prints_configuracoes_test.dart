@@ -12,7 +12,7 @@ import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/activityPage.dart';
 import 'package:budget/pages/addAssociatedTitlePage.dart';
 import 'package:budget/pages/addCategoryPage.dart';
-import 'package:budget/pages/addTransactionPage.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/pages/debugPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editCategoriesPage.dart';
