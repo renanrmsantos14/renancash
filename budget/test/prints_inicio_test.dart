@@ -55,10 +55,10 @@ const _atalhosExemplo = [
       subPk: 'uber', subNome: 'Uber', vezes: 16),
   MbAtalhoRapido('salgado', 'alim', 'Alimentação', 7,
       subPk: 'normal', subNome: 'Normal', vezes: 11),
-  MbAtalhoRapido('combustivel', 'transp', 'Transporte', 20,
+  MbAtalhoRapido('combustível', 'transp', 'Transporte', 20,
       subPk: 'comb', vezes: 6),
   MbAtalhoRapido('mercado', 'alim', 'Alimentação', 29.9, vezes: 5),
-  MbAtalhoRapido('energetico', 'alim', 'Alimentação', 7.29, vezes: 5),
+  MbAtalhoRapido('energético', 'alim', 'Alimentação', 7.29, vezes: 5),
 ];
 
 const _metasExemplo = [

@@ -358,19 +358,36 @@ class _LancamentoRapidoInicioState extends State<LancamentoRapidoInicio> {
             filhos: [
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: LayoutBuilder(
-                  builder: (context, c) => Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final a in _atalhos)
-                      SizedBox(
-                        width: (c.maxWidth - 16) / 3,
-                        child: _AtalhoRapido(
-                            atalho: a,
-                            onTap: () async {
-                              if (await mbLancarRapido(context, a)) _carregar();
-                            }),
+                // Três por linha; IntrinsicHeight iguala a altura dos cartões da linha
+                // (título que quebra em 2 linhas não deixa o vizinho mais baixo).
+                child: Column(children: [
+                  for (var i = 0; i < _atalhos.length; i += 3)
+                    Padding(
+                      padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var j = i; j < i + 3; j++) ...[
+                              if (j > i) const SizedBox(width: 8),
+                              Expanded(
+                                child: j >= _atalhos.length
+                                    ? const SizedBox.shrink()
+                                    : _AtalhoRapido(
+                                        atalho: _atalhos[j],
+                                        onTap: () async {
+                                          if (await mbLancarRapido(
+                                              context, _atalhos[j])) {
+                                            _carregar();
+                                          }
+                                        }),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                  ]),
-                ),
+                    ),
+                ]),
               ),
             ],
           );
@@ -615,6 +632,8 @@ class _SemLimite extends StatelessWidget {
             onPressed: onDefinirLimite,
             style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 44),
+                alignment: Alignment.centerLeft,
                 visualDensity: VisualDensity.compact,
                 foregroundColor: e.acc),
             child: const Text('Definir limite do ciclo'),
@@ -757,10 +776,14 @@ class _Grupo extends StatelessWidget {
         ? GestureDetector(
             onTap: onAcao,
             behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(acao!,
-                  style: EdTexto.rotulo(context).copyWith(color: e.acc)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+              child: Align(
+                alignment: Alignment.centerRight,
+                widthFactor: 1,
+                child: Text(acao!,
+                    style: EdTexto.rotulo(context).copyWith(color: e.acc)),
+              ),
             ),
           )
         : nota == null
@@ -856,6 +879,9 @@ class _Secao extends StatelessWidget {
               TextButton(
                 onPressed: onAcao,
                 style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 44),
+                    alignment: Alignment.centerRight,
                     visualDensity: VisualDensity.compact,
                     foregroundColor: e.mu),
                 child: Text(acao!),

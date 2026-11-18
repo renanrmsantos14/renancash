@@ -258,6 +258,18 @@ void main() {
     expect(_montar(contas: conta(10)), isNot(_montar(contas: conta(20))));
   });
 
+  test('mbSigla pula o prefixo genérico do nome do banco', () {
+    expect(mbSigla('Banco Inter'), 'IN');
+    expect(mbSigla('Banco do Brasil'), 'BR');
+    expect(mbSigla('Cartão Poup'), 'PO');
+    expect(mbSigla('Conta Poupança'), 'PO');
+    expect(mbSigla('Nubank'), 'NU');
+    expect(mbSigla('Itaú'), 'IT');
+    expect(mbSigla('Banco'), 'BA');
+    expect(mbSigla('X'), 'X');
+    expect(mbSigla('  '), '··');
+  });
+
   test('RecargaColapsada junta a rajada em uma recarga + uma repetição', () async {
     var cargas = 0;
     final r = RecargaColapsada(() async {
