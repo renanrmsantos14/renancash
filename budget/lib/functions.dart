@@ -265,6 +265,9 @@ String convertToMoney(AllWallets allWallets, double amount,
                 "")
             .toUpperCase();
   }
+  // Moeda sem código (carteira ausente) não deixa espaço sobrando no fim do valor,
+  // senão "1.234,56 " não casa com os centavos menores de ContagemValor.
+  if (currencyName != null && currencyName.trim().isEmpty) currencyName = null;
 
   if (useCustomNumberFormat) {
     formatOutput = formatOutputWithNewDelimiterAndDecimal(

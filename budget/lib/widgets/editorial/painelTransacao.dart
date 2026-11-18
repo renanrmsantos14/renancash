@@ -57,6 +57,17 @@ double? mbLerValor(String texto) {
   return double.tryParse(t);
 }
 
+/// pk → rótulo; nomes repetidos ganham " (2)", " (3)"... para o seletor não esconder qual é qual.
+Map<String, String> mbRotulosUnicos(Iterable<(String, String)> itens) {
+  final vistos = <String, int>{};
+  return {
+    for (final (pk, nome) in itens)
+      pk: (vistos[nome] = (vistos[nome] ?? 0) + 1) == 1
+          ? nome
+          : '$nome (${vistos[nome]})',
+  };
+}
+
 String _valorInicial(double v) =>
     v.toStringAsFixed(2).replaceAll('.', ',').replaceAll(RegExp(r',00$'), '');
 
@@ -84,6 +95,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
   late final _titulo = TextEditingController(text: t?.name ?? '');
   late final _notas = TextEditingController(text: t?.note ?? '');
   late String? _categoriaPk = t?.categoryFk;
+  late String? _subPk = t?.subCategoryFk;
   late String _carteiraPk =
       t?.walletFk ?? '${appStateSettings["selectedWalletPk"] ?? "0"}';
   late DateTime _data = t?.dateCreated ?? DateTime.now();
@@ -98,6 +110,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
         _titulo.text,
         _notas.text,
         _categoriaPk,
+        _subPk,
         _carteiraPk,
         _data
       ].join('|');
@@ -190,6 +203,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
             amount: quantia,
             note: _notas.text,
             categoryFk: categoria!.categoryPk,
+            subCategoryFk: _subPk,
             walletFk: _carteiraPk,
             dateCreated: _data,
             income: _receita,
@@ -203,10 +217,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
             amount: quantia,
             note: _notas.text,
             categoryFk: categoria!.categoryPk,
-            // Subcategoria só vale para a categoria original.
-            subCategoryFk: categoria.categoryPk == atual.categoryFk
-                ? Value(atual.subCategoryFk)
-                : const Value(null),
+            subCategoryFk: Value(_subPk),
             walletFk: _carteiraPk,
             dateCreated: _data,
             income: _receita,
@@ -262,7 +273,25 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
   Widget build(BuildContext context) {
     final e = cores(context);
     final carteiras = Provider.of<AllWallets>(context).list;
-    final categorias = _categorias.where((c) => c.income == _receita).toList();
+    // Subcategorias aparecem no seu próprio campo, não como categorias.
+    final categorias = _categorias
+        .where((c) => c.income == _receita && c.mainCategoryPk == null)
+        .toList();
+    final subs = _categorias
+        .where((c) => _categoriaPk != null && c.mainCategoryPk == _categoriaPk)
+        .toList();
+    final nomesCategorias =
+        mbRotulosUnicos([for (final c in categorias) (c.categoryPk, c.name)]);
+    final nomesSubs =
+        mbRotulosUnicos([for (final c in subs) (c.categoryPk, c.name)]);
+    // Conta arquivada só aparece se for a da própria transação.
+    final arquivadas = carteirasArquivadas();
+    final contas = [
+      for (final w in carteiras)
+        if (w.walletPk == _carteiraPk || !arquivadas.contains(w.walletPk)) w
+    ];
+    final nomesContas =
+        mbRotulosUnicos([for (final w in contas) (w.walletPk, w.name)]);
     final agora = DateTime.now();
     final hoje = _data.year == agora.year &&
         _data.month == agora.month &&
@@ -309,6 +338,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
                           c.categoryPk == _categoriaPk &&
                           c.income == _receita)) {
                         _categoriaPk = null;
+                        _subPk = null;
                       }
                     }),
                   ),
@@ -346,21 +376,49 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
                       menuHeight: 320,
                       dropdownMenuEntries: [
                         for (final c in categorias)
-                          DropdownMenuEntry(value: c.categoryPk, label: c.name),
+                          DropdownMenuEntry(
+                              value: c.categoryPk,
+                              label: nomesCategorias[c.categoryPk]!),
                       ],
-                      onSelected: (pk) => setState(() => _categoriaPk = pk),
+                      onSelected: (pk) => setState(() {
+                        if (pk != _categoriaPk) _subPk = null;
+                        _categoriaPk = pk;
+                      }),
                     ),
                   ),
+                  if (subs.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, box) => DropdownMenu<String>(
+                        key: ValueKey('sub-$_categoriaPk'),
+                        width: box.maxWidth,
+                        label: const Text('Subcategoria'),
+                        initialSelection: _subPk ?? '',
+                        menuHeight: 320,
+                        dropdownMenuEntries: [
+                          const DropdownMenuEntry(value: '', label: 'Nenhuma'),
+                          for (final c in subs)
+                            DropdownMenuEntry(
+                                value: c.categoryPk,
+                                label: nomesSubs[c.categoryPk]!),
+                        ],
+                        onSelected: (pk) => setState(
+                            () => _subPk = pk == null || pk.isEmpty ? null : pk),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   LayoutBuilder(
                     builder: (context, box) => DropdownMenu<String>(
-                      key: ValueKey('conta-${carteiras.length}'),
+                      key: ValueKey('conta-${contas.length}'),
                       width: box.maxWidth,
                       label: const Text('Conta'),
                       initialSelection: _carteiraPk,
                       dropdownMenuEntries: [
-                        for (final w in carteiras)
-                          DropdownMenuEntry(value: w.walletPk, label: w.name),
+                        for (final w in contas)
+                          DropdownMenuEntry(
+                              value: w.walletPk,
+                              label: nomesContas[w.walletPk]!),
                       ],
                       onSelected: (pk) {
                         if (pk != null) setState(() => _carteiraPk = pk);
