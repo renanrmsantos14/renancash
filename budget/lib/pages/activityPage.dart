@@ -133,7 +133,9 @@ void restoreTransaction(
 }
 
 class ActivityPage extends StatefulWidget {
-  const ActivityPage({super.key});
+  const ActivityPage({super.key, this.logsForTest});
+
+  final List<TransactionActivityLog>? logsForTest;
 
   @override
   State<ActivityPage> createState() => ActivityPageState();
@@ -166,12 +168,16 @@ class ActivityPageState extends State<ActivityPage> {
         listID: pageId,
         slivers: [
           StreamBuilder<List<TransactionActivityLog>>(
-            stream: database.watchAllTransactionActivityLog(limit: 30),
+            stream: widget.logsForTest != null
+                ? Stream.value(widget.logsForTest!)
+                : database.watchAllTransactionActivityLog(limit: 30),
             builder: (context, snapshot1) {
               return Container(
                 child: StreamBuilder<List<TransactionActivityLog>>(
-                  stream:
-                      database.watchAllTransactionDeleteActivityLog(limit: 30),
+                  stream: widget.logsForTest != null
+                      ? Stream.value(const <TransactionActivityLog>[])
+                      : database.watchAllTransactionDeleteActivityLog(
+                          limit: 30),
                   builder: (context, snapshot2) {
                     // print(snapshot1.data);
                     // print(snapshot2.data);

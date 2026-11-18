@@ -45,6 +45,11 @@ class AddCategoryPage extends StatefulWidget {
     required this.routesToPopAfterDelete,
     this.mainCategoryPkWhenSubCategory,
     this.initiallyIsExpense = true,
+    this.mainCategoriesForTest,
+    this.subCategoriesForTest,
+    this.subCategoryCountsForTest,
+    this.titlesForTest,
+    this.testMode = false,
   }) : super(key: key);
 
   //When a category is passed in, we are editing that category
@@ -53,6 +58,11 @@ class AddCategoryPage extends StatefulWidget {
   final String?
       mainCategoryPkWhenSubCategory; //When this is null, it is a main category not a sub category
   final bool initiallyIsExpense;
+  final List<TransactionCategory>? mainCategoriesForTest;
+  final List<TransactionCategory>? subCategoriesForTest;
+  final Map<String, int>? subCategoryCountsForTest;
+  final List<TransactionAssociatedTitle>? titlesForTest;
+  final bool testMode;
   @override
   _AddCategoryPageState createState() => _AddCategoryPageState();
 }
@@ -254,9 +264,11 @@ class _AddCategoryPageState extends State<AddCategoryPage>
         _titleController.text = selectedTitle ?? "";
         _titleController.selection = TextSelection.fromPosition(
             TextPosition(offset: _titleController.text.length));
-        await database.fixOrderCategories(
-            mainCategoryPkIfSubCategoryOrderFixing:
-                widget.category!.categoryPk);
+        if (!widget.testMode) {
+          await database.fixOrderCategories(
+              mainCategoryPkIfSubCategoryOrderFixing:
+                  widget.category!.categoryPk);
+        }
       });
     }
 
@@ -270,7 +282,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
     setState(() {
       canAddCategory = false;
     });
-    if (widget.category == null) {
+    if (widget.category == null && !widget.testMode) {
       Future.delayed(Duration.zero, () async {
         categoryInitial = await createTransactionCategory();
       });
@@ -696,6 +708,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
               padding: const EdgeInsetsDirectional.only(top: 20),
               child: SelectIsSubcategory(
                 isMainCategoryWhenCreating: isMainCategoryWhenCreating,
+                mainCategoriesForTest: widget.mainCategoriesForTest,
                 onTap: (value) {
                   setState(() {
                     isMainCategoryWhenCreating = value;
@@ -711,8 +724,10 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                   isSubCategory) ==
               false)
             StreamBuilder<List<TransactionCategory>>(
-              stream: database.watchAllSubCategoriesOfMainCategory(
-                  widget.category!.categoryPk),
+              stream: widget.subCategoriesForTest != null
+                  ? Stream.value(widget.subCategoriesForTest!)
+                  : database.watchAllSubCategoriesOfMainCategory(
+                      widget.category!.categoryPk),
               builder: (context, snapshot) {
                 List<TransactionCategory> subCategories = snapshot.data ?? [];
                 if (subCategories.length <= 0 &&
@@ -805,9 +820,16 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                     fontSize: 15,
                                   ),
                                   StreamBuilder<List<int?>>(
-                                    stream: database
-                                        .watchTotalCountOfTransactionsInSubCategory(
-                                            category.categoryPk),
+                                    stream: widget.subCategoryCountsForTest !=
+                                            null
+                                        ? Stream.value([
+                                            widget.subCategoryCountsForTest![
+                                                    category.categoryPk] ??
+                                                0
+                                          ])
+                                        : database
+                                            .watchTotalCountOfTransactionsInSubCategory(
+                                                category.categoryPk),
                                     builder: (context, snapshot) {
                                       if (snapshot.hasData &&
                                           snapshot.data != null) {
@@ -967,12 +989,14 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                   ),
                 if (widget.category != null)
                   StreamBuilder<List<TransactionAssociatedTitle>>(
-                      stream: database.watchAllAssociatedTitlesInCategory(
-                        widget.category == null
-                            ? "-1"
-                            : widget.category!.categoryPk,
-                        limit: 30,
-                      ),
+                      stream: widget.titlesForTest != null
+                          ? Stream.value(widget.titlesForTest!)
+                          : database.watchAllAssociatedTitlesInCategory(
+                              widget.category == null
+                                  ? "-1"
+                                  : widget.category!.categoryPk,
+                              limit: 30,
+                            ),
                       builder: (context, snapshot) {
                         // print(snapshot.data);
                         if (snapshot.hasData &&
@@ -1191,11 +1215,13 @@ class SelectIsSubcategory extends StatelessWidget {
       {required this.isMainCategoryWhenCreating,
       required this.onTap,
       required this.setMainCategoryPkForSubcategoryWhenCreating,
+      this.mainCategoriesForTest,
       super.key});
   final bool isMainCategoryWhenCreating;
   final Function(bool isMainCategoryWhenCreating) onTap;
   final Function(String mainCategoryPkForSubcategoryWhenCreating)
       setMainCategoryPkForSubcategoryWhenCreating;
+  final List<TransactionCategory>? mainCategoriesForTest;
 
   @override
   Widget build(BuildContext context) {
@@ -1262,18 +1288,44 @@ class SelectIsSubcategory extends StatelessWidget {
                         padding: const EdgeInsetsDirectional.symmetric(
                             horizontal: 1),
                         child: ClipRRect(
-                          child: SelectCategory(
-                            horizontalList: true,
-                            listPadding:
-                                EdgeInsetsDirectional.symmetric(horizontal: 10),
-                            addButton: false,
-                            setSelectedCategory: (category) {
-                              setMainCategoryPkForSubcategoryWhenCreating(
-                                  category.categoryPk);
-                              onTap(false);
-                            },
-                            popRoute: false,
-                          ),
+                          child: mainCategoriesForTest != null
+                              ? SizedBox(
+                                  height: 100,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsetsDirectional
+                                        .symmetric(horizontal: 10),
+                                    children: [
+                                      for (final c in mainCategoriesForTest!)
+                                        CategoryIcon(
+                                          categoryPk: c.categoryPk,
+                                          category: c,
+                                          size: 42,
+                                          sizePadding: 28,
+                                          label: true,
+                                          canEditByLongPress: false,
+                                          onTap: () {
+                                            setMainCategoryPkForSubcategoryWhenCreating(
+                                                c.categoryPk);
+                                            onTap(false);
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              : SelectCategory(
+                                  horizontalList: true,
+                                  listPadding:
+                                      EdgeInsetsDirectional.symmetric(
+                                          horizontal: 10),
+                                  addButton: false,
+                                  setSelectedCategory: (category) {
+                                    setMainCategoryPkForSubcategoryWhenCreating(
+                                        category.categoryPk);
+                                    onTap(false);
+                                  },
+                                  popRoute: false,
+                                ),
                         ),
                       )
                     ],

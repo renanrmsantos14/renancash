@@ -32,7 +32,12 @@ import 'package:budget/modified/reorderable_list.dart';
 class EditCategoriesPage extends StatefulWidget {
   EditCategoriesPage({
     Key? key,
+    this.categoriesForTest,
+    this.subCategoriesForTest,
   }) : super(key: key);
+
+  final List<CategoryWithDetails>? categoriesForTest;
+  final Map<String, List<TransactionCategory>>? subCategoriesForTest;
 
   @override
   _EditCategoriesPageState createState() => _EditCategoriesPageState();
@@ -45,9 +50,11 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
 
   @override
   void initState() {
-    Future.delayed(Duration.zero, () {
-      database.fixOrderCategories();
-    });
+    if (widget.categoriesForTest == null) {
+      Future.delayed(Duration.zero, () {
+        database.fixOrderCategories();
+      });
+    }
     super.initState();
   }
 
@@ -134,14 +141,18 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
             ),
           ),
           StreamBuilder<Map<String, List<TransactionCategory>>>(
-              stream: database.watchAllSubCategoriesIndexedByMainCategoryPk(),
+              stream: widget.subCategoriesForTest != null
+                  ? Stream.value(widget.subCategoriesForTest!)
+                  : database.watchAllSubCategoriesIndexedByMainCategoryPk(),
               builder: (context, snapshotSubCategories) {
                 Map<String, List<TransactionCategory>>
                     subCategoriesIndexedByMainPk =
                     snapshotSubCategories.data ?? {};
                 return StreamBuilder<List<CategoryWithDetails>>(
-                  stream: database.watchAllMainCategoriesWithDetails(
-                      searchFor: null),
+                  stream: widget.categoriesForTest != null
+                      ? Stream.value(widget.categoriesForTest!)
+                      : database.watchAllMainCategoriesWithDetails(
+                          searchFor: null),
                   // Do the search below, we search through any subcategories that may have a name
                   builder: (context, snapshot) {
                     List<CategoryWithDetails> categoriesToShow =

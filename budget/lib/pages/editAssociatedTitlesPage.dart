@@ -29,7 +29,10 @@ import 'package:budget/modified/reorderable_list.dart';
 class EditAssociatedTitlesPage extends StatefulWidget {
   EditAssociatedTitlesPage({
     Key? key,
+    this.titlesForTest,
   }) : super(key: key);
+
+  final List<TransactionAssociatedTitleWithCategory>? titlesForTest;
 
   @override
   _EditAssociatedTitlesPageState createState() =>
@@ -44,10 +47,12 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
 
   @override
   void initState() {
-    Future.delayed(Duration.zero, () async {
-      await database.fixDuplicateAssociatedTitles();
-      await database.fixOrderAssociatedTitles();
-    });
+    if (widget.titlesForTest == null) {
+      Future.delayed(Duration.zero, () async {
+        await database.fixDuplicateAssociatedTitles();
+        await database.fixOrderAssociatedTitles();
+      });
+    }
     super.initState();
   }
 
@@ -155,8 +160,16 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
           //   ),
           // ),
           StreamBuilder<List<TransactionAssociatedTitleWithCategory>>(
-            stream: database.watchAllAssociatedTitles(
-                searchFor: searchValue == "" ? null : searchValue),
+            stream: widget.titlesForTest != null
+                ? Stream.value(searchValue == ""
+                    ? widget.titlesForTest!
+                    : widget.titlesForTest!
+                        .where((t) => t.title.title
+                            .toLowerCase()
+                            .contains(searchValue.toLowerCase().trim()))
+                        .toList())
+                : database.watchAllAssociatedTitles(
+                    searchFor: searchValue == "" ? null : searchValue),
             builder: (context, snapshot) {
               List<TransactionAssociatedTitleWithCategory> titles =
                   snapshot.data ?? [];

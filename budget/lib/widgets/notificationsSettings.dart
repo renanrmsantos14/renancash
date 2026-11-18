@@ -176,7 +176,12 @@ class _DailyNotificationsSettingsState
 }
 
 class UpcomingTransactionsNotificationsSettings extends StatefulWidget {
-  const UpcomingTransactionsNotificationsSettings({super.key});
+  const UpcomingTransactionsNotificationsSettings({
+    super.key,
+    this.upcomingForTest,
+  });
+
+  final List<(Transaction, TransactionCategory)>? upcomingForTest;
 
   @override
   State<UpcomingTransactionsNotificationsSettings> createState() =>
@@ -235,8 +240,29 @@ class _UpcomingTransactionsNotificationsSettingsState
               child: ClipRRect(
                 borderRadius: BorderRadiusDirectional.circular(
                     getPlatform() == PlatformOS.isIOS ? 10 : 15),
-                child: StreamBuilder<List<Transaction>>(
-                  stream: database.watchAllOverdueUpcomingTransactions(false),
+                child: widget.upcomingForTest != null
+                    ? Column(
+                        children: [
+                          for (final (transaction, cat)
+                              in widget.upcomingForTest!)
+                            SettingsContainerSwitch(
+                              icon: getTransactionTypeIcon(transaction.type),
+                              title: getTransactionLabelSync(transaction, cat),
+                              description: getWordedDateShortMore(
+                                      transaction.dateCreated) +
+                                  ", " +
+                                  getWordedTime(null, transaction.dateCreated),
+                              onSwitched: (_) {},
+                              syncWithInitialValue: false,
+                              initialValue: transaction
+                                      .upcomingTransactionNotification ??
+                                  true,
+                            ),
+                        ],
+                      )
+                    : StreamBuilder<List<Transaction>>(
+                        stream:
+                            database.watchAllOverdueUpcomingTransactions(false),
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       return Column(

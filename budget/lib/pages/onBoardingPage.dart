@@ -17,6 +17,7 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/database/initializeDefaultDatabase.dart';
 
@@ -25,10 +26,12 @@ class OnBoardingPage extends StatelessWidget {
     Key? key,
     this.popNavigationWhenDone = false,
     this.showPreviewDemoButton = true,
+    this.initializeDb = true,
   }) : super(key: key);
 
   final bool popNavigationWhenDone;
   final bool showPreviewDemoButton;
+  final bool initializeDb;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +39,8 @@ class OnBoardingPage extends StatelessWidget {
         resizeToAvoidBottomInset: false,
         body: OnBoardingPageBody(
             popNavigationWhenDone: popNavigationWhenDone,
-            showPreviewDemoButton: showPreviewDemoButton));
+            showPreviewDemoButton: showPreviewDemoButton,
+            initializeDb: initializeDb));
   }
 }
 
@@ -45,9 +49,11 @@ class OnBoardingPageBody extends StatefulWidget {
     Key? key,
     this.popNavigationWhenDone = false,
     this.showPreviewDemoButton = true,
+    this.initializeDb = true,
   }) : super(key: key);
   final bool popNavigationWhenDone;
   final bool showPreviewDemoButton;
+  final bool initializeDb;
 
   @override
   State<OnBoardingPageBody> createState() => OnBoardingPageBodyState();
@@ -59,10 +65,12 @@ class OnBoardingPageBodyState extends State<OnBoardingPageBody> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(Duration.zero, () async {
-      // Depois da interface (e das traduções): cria a conta padrão.
-      await initializeDefaultDatabase();
-    });
+    if (widget.initializeDb) {
+      Future.delayed(Duration.zero, () async {
+        // Depois da interface (e das traduções): cria a conta padrão.
+        await initializeDefaultDatabase();
+      });
+    }
   }
 
   Future<void> concluir({bool generatePreview = false, Widget? abrir}) async {
@@ -182,7 +190,9 @@ class OnBoardingPageBodyState extends State<OnBoardingPageBody> {
       ),
       SizedBox(height: 20),
       StreamBuilder<AllWallets>(
-        stream: database.watchAllWalletsIndexed(),
+        stream: widget.initializeDb
+            ? database.watchAllWalletsIndexed()
+            : Stream.value(Provider.of<AllWallets>(context, listen: false)),
         builder: (context, snapshot) {
           TransactionWallet? primaryWallet =
               snapshot.data?.indexedByPk[appStateSettings["selectedWalletPk"]];

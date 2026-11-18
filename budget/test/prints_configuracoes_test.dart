@@ -4,7 +4,6 @@
 // Os PNGs vão para .verificacao/prints/config_*.png (fora do git).
 // Sem EasyLocalization os textos .tr() saem como chave; os textos novos
 // (grupos, descrições) já são pt-BR literais.
-import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
 
 import 'package:budget/database/tables.dart';
@@ -12,7 +11,6 @@ import 'package:budget/pages/aboutPage.dart';
 import 'package:budget/pages/activityPage.dart';
 import 'package:budget/pages/addAssociatedTitlePage.dart';
 import 'package:budget/pages/addCategoryPage.dart';
-import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/pages/debugPage.dart';
 import 'package:budget/pages/editAssociatedTitlesPage.dart';
 import 'package:budget/pages/editCategoriesPage.dart';
@@ -21,21 +19,17 @@ import 'package:budget/pages/notificationsPage.dart';
 import 'package:budget/pages/onBoardingPage.dart';
 import 'package:budget/pages/settingsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
-import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/languageMap.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/textInput.dart';
-import 'package:drift/drift.dart' hide Column;
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' hide TextInput;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqlite3/open.dart';
 
 final _pular = Platform.environment['PRINTS'] != '1';
 
@@ -108,6 +102,16 @@ final _catRenda = TransactionCategory(
   income: true,
 );
 
+final _categoriasPrincipais = [
+  CategoryWithDetails(category: _catAlimentacao, numberTransactions: 28),
+  CategoryWithDetails(category: _catTransporte, numberTransactions: 14),
+  CategoryWithDetails(category: _catRenda, numberTransactions: 2),
+];
+
+final _subcategoriasPorPai = {
+  'c1': [_subDelivery, _subPadaria],
+};
+
 final _titulo1 = TransactionAssociatedTitle(
   associatedTitlePk: 't1',
   categoryFk: 'c1',
@@ -125,6 +129,101 @@ final _titulo2 = TransactionAssociatedTitle(
   dateCreated: DateTime(2026, 1, 2),
   order: 1,
 );
+
+final _titulosComCategoria = [
+  TransactionAssociatedTitleWithCategory(
+    title: _titulo1,
+    category: _catAlimentacao,
+  ),
+  TransactionAssociatedTitleWithCategory(
+    title: _titulo2,
+    category: _catTransporte,
+  ),
+];
+
+final _txEditada = Transaction(
+  transactionPk: 'tx1',
+  name: 'Pão de Açúcar',
+  amount: -182.30,
+  note: 'Compras da semana',
+  categoryFk: 'c1',
+  subCategoryFk: 's1',
+  walletFk: '0',
+  dateCreated: DateTime(2026, 11, 16, 10, 0),
+  dateTimeModified: DateTime.now().subtract(const Duration(hours: 2)),
+  income: false,
+  paid: true,
+  skipPaid: false,
+);
+
+final _txApagada = Transaction(
+  transactionPk: 'del1',
+  name: 'Uber',
+  amount: -27.90,
+  note: '',
+  categoryFk: 'c2',
+  walletFk: '0',
+  dateCreated: DateTime(2026, 11, 15, 18, 0),
+  dateTimeModified: DateTime.now().subtract(const Duration(hours: 5)),
+  income: false,
+  paid: true,
+  skipPaid: false,
+);
+
+final _txAgendada = Transaction(
+  transactionPk: 'tx2',
+  name: 'Internet Fibra',
+  amount: -129.90,
+  note: '',
+  categoryFk: 'c2',
+  walletFk: '0',
+  dateCreated: DateTime(2026, 11, 25, 9, 0),
+  dateTimeModified: DateTime.now().subtract(const Duration(days: 1)),
+  income: false,
+  paid: false,
+  skipPaid: false,
+  type: TransactionSpecialType.upcoming,
+  upcomingTransactionNotification: true,
+);
+
+List<TransactionActivityLog> _logsHistorico() {
+  final agora = DateTime.now();
+  return [
+    TransactionActivityLog(
+      dateTime: agora.subtract(const Duration(hours: 1)),
+      deleteLog: DeleteLog(
+        deleteLogPk: 'dl1',
+        entryPk: 'del1',
+        type: DeleteLogType.Transaction,
+        dateTimeModified: agora.subtract(const Duration(hours: 1)),
+      ),
+      transaction: _txApagada,
+      transactionWithCategory: TransactionWithCategory(
+        category: _catTransporte,
+        transaction: _txApagada,
+      ),
+    ),
+    TransactionActivityLog(
+      dateTime: agora.subtract(const Duration(hours: 2)),
+      transaction: _txEditada,
+      transactionWithCategory: TransactionWithCategory(
+        category: _catAlimentacao,
+        subCategory: _subDelivery,
+        transaction: _txEditada,
+      ),
+    ),
+    TransactionActivityLog(
+      dateTime: agora.subtract(const Duration(days: 2)),
+      deleteLog: DeleteLog(
+        deleteLogPk: 'dl2',
+        entryPk: 'del_antiga',
+        type: DeleteLogType.Transaction,
+        dateTimeModified: agora.subtract(const Duration(days: 2)),
+      ),
+      transaction: null,
+    ),
+  ];
+}
 
 Map<String, dynamic> _padroes = {};
 Map<String, dynamic> _ajustes(String modo, {Map<String, dynamic>? extras}) => {
@@ -171,106 +270,11 @@ Widget _app(String modo, Widget home) {
   );
 }
 
-Future<void> _prepararBanco(WidgetTester t, {bool vazio = false}) async {
-  await t.runAsync(() async {
-    await database.delete(database.deleteLogs).go();
-    await database.delete(database.transactions).go();
-    await database.delete(database.associatedTitles).go();
-    await database.delete(database.categories).go();
-    await database.delete(database.wallets).go();
-    recentlyDeletedTransactions.clear();
-
-    await database.into(database.wallets).insert(_carteiraPadrao);
-    if (vazio) return;
-
-    for (final c in [
-      _catAlimentacao,
-      _subDelivery,
-      _subPadaria,
-      _catTransporte,
-      _catRenda,
-    ]) {
-      await database.into(database.categories).insert(c);
-    }
-
-    for (final tt in [_titulo1, _titulo2]) {
-      await database.into(database.associatedTitles).insert(tt);
-    }
-
-    final agora = DateTime(2026, 11, 17, 14, 30);
-    await database.into(database.transactions).insert(
-          Transaction(
-            transactionPk: 'tx1',
-            name: 'Pão de Açúcar',
-            amount: -182.30,
-            note: 'Compras da semana',
-            categoryFk: 'c1',
-            subCategoryFk: 's1',
-            walletFk: '0',
-            dateCreated: DateTime(2026, 11, 16, 10, 0),
-            dateTimeModified: agora.subtract(const Duration(hours: 2)),
-            income: false,
-            paid: true,
-            skipPaid: false,
-          ),
-        );
-    await database.into(database.transactions).insert(
-          Transaction(
-            transactionPk: 'tx2',
-            name: 'Internet Fibra',
-            amount: -129.90,
-            note: '',
-            categoryFk: 'c2',
-            walletFk: '0',
-            dateCreated: DateTime(2026, 11, 25, 9, 0),
-            dateTimeModified: agora.subtract(const Duration(days: 1)),
-            income: false,
-            paid: false,
-            skipPaid: false,
-            type: TransactionSpecialType.upcoming,
-            upcomingTransactionNotification: true,
-          ),
-        );
-
-    final apagada = Transaction(
-      transactionPk: 'del1',
-      name: 'Uber',
-      amount: -27.90,
-      note: '',
-      categoryFk: 'c2',
-      walletFk: '0',
-      dateCreated: DateTime(2026, 11, 15, 18, 0),
-      dateTimeModified: agora.subtract(const Duration(hours: 5)),
-      income: false,
-      paid: true,
-      skipPaid: false,
-    );
-    addTransactionToRecentlyDeleted(apagada, save: false);
-    await database.into(database.deleteLogs).insert(
-          DeleteLog(
-            deleteLogPk: 'dl1',
-            entryPk: 'del1',
-            type: DeleteLogType.Transaction,
-            dateTimeModified: agora.subtract(const Duration(hours: 1)),
-          ),
-        );
-    await database.into(database.deleteLogs).insert(
-          DeleteLog(
-            deleteLogPk: 'dl2',
-            entryPk: 'del_antiga',
-            type: DeleteLogType.Transaction,
-            dateTimeModified: agora.subtract(const Duration(days: 2)),
-          ),
-        );
-  });
-}
-
-Future<void> _precarregarImagens(WidgetTester t) async {
+Future<void> _decodificarImagens(WidgetTester t) async {
   final encontrados = find.byType(MaterialApp);
-  if (encontrados.evaluate().isEmpty) return;
-  final ctx = t.element(encontrados.first);
-  await t.runAsync(() async {
-    await precacheImage(const AssetImage('assets/icon/icon-small.png'), ctx);
+  if (encontrados.evaluate().isNotEmpty) {
+    final ctx = t.element(encontrados.first);
+    precacheImage(const AssetImage('assets/icon/icon-small.png'), ctx);
     for (final ic in [
       'groceries.png',
       'car.png',
@@ -279,10 +283,10 @@ Future<void> _precarregarImagens(WidgetTester t) async {
       'cutlery.png',
       'price-tag.png',
     ]) {
-      await precacheImage(AssetImage('assets/categories/$ic'), ctx);
+      precacheImage(AssetImage('assets/categories/$ic'), ctx);
     }
-    await Future.delayed(const Duration(milliseconds: 150));
-  });
+  }
+  await t.runAsync(() => Future.delayed(const Duration(milliseconds: 350)));
 }
 
 Future<void> _print(
@@ -291,23 +295,21 @@ Future<void> _print(
   String nome,
   Widget tela, {
   double altura = 844,
-  bool vazio = false,
   Map<String, dynamic>? extras,
   Future<void> Function(WidgetTester)? aposMontar,
 }) async {
-  await _prepararBanco(t, vazio: vazio);
   appStateSettings = _ajustes(modo, extras: extras);
   t.view.physicalSize = Size(390 * 2, altura * 2);
   t.view.devicePixelRatio = 2;
   addTearDown(t.view.reset);
   await t.pumpWidget(_app(modo, tela));
-  await _precarregarImagens(t);
-  for (var i = 0; i < 20; i++) {
+  await _decodificarImagens(t);
+  for (var i = 0; i < 15; i++) {
     await t.pump(const Duration(milliseconds: 100));
   }
   if (aposMontar != null) {
     await aposMontar(t);
-    for (var i = 0; i < 15; i++) {
+    for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 100));
     }
   }
@@ -322,17 +324,15 @@ Future<void> _printDesktop(
   String nome,
   Widget tela, {
   double altura = 900,
-  bool vazio = false,
   Map<String, dynamic>? extras,
 }) async {
-  await _prepararBanco(t, vazio: vazio);
   appStateSettings = _ajustes('claro', extras: extras);
   t.view.physicalSize = Size(1440, altura);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
   await t.pumpWidget(_app('claro', tela));
-  await _precarregarImagens(t);
-  for (var i = 0; i < 20; i++) {
+  await _decodificarImagens(t);
+  for (var i = 0; i < 15; i++) {
     await t.pump(const Duration(milliseconds: 100));
   }
   await expectLater(
@@ -347,13 +347,6 @@ Future<void> _printDesktop(
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    if (Platform.isLinux) {
-      open.overrideFor(OperatingSystem.linux,
-          () => DynamicLibrary.open('libsqlite3.so.0'));
-    }
-    SharedPreferences.setMockInitialValues({});
-    sharedPreferences = await SharedPreferences.getInstance();
-    database = FinanceDatabase(NativeDatabase.memory());
     _padroes = await getDefaultPreferences();
     await loadCurrencyJSON();
     await loadLanguageNamesJSON();
@@ -369,10 +362,6 @@ void main() {
         'C:/Users/mendo/development/flutter-3.24.5';
     await _fonte('MaterialIcons',
         ['$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf']);
-  });
-
-  tearDownAll(() async {
-    await database.close();
   });
 
   for (final modo in ['claro', 'escuro']) {
@@ -402,6 +391,7 @@ void main() {
         const OnBoardingPage(
           popNavigationWhenDone: false,
           showPreviewDemoButton: false,
+          initializeDb: false,
         ),
       );
     });
@@ -414,17 +404,33 @@ void main() {
         const OnBoardingPage(
           popNavigationWhenDone: true,
           showPreviewDemoButton: false,
+          initializeDb: false,
         ),
       );
     });
 
     testWidgets('print categorias com dados $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'categorias_dados', EditCategoriesPage());
+      await _print(
+        t,
+        modo,
+        'categorias_dados',
+        EditCategoriesPage(
+          categoriesForTest: _categoriasPrincipais,
+          subCategoriesForTest: _subcategoriasPorPai,
+        ),
+      );
     });
 
     testWidgets('print categorias vazio $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'categorias_vazio', EditCategoriesPage(),
-          vazio: true);
+      await _print(
+        t,
+        modo,
+        'categorias_vazio',
+        EditCategoriesPage(
+          categoriesForTest: const [],
+          subCategoriesForTest: const {},
+        ),
+      );
     });
 
     testWidgets('print categorias busca vazia $modo', skip: _pular, (t) async {
@@ -432,7 +438,10 @@ void main() {
         t,
         modo,
         'categorias_busca_vazia',
-        EditCategoriesPage(),
+        EditCategoriesPage(
+          categoriesForTest: _categoriasPrincipais,
+          subCategoriesForTest: _subcategoriasPorPai,
+        ),
         aposMontar: (t) async {
           await t.enterText(find.byType(TextInput).first, 'inexistente');
         },
@@ -445,7 +454,15 @@ void main() {
         t,
         modo,
         'categoria_nova',
-        AddCategoryPage(routesToPopAfterDelete: RoutesToPopAfterDelete.None),
+        AddCategoryPage(
+          routesToPopAfterDelete: RoutesToPopAfterDelete.None,
+          mainCategoriesForTest: [
+            _catAlimentacao,
+            _catTransporte,
+            _catRenda,
+          ],
+          testMode: true,
+        ),
       );
     });
 
@@ -457,18 +474,31 @@ void main() {
         AddCategoryPage(
           category: _catAlimentacao,
           routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+          subCategoriesForTest: [_subDelivery, _subPadaria],
+          subCategoryCountsForTest: const {'s1': 18, 's2': 10},
+          titlesForTest: [_titulo1],
+          testMode: true,
         ),
         altura: 1050,
       );
     });
 
     testWidgets('print títulos com dados $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'titulos_dados', EditAssociatedTitlesPage());
+      await _print(
+        t,
+        modo,
+        'titulos_dados',
+        EditAssociatedTitlesPage(titlesForTest: _titulosComCategoria),
+      );
     });
 
     testWidgets('print títulos vazio $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'titulos_vazio', EditAssociatedTitlesPage(),
-          vazio: true);
+      await _print(
+        t,
+        modo,
+        'titulos_vazio',
+        EditAssociatedTitlesPage(titlesForTest: const []),
+      );
     });
 
     testWidgets('print títulos busca vazia $modo', skip: _pular, (t) async {
@@ -476,7 +506,7 @@ void main() {
         t,
         modo,
         'titulos_busca_vazia',
-        EditAssociatedTitlesPage(),
+        EditAssociatedTitlesPage(titlesForTest: _titulosComCategoria),
         aposMontar: (t) async {
           await t.enterText(find.byType(TextInput).first, 'inexistente');
         },
@@ -484,7 +514,6 @@ void main() {
     });
 
     testWidgets('print novo título $modo', skip: _pular, (t) async {
-      await _prepararBanco(t);
       appStateSettings = _ajustes(modo);
       t.view.physicalSize = const Size(390 * 2, 844 * 2);
       t.view.devicePixelRatio = 2;
@@ -503,7 +532,6 @@ void main() {
               ),
             ),
           )));
-      await _precarregarImagens(t);
       await t.tap(find.text('abrir'));
       for (var i = 0; i < 20; i++) {
         await t.pump(const Duration(milliseconds: 50));
@@ -515,7 +543,6 @@ void main() {
     });
 
     testWidgets('print editar título $modo', skip: _pular, (t) async {
-      await _prepararBanco(t);
       appStateSettings = _ajustes(modo);
       t.view.physicalSize = const Size(390 * 2, 844 * 2);
       t.view.devicePixelRatio = 2;
@@ -528,16 +555,19 @@ void main() {
                 child: TextButton(
                   onPressed: () => openBottomSheet(
                       c,
-                      AddAssociatedTitlePage(associatedTitle: _titulo1),
+                      AddAssociatedTitlePage(
+                        associatedTitle: _titulo1,
+                        initialCategory: _catAlimentacao,
+                      ),
                       popupWithKeyboard: true),
                   child: const Text('abrir'),
                 ),
               ),
             ),
           )));
-      await _precarregarImagens(t);
+      await _decodificarImagens(t);
       await t.tap(find.text('abrir'));
-      for (var i = 0; i < 25; i++) {
+      for (var i = 0; i < 20; i++) {
         await t.pump(const Duration(milliseconds: 50));
       }
       await expectLater(
@@ -554,7 +584,10 @@ void main() {
         t,
         modo,
         'notificacoes_desativadas',
-        const NotificationsPage(),
+        const NotificationsPage(
+          notificationsEnabledForTest: false,
+          upcomingForTest: [],
+        ),
         extras: {
           'notifications': false,
           'notificationsUpcomingTransactions': false,
@@ -567,7 +600,10 @@ void main() {
         t,
         modo,
         'notificacoes_ativas',
-        const NotificationsPage(),
+        NotificationsPage(
+          notificationsEnabledForTest: true,
+          upcomingForTest: [(_txAgendada, _catTransporte)],
+        ),
         extras: {
           'notifications': true,
           'notificationsUpcomingTransactions': true,
@@ -595,12 +631,21 @@ void main() {
     });
 
     testWidgets('print histórico com dados $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'historico_dados', const ActivityPage());
+      await _print(
+        t,
+        modo,
+        'historico_dados',
+        ActivityPage(logsForTest: _logsHistorico()),
+      );
     });
 
     testWidgets('print histórico vazio $modo', skip: _pular, (t) async {
-      await _print(t, modo, 'historico_vazio', const ActivityPage(),
-          vazio: true);
+      await _print(
+        t,
+        modo,
+        'historico_vazio',
+        const ActivityPage(logsForTest: []),
+      );
     });
 
     testWidgets('print depuração $modo', skip: _pular, (t) async {
@@ -632,12 +677,20 @@ void main() {
       const OnBoardingPage(
         popNavigationWhenDone: false,
         showPreviewDemoButton: false,
+        initializeDb: false,
       ),
     );
   });
 
   testWidgets('print categorias desktop claro', skip: _pular, (t) async {
-    await _printDesktop(t, 'categorias', EditCategoriesPage());
+    await _printDesktop(
+      t,
+      'categorias',
+      EditCategoriesPage(
+        categoriesForTest: _categoriasPrincipais,
+        subCategoriesForTest: _subcategoriasPorPai,
+      ),
+    );
   });
 
   testWidgets('print editar categoria desktop claro', skip: _pular, (t) async {
@@ -647,13 +700,21 @@ void main() {
       AddCategoryPage(
         category: _catAlimentacao,
         routesToPopAfterDelete: RoutesToPopAfterDelete.One,
+        subCategoriesForTest: [_subDelivery, _subPadaria],
+        subCategoryCountsForTest: const {'s1': 18, 's2': 10},
+        titlesForTest: [_titulo1],
+        testMode: true,
       ),
       altura: 1000,
     );
   });
 
   testWidgets('print títulos desktop claro', skip: _pular, (t) async {
-    await _printDesktop(t, 'titulos', EditAssociatedTitlesPage());
+    await _printDesktop(
+      t,
+      'titulos',
+      EditAssociatedTitlesPage(titlesForTest: _titulosComCategoria),
+    );
   });
 
   testWidgets('print câmbio desktop claro', skip: _pular, (t) async {
@@ -661,7 +722,11 @@ void main() {
   });
 
   testWidgets('print histórico desktop claro', skip: _pular, (t) async {
-    await _printDesktop(t, 'historico', const ActivityPage());
+    await _printDesktop(
+      t,
+      'historico',
+      ActivityPage(logsForTest: _logsHistorico()),
+    );
   });
 
   testWidgets('print depuração desktop claro', skip: _pular, (t) async {

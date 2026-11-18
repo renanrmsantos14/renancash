@@ -19,10 +19,12 @@ class AddAssociatedTitlePage extends StatefulWidget {
   AddAssociatedTitlePage({
     Key? key,
     this.associatedTitle,
+    this.initialCategory,
   }) : super(key: key);
 
   //When a Title is passed in, we are editing that Title
   final TransactionAssociatedTitle? associatedTitle;
+  final TransactionCategory? initialCategory;
 
   @override
   _AddAssociatedTitlePageState createState() => _AddAssociatedTitlePageState();
@@ -78,6 +80,9 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
   void initState() {
     super.initState();
     _focusNode = new FocusNode();
+    if (widget.initialCategory != null) {
+      selectedCategory = widget.initialCategory;
+    }
     if (widget.associatedTitle != null) {
       //We are editing a Title
       //Fill in the information from the passed in Title
@@ -85,9 +90,12 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
         // selectedColor = HexColor(widget.Title!.colour);
         selectedTitle = widget.associatedTitle!.title;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        updateInitial();
-      });
+      determineBottomButton();
+      if (widget.initialCategory == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          updateInitial();
+        });
+      }
     } else {}
     // requestLateAutoFocus
     // if (widget.associatedTitle == null)
