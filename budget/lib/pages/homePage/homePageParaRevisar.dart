@@ -1,4 +1,3 @@
-import 'package:budget/colors.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/movimento.dart' show ToqueEscala;
@@ -8,16 +7,16 @@ import 'package:budget/struct/mbSync/reembolso.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/struct/meuBancoSync.dart';
-import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/functions.dart' show popRoute;
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openSnackbar.dart';
-import 'package:budget/widgets/textWidgets.dart';
+import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeSemEspacosRepetidos;
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
 import 'package:budget/widgets/editorial/itemClassificar.dart' show ParteDeConta;
-import 'package:budget/widgets/editorial/reembolsoConta.dart' show mbEscolherGastoRachado, semGastoReembolso;
+import 'package:budget/widgets/editorial/reembolsoConta.dart'
+    show mbEscolherGastoRachado, mbNomeDoPagador, semGastoReembolso;
 import 'package:flutter/material.dart';
 
 const _rotulos = {
@@ -41,7 +40,8 @@ Future<String> _pkDaCategoria(String nome) async {
 
 /// Cartão "Para revisar" da Início: some quando a fila está vazia; cada item tem os botões das opções.
 class HomePageParaRevisar extends StatefulWidget {
-  const HomePageParaRevisar({super.key});
+  const HomePageParaRevisar({super.key, this.atualizar = true});
+  final bool atualizar;
 
   @override
   State<HomePageParaRevisar> createState() => _HomePageParaRevisarState();
@@ -51,7 +51,7 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
   @override
   void initState() {
     super.initState();
-    mbAtualizarRevisar();
+    if (widget.atualizar) mbAtualizarRevisar();
   }
 
   @override
@@ -60,62 +60,82 @@ class _HomePageParaRevisarState extends State<HomePageParaRevisar> {
       valueListenable: meuBancoRevisar,
       builder: (context, itens, _) {
         if (itens.isEmpty) return const SizedBox.shrink();
-        final cor = Theme.of(context).colorScheme;
+        final e = cores(context);
+        final visiveis = itens.take(_itensNoCartao).toList();
         return KeepAliveClientMixin(
           child: Container(
-            margin: const EdgeInsetsDirectional.only(start: 13, end: 13, bottom: 13),
-            padding: const EdgeInsetsDirectional.all(15),
+            margin: const EdgeInsetsDirectional.only(
+                start: 13, end: 13, bottom: 13),
+            padding: const EdgeInsetsDirectional.all(18),
             decoration: BoxDecoration(
-              color: getColor(context, "lightDarkAccentHeavyLight"),
-              borderRadius: BorderRadius.circular(15),
+              color: e.bg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: e.line),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(children: [
                   Expanded(
-                    child: TextFont(
-                        text: 'Para revisar',
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
+                    child: Text('Para revisar',
+                        style: EdTexto.corpo(context).copyWith(
+                            fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
                   Container(
-                    padding: const EdgeInsetsDirectional.symmetric(
-                        horizontal: 10, vertical: 3),
+                    constraints: const BoxConstraints(minWidth: 24),
+                    height: 24,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                        color: cor.primary,
-                        borderRadius: BorderRadius.circular(20)),
-                    child: TextFont(
-                        text: '${itens.length}',
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        textColor: cor.onPrimary),
+                        color: e.acc,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Text('${itens.length}',
+                        style: EdTexto.mono(context).copyWith(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: e.bg)),
                   ),
                 ]),
-                for (final i in itens.take(_itensNoCartao)) ...[
-                  const SizedBox(height: 14),
-                  ItemParaRevisar(item: i),
+                for (var idx = 0; idx < visiveis.length; idx++) ...[
+                  if (idx == 0)
+                    const SizedBox(height: 14)
+                  else
+                    Divider(height: 28, thickness: 1, color: e.line),
+                  ItemParaRevisar(item: visiveis[idx]),
                 ],
                 if (itens.length > _itensNoCartao) ...[
-                  const SizedBox(height: 12),
-                  Button(
-                    label: 'Ver todos (${itens.length})',
-                    onTap: () => openBottomSheet(
-                        context,
-                        PopupFramework(
-                            title: 'Para revisar',
-                            child: ValueListenableBuilder<List<MbItemRevisao>>(
-                              valueListenable: meuBancoRevisar,
-                              builder: (context, todos, _) => Column(children: [
-                                for (final i in todos) ...[
-                                  ItemParaRevisar(item: i),
-                                  const SizedBox(height: 14),
-                                ]
-                              ]),
-                            ))),
-                    expandedLayout: true,
-                    color: cor.secondaryContainer,
-                    textColor: cor.onSecondaryContainer,
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 44,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: e.tx,
+                        backgroundColor: e.surf,
+                        side: BorderSide(color: e.line),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => openBottomSheet(
+                          context,
+                          PopupFramework(
+                              title: 'Para revisar',
+                              child: ValueListenableBuilder<List<MbItemRevisao>>(
+                                valueListenable: meuBancoRevisar,
+                                builder: (context, todos, _) =>
+                                    Column(children: [
+                                  for (var idx = 0; idx < todos.length; idx++) ...[
+                                    if (idx > 0)
+                                      Divider(
+                                          height: 28,
+                                          thickness: 1,
+                                          color: e.line),
+                                    ItemParaRevisar(item: todos[idx]),
+                                  ]
+                                ]),
+                              ))),
+                      child: Text('Ver todos (${itens.length})',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
                   ),
                 ],
               ],
@@ -151,18 +171,16 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
 
   Future<void> _escolherCategoria() async {
     final nomes = [...mbCategoriasProprias, mbCategoriaOutros];
+    final dest = widget.item.destinatario;
     final nome = await openBottomSheet(
       context,
       PopupFramework(
         title: 'Categoria',
-        subtitle: widget.item.destinatario,
+        subtitle: dest == null ? null : nomeSemEspacosRepetidos(dest),
         child: Wrap(spacing: 8, runSpacing: 8, children: [
           for (final n in nomes)
-            Button(
-              label: n,
-              fontSize: 14,
-              padding: const EdgeInsetsDirectional.symmetric(
-                  horizontal: 14, vertical: 10),
+            BotaoEscolha(
+              rotulo: n,
               onTap: () => popRoute(context, n),
             ),
         ]),
@@ -211,17 +229,29 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
   Widget build(BuildContext context) {
     final i = widget.item;
     final data = DateTime.tryParse(i.data ?? '');
+    final pagador = i.tipo == 'pix_recebido'
+        ? mbChavePadrao(i.destinatario ?? i.descricao ?? '')
+        : '';
+    final dest = i.tipo == 'pix_enviado'
+        ? mbChavePadrao(i.destinatario ?? i.descricao ?? '')
+        : '';
+    final destBruto = i.destinatario == null
+        ? ''
+        : nomeSemEspacosRepetidos(i.destinatario!.trim());
     final titulo = i.ehSalario
         ? 'Salário não detectado'
         : switch (i.tipo) {
-            'pix_enviado' =>
-              'Pix enviado${i.destinatario == null ? '' : ' a ${i.destinatario}'}',
+            'pix_enviado' => dest.isNotEmpty
+                ? 'Pix enviado a ${mbNomeDoPagador(dest)}'
+                : 'Pix enviado${destBruto.isEmpty ? '' : ' a $destBruto'}',
             'envio_santander' => 'Enviado ao Santander',
-            _ => 'Pix recebido',
+            _ => pagador.isEmpty
+                ? 'Pix recebido'
+                : 'Pix recebido de ${mbNomeDoPagador(pagador)}',
           };
     final detalhe = i.ehSalario
         ? 'Há ${i.dias} dias sem salário no Inter. Qual entrada é o salário?'
-        : '${brl(i.valor)}${data == null ? '' : ' · ${diaMes(data)}'}';
+        : '${brl(i.valor.abs())}${data == null ? '' : ' · ${diaMes(data)}'}';
     // Quem já mandou a parte de 2 contas ou mais: o gasto provável já vem no topo, com Confirmar.
     final recorrente = i.tipo == 'pix_recebido' &&
         i.txId != null &&
@@ -281,13 +311,26 @@ class BotaoEscolha extends StatelessWidget {
         onTap: onTap,
         child: ToqueEscala(
           onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-                color: e.chip, borderRadius: BorderRadius.circular(10)),
-            child: Text(rotulo,
-                style: EdTexto.corpo(context)
-                    .copyWith(fontWeight: FontWeight.w500)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                  color: e.chip, borderRadius: BorderRadius.circular(10)),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(rotulo,
+                          style: EdTexto.corpo(context)
+                              .copyWith(fontWeight: FontWeight.w500)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ));
   }

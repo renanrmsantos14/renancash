@@ -58,9 +58,11 @@ List<T> ordenarPulados<T>(
 /// vencidas) um item por vez. "Pular" (botão ou deslizar para a esquerda) manda o item para o fim da
 /// fila só nesta sessão.
 class PendenciasPage extends StatefulWidget {
-  // `atualizar` existe para os testes preencherem as filas sem o banco.
-  const PendenciasPage({super.key, this.atualizar = true});
+  // `atualizar` e `carregando` existem para os testes/prints exercitarem as filas sem o banco.
+  const PendenciasPage(
+      {super.key, this.atualizar = true, this.carregando = false});
   final bool atualizar;
+  final bool carregando;
 
   @override
   State<PendenciasPage> createState() => _PendenciasPageState();
@@ -68,12 +70,22 @@ class PendenciasPage extends StatefulWidget {
 
 class _PendenciasPageState extends State<PendenciasPage> {
   final List<String> _pulados = [];
+  late bool _carregando = widget.carregando ||
+      (widget.atualizar &&
+          meuBancoRevisar.value.isEmpty &&
+          meuBancoClassificar.value.isEmpty &&
+          meuBancoAvisos.value.isEmpty &&
+          meuBancoVencidas.value.isEmpty);
 
   @override
   void initState() {
     super.initState();
     if (widget.atualizar) {
-      mbAtualizarRevisar();
+      mbAtualizarRevisar().whenComplete(() {
+        if (mounted && !widget.carregando && _carregando) {
+          setState(() => _carregando = false);
+        }
+      });
       if (AjustesInicio.vencidas) mbVigiarVencidas();
     }
   }
@@ -146,31 +158,44 @@ class _PendenciasPageState extends State<PendenciasPage> {
               padding: const EdgeInsets.fromLTRB(
                   20, 16, 20, 120 + mbAlturaFaixaVersao),
               children: [
-                Text('Pendências', style: EdTexto.h1(context)),
-                const SizedBox(height: 16),
-                for (final a in avisos) _FaixaDesconectado(aviso: a),
-                if (fila.isEmpty && avisos.isEmpty)
-                  const _TudoEmDia()
-                else if (fila.isEmpty)
-                  Text('Nada na fila.',
-                      style: EdTexto.corpo(context).copyWith(color: e.mu))
-                else ...[
-                  Row(children: [
-                    Expanded(
-                        child: Text(fila.first.rotulo,
-                            style: EdTexto.rotulo(context))),
-                    Text(
-                        '${itens.indexOf(fila.first) + 1} de ${fila.length}',
-                        style: EdTexto.rotulo(context)),
-                  ]),
-                  const SizedBox(height: 10),
-                  _CartaoTriagem(
-                    key: ValueKey(fila.first.id),
-                    conteudo: fila.first.conteudo(),
-                    aoPular:
-                        fila.length > 1 ? () => _pular(fila.first.id) : null,
+                Align(
+                  alignment: AlignmentDirectional.topStart,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 680),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Pendências', style: EdTexto.h1(context)),
+                        const SizedBox(height: 16),
+                        for (final a in avisos) _FaixaDesconectado(aviso: a),
+                        if (_carregando && fila.isEmpty && avisos.isEmpty)
+                          const _CarregandoPendencias()
+                        else if (fila.isEmpty && avisos.isEmpty)
+                          const _TudoEmDia()
+                        else if (fila.isEmpty)
+                          const _NadaNaFila()
+                        else ...[
+                          Row(children: [
+                            Expanded(
+                                child: Text(fila.first.rotulo,
+                                    style: EdTexto.rotulo(context))),
+                            Text(
+                                '${itens.indexOf(fila.first) + 1} de ${fila.length}',
+                                style: EdTexto.rotulo(context)),
+                          ]),
+                          const SizedBox(height: 10),
+                          _CartaoTriagem(
+                            key: ValueKey(fila.first.id),
+                            conteudo: fila.first.conteudo(),
+                            aoPular: fila.length > 1
+                                ? () => _pular(fila.first.id)
+                                : null,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ],
             );
           },
@@ -244,10 +269,56 @@ class _FaixaDesconectado extends StatelessWidget {
         ),
         TextButton(
           onPressed: () => mbReconectarAviso(context, aviso),
-          style: TextButton.styleFrom(foregroundColor: e.warntx),
+          style: TextButton.styleFrom(
+            foregroundColor: e.warntx,
+            minimumSize: const Size(64, 44),
+          ),
           child: const Text('Reconectar',
               style: TextStyle(fontWeight: FontWeight.w600)),
         ),
+      ]),
+    );
+  }
+}
+
+class _CarregandoPendencias extends StatelessWidget {
+  const _CarregandoPendencias();
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 96),
+      child: Column(children: [
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2, color: e.mu),
+        ),
+        const SizedBox(height: 12),
+        Text('Carregando pendências…', style: EdTexto.rotulo(context)),
+      ]),
+    );
+  }
+}
+
+class _NadaNaFila extends StatelessWidget {
+  const _NadaNaFila();
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 48),
+      child: Column(children: [
+        Icon(Icons.check_circle_outline_rounded, size: 32, color: e.mu),
+        const SizedBox(height: 10),
+        Text('Nada na fila.',
+            style: EdTexto.corpo(context).copyWith(
+                fontSize: 16, fontWeight: FontWeight.w600, color: e.tx)),
+        const SizedBox(height: 4),
+        Text('Nenhuma transação pendente para revisar ou classificar.',
+            textAlign: TextAlign.center, style: EdTexto.rotulo(context)),
       ]),
     );
   }
@@ -394,7 +465,8 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
           );
         },
         child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+          padding: EdgeInsets.fromLTRB(
+              18, 18, 18, widget.aoPular == null ? 18 : 8),
           decoration: BoxDecoration(
             color: e.bg,
             borderRadius: BorderRadius.circular(16),
@@ -404,18 +476,22 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               widget.conteudo,
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: widget.aoPular == null
-                    ? const SizedBox(height: 40)
-                    : TextButton.icon(
-                        onPressed: _sair,
-                        style: TextButton.styleFrom(foregroundColor: e.mu),
-                        icon: const Icon(Icons.arrow_back_rounded, size: 16),
-                        label: const Text('Pular'),
-                      ),
-              ),
+              if (widget.aoPular != null) ...[
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _sair,
+                    iconAlignment: IconAlignment.end,
+                    style: TextButton.styleFrom(
+                      foregroundColor: e.mu,
+                      minimumSize: const Size(64, 44),
+                    ),
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                    label: const Text('Pular'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

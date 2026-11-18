@@ -124,7 +124,8 @@ void main() {
       t.view.physicalSize = const Size(390 * 2, 844 * 2);
       t.view.devicePixelRatio = 2;
       addTearDown(t.view.reset);
-      await t.pumpWidget(_app(modo, const Scaffold(body: PendenciasPage(atualizar: false))));
+      await t.pumpWidget(
+          _app(modo, const Scaffold(body: PendenciasPage(atualizar: false, carregando: true))));
       await t.pump();
       await expectLater(
           find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/pendencias_carregando_$modo.png'));
@@ -207,9 +208,9 @@ void main() {
       addTearDown(() => mbBuscarCandidatosReembolso = original);
       meuBancoReembolsos.value = const [
         MbVinculoReembolso(
-            'mb:r0', 'mb:g0', 'CARLOS EDUARDO DE ALMEIDA MONTEIRO FILHO', 5000),
+            'mb:r0', 'mb:g0', 'CARLOS EDUARDO DE ALMEIDA', 5000),
         MbVinculoReembolso(
-            'mb:r1', 'mb:g2', 'CARLOS EDUARDO DE ALMEIDA MONTEIRO FILHO', 4000),
+            'mb:r1', 'mb:g2', 'CARLOS EDUARDO DE ALMEIDA', 4000),
       ];
       meuBancoClassificar.value = [
         MbLancamentoIa(
@@ -318,7 +319,7 @@ void main() {
               color: cores(c).bg,
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 20),
-                children: const [HomePageParaRevisar()],
+                children: const [HomePageParaRevisar(atualizar: false)],
               ),
             ),
           ),

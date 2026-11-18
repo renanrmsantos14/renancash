@@ -11,6 +11,8 @@ import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openSnackbar.dart';
+import 'package:budget/widgets/transactionEntry/transactionLabel.dart'
+    show nomeSemEspacosRepetidos;
 import 'package:flutter/material.dart';
 
 // Rachar conta na tela (a regra está em struct/mbSync/reembolso.dart): a lista de gastos para ligar um Pix recebido e o
@@ -97,6 +99,7 @@ class _GastosRachadosState extends State<GastosRachados> {
       if (widget.comNenhum) ...[
         const SizedBox(height: 8),
         TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(64, 44)),
           onPressed: () => popRoute(context, semGastoReembolso),
           child: Text('Nenhum desses (abater em Outros)', style: EdTexto.corpo(context)),
         ),
@@ -124,8 +127,8 @@ class _LinhaGasto extends StatelessWidget {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(g.nome,
-                    maxLines: 1,
+                Text(nomeSemEspacosRepetidos(g.nome),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
                 Text([diaMes(g.data), if (g.categoria.isNotEmpty) g.categoria, ...s.motivos].join(' · '),
@@ -326,7 +329,10 @@ class _LinhaVinculo extends StatelessWidget {
           if (detalhe != null) Text(detalhe!, style: EdTexto.rotulo(context)),
         ]),
       ),
-      TextButton(onPressed: aoDesligar, child: Text('Desligar', style: EdTexto.corpo(context).copyWith(color: e.acc))),
+      TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(64, 44)),
+          onPressed: aoDesligar,
+          child: Text('Desligar', style: EdTexto.corpo(context).copyWith(color: e.acc))),
     ]);
   }
 }
