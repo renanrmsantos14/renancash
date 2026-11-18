@@ -113,10 +113,16 @@ jobs:
       - name: Renomear APK
         run: cp build/app/outputs/flutter-apk/app-release.apk "renancash-${VERSAO}.apk"
 
+      # O app confere este hash (formato do sha256sum) antes de oferecer a instalação.
+      - name: Gerar SHA-256 do APK
+        run: sha256sum "renancash-${VERSAO}.apk" > "renancash-${VERSAO}.apk.sha256"
+
       - uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         with:
           tag_name: v${{ env.VERSAO }}
-          files: budget/renancash-${{ env.VERSAO }}.apk
+          files: |
+            budget/renancash-${{ env.VERSAO }}.apk
+            budget/renancash-${{ env.VERSAO }}.apk.sha256
           generate_release_notes: true
 
       - name: Apagar keystore e key.properties

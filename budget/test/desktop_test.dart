@@ -238,8 +238,7 @@ void main() {
           limite: 8000.0,
           pct: 39.0
         )
-      ],
-      ultimas: const []);
+      ]);
 
   Future<void> montarPainel(WidgetTester t, Size tamanho) async {
     t.view.physicalSize = tamanho;
@@ -261,6 +260,13 @@ void main() {
     ));
     await t.pump();
   }
+
+  testWidgets('painel lista as últimas transações quando existem', (t) async {
+    await montarPainel(t, const Size(1280, 800));
+    expect(find.text('MERCADO A'), findsOneWidget);
+    expect(find.text('PADARIA B'), findsOneWidget);
+    expect(find.text('Nenhuma transação ainda.'), findsNothing);
+  });
 
   testWidgets('painel a 1100px com detalhe aberto não estoura', (t) async {
     await montarPainel(t, const Size(1100, 700));

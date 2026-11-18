@@ -24,20 +24,6 @@ typedef CartaoInicio = ({
   double? limite,
   double? pct
 });
-typedef UltimaInicio = ({
-  String nome,
-  String categoria,
-  String quando,
-  double valor,
-  bool receita
-});
-typedef UltimaBruta = ({
-  String nome,
-  String categoria,
-  DateTime data,
-  double valor,
-  bool receita
-});
 
 class ModeloInicio {
   final String ciclo, saudacao, origemDisponivel;
@@ -51,7 +37,6 @@ class ModeloInicio {
   final List<double> porDia;
   final List<ContaInicio> contas;
   final List<CartaoInicio> cartoes;
-  final List<UltimaInicio> ultimas;
   /// "26 out – 25 nov" (sem o prefixo "Ciclo"); "Ciclo atual" quando não há datas.
   String get periodo => ciclo.startsWith('Ciclo ') && ciclo != 'Ciclo atual'
       ? ciclo.substring(6)
@@ -75,12 +60,11 @@ class ModeloInicio {
       indiceHoje == o.indiceHoje &&
       listEquals(porDia, o.porDia) &&
       listEquals(contas, o.contas) &&
-      listEquals(cartoes, o.cartoes) &&
-      listEquals(ultimas, o.ultimas);
+      listEquals(cartoes, o.cartoes);
 
   @override
   int get hashCode => Object.hash(ciclo, saudacao, disponivel, consumido,
-      diasRestantes, indiceHoje, porDia.length, contas.length, ultimas.length);
+      diasRestantes, indiceHoje, porDia.length, contas.length);
 
   const ModeloInicio({
     required this.ciclo,
@@ -97,7 +81,6 @@ class ModeloInicio {
     required this.indiceHoje,
     required this.contas,
     required this.cartoes,
-    required this.ultimas,
   });
 }
 
@@ -177,7 +160,6 @@ ModeloInicio montarModeloInicio({
   required List<Map<String, dynamic>> contas,
   required Map<String, dynamic> faturas,
   required String? sincronizadoEm,
-  required List<UltimaBruta> ultimas,
   required String nome,
   required DateTime agora,
   // Configurações › Início: poupanças numa linha só (padrão) ou uma linha por conta.
@@ -309,16 +291,6 @@ ModeloInicio montarModeloInicio({
     indiceHoje: indice,
     contas: linhas,
     cartoes: cartoes,
-    ultimas: [
-      for (final u in ultimas.take(5))
-        (
-          nome: u.nome,
-          categoria: u.categoria,
-          quando: quandoRelativo(u.data, agora),
-          valor: u.valor,
-          receita: u.receita
-        )
-    ],
   );
 }
 
@@ -396,16 +368,6 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
     ],
     faturas: ((mapa['faturas'] as Map?) ?? const {}).cast<String, dynamic>(),
     sincronizadoEm: await mbLerEstado('sincronizado_em'),
-    ultimas: [
-      for (final t in txs)
-        (
-          nome: t.transaction.name,
-          categoria: t.category.name,
-          data: t.transaction.dateCreated,
-          valor: t.transaction.amount,
-          receita: t.transaction.income
-        )
-    ],
     nome: nome,
     agora: agora,
   );

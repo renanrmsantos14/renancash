@@ -152,6 +152,7 @@ void main() {
           home: const Scaffold(body: PendenciasPage(atualizar: false)),
         ));
         await t.pump(const Duration(seconds: 1));
+        await t.pump(); // o destaque avisa o cartão depois do quadro (esconde "Sem sugestão")
         await expectLater(
             find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/casos_${nome}_$modo.png'));
       });
