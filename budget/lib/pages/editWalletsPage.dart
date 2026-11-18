@@ -33,6 +33,7 @@ import 'exchangeRatesPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart'
     show mbLerSaldosReais, mbSigla;
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/contas.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:sliver_tools/sliver_tools.dart';
