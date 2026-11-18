@@ -349,6 +349,11 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
   _diag('golden ok');
   await t.pumpWidget(const SizedBox.shrink());
   _diag('desmontado');
+  // Deixa os Future.delayed da página e as consultas do banco terminarem antes de o teste fechar.
+  await t.pump(const Duration(seconds: 5));
+  _diag('pump final');
+  await t.runAsync(() => Future.delayed(const Duration(milliseconds: 200)));
+  _diag('runAsync final');
   await _fecharBanco(t);
 }
 
