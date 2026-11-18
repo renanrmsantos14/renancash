@@ -136,5 +136,27 @@ List<TransactionCategory> defaultCategories() {
       order: 11,
       income: true,
     ),
+    // Receitas extras só para bancos novos (createDefaultCategories roda só sem
+    // categorias): quem já tem dados não ganha nem perde nada.
+    TransactionCategory(
+      categoryPk: "12",
+      name: "Salário",
+      colour: toHexString(Colors.green.shade600),
+      iconName: "cash-bill-dollar.png",
+      dateCreated: DateTime.now(),
+      dateTimeModified: null,
+      order: 12,
+      income: true,
+    ),
+    TransactionCategory(
+      categoryPk: "13",
+      name: "Rendimentos",
+      colour: toHexString(Colors.teal),
+      iconName: "charts.png",
+      dateCreated: DateTime.now(),
+      dateTimeModified: null,
+      order: 13,
+      income: true,
+    ),
   ];
 }
