@@ -125,12 +125,12 @@ void main() {
       expect(_t(r, 'p1').categoriaPk, 'cashew:lazer');
     });
 
-    test('Pix seguinte para a mesma pessoa usa a categoria lembrada; outra pessoa continua a classificar', () {
+    test('a memória do destinatário só sugere: no ciclo atual o Pix continua a validar', () {
       final r = _mapear([
         _tx('p2', 'Pix enviado: Joao Silva', -70),
         _tx('p3', 'Pix enviado: Ana', -20),
       ], regs: [_destino('JOAO SILVA', 'cashew:lazer')]);
-      expect(_t(r, 'p2').categoriaPk, 'cashew:lazer');
+      expect(_t(r, 'p2').categoriaNome, mbCategoriaAClassificar);
       expect(_t(r, 'p3').categoriaNome, mbCategoriaAClassificar);
     });
 
@@ -157,7 +157,7 @@ void main() {
 
     test('reembolso com gasto confirmado abate aquele gasto, na categoria dele', () {
       final r = _mapear(
-          [_tx('g1', 'RESTAURANTE', -60, data: '2026-11-08', categoria: 'Eating out'), _tx('r1', 'Pix recebido: Maria', 60)],
+          [_tx('g1', 'RESTAURANTE', -60, data: '2026-10-20', categoria: 'Eating out'), _tx('r1', 'Pix recebido: Maria', 60)],
           regs: [_decisaoReembolso('r1', 'g1')]);
       final t = _t(r, 'r1');
       expect([t.valor, t.receita, t.categoriaNome], [60, false, 'Alimentação fora']);
@@ -176,10 +176,10 @@ void main() {
 
     test('gasto vinculado não é consumido por estorno automático', () {
       final r = _mapear([
-        _tx('g1', 'RESTAURANTE', -60, data: '2026-11-06'),
-        _tx('g2', 'RESTAURANTE', -60, data: '2026-11-08', categoria: 'Eating out'),
-        _tx('r1', 'Pix recebido: Maria', 60, data: '2026-11-09'),
-        _tx('e1', 'RESTAURANTE', 60, data: '2026-11-10'),
+        _tx('g1', 'RESTAURANTE', -60, data: '2026-10-20'),
+        _tx('g2', 'RESTAURANTE', -60, data: '2026-10-22', categoria: 'Eating out'),
+        _tx('r1', 'Pix recebido: Maria', 60, data: '2026-10-23'),
+        _tx('e1', 'RESTAURANTE', 60, data: '2026-10-24'),
       ], regs: [_decisaoReembolso('r1', 'g2')]);
       expect(_t(r, 'r1').categoriaNome, 'Alimentação fora');
       expect(_t(r, 'e1').valor, 60);
@@ -352,7 +352,7 @@ void main() {
 
     test('reembolso com gasto confirmado grava o vínculo, abate o gasto e não gera ajuste', () async {
       cliente.transacoes = [
-        _tx('g1', 'RESTAURANTE', -60, data: _hoje(), categoria: 'Eating out'),
+        _tx('g1', 'RESTAURANTE', -60, data: _antes(), categoria: 'Eating out'),
         _tx('r1', 'Pix recebido: Maria', 60, data: _hoje()),
       ];
       cliente.ciclo = {'inicio': _hoje(), 'revisar': [
@@ -372,7 +372,7 @@ void main() {
 
     test('vínculo vindo de outro aparelho remapeia o reembolso no pull seguinte', () async {
       cliente.transacoes = [
-        _tx('g1', 'RESTAURANTE', -60, data: _hoje(), categoria: 'Eating out'),
+        _tx('g1', 'RESTAURANTE', -60, data: _antes(), categoria: 'Eating out'),
         _tx('r1', 'Pix recebido: Maria', 60, data: _hoje()),
       ];
       cliente.ciclo = {'inicio': _hoje()};
@@ -437,6 +437,8 @@ void main() {
     });
   });
 }
+
+String _antes() => DateTime.now().subtract(const Duration(days: 3)).toIso8601String().substring(0, 10);
 
 String _hoje() => DateTime.now().toIso8601String().substring(0, 10);
 

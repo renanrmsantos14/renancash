@@ -4,6 +4,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
@@ -302,6 +303,11 @@ class _DetalheTransacaoState extends State<DetalheTransacao> {
     final m = _m;
     if (m == null) return const SizedBox.shrink();
     final sinal = m.receita ? '+' : '−';
+    final tipoMov = mbTipoMov(
+        valor: m.receita ? 1 : -1,
+        categoria: m.categoria,
+        investimento: m.pk.startsWith('mb:inv:'),
+        emprestimo: m.transacao?.objectiveLoanFk != null);
     final linhas = <(String, Widget)>[
       ('Conta', Text(m.conta, style: EdTexto.corpo(context))),
       ('Categoria', ChipCategoria(m.categoria, receita: m.receita)),
@@ -354,11 +360,15 @@ class _DetalheTransacaoState extends State<DetalheTransacao> {
                   const SizedBox(height: 6),
                   Text(_dataHora(m.data), style: EdTexto.rotulo(context)),
                   const SizedBox(height: 16),
-                  Text('$sinal${brl(m.valor.abs())}',
-                      style: EdTexto.numeroGrande(context).copyWith(
-                          fontSize: 44,
-                          letterSpacing: -.045 * 44,
-                          color: m.receita ? e.pos : e.tx)),
+                  Row(children: [
+                    IconeTipo(tipoMov, tamanho: 36),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text('$sinal${brl(m.valor.abs())}',
+                          style: EdTexto.numeroGrande(context).copyWith(
+                              fontSize: 44, letterSpacing: -.045 * 44, color: tipoMov.cor(context))),
+                    ),
+                  ]),
                   const SizedBox(height: 20),
                   Divider(height: 1, thickness: 1, color: e.line),
                   for (final l in linhas)

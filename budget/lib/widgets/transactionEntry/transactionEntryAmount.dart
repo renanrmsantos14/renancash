@@ -3,6 +3,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/countNumber.dart';
 import 'package:budget/widgets/textWidgets.dart';
@@ -14,11 +15,13 @@ class TransactionEntryAmount extends StatelessWidget {
     required this.transaction,
     required this.showOtherCurrency,
     required this.unsetCustomCurrency,
+    this.categoriaNome,
     super.key,
   });
   final Transaction transaction;
   final bool showOtherCurrency;
   final bool unsetCustomCurrency;
+  final String? categoriaNome; // define o tipo (gasto, receita, investimento…) e a cor do valor
 
   @override
   Widget build(BuildContext context) {
@@ -37,12 +40,20 @@ class TransactionEntryAmount extends StatelessWidget {
         : transaction.income
             ? '+'
             : '−';
+    // Código de cores por tipo: só no que já foi pago e não é ajuste; pendente e crédito/dívida seguem a cor própria.
+    final tipo = mbTipoDaTransacao(transaction, categoriaNome);
+    final porTipo = !semSinal && transaction.paid;
+    final corValor = porTipo ? tipo.cor(context) : getTransactionAmountColor(context, transaction);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Row(
           children: [
+            if (porTipo) ...[
+              Icon(tipo.icone, size: 14, color: corValor),
+              const SizedBox(width: 4),
+            ],
             CountNumber(
               count: count,
               duration: Duration(milliseconds: 1000),
@@ -60,8 +71,7 @@ class TransactionEntryAmount extends StatelessWidget {
                           ),
                       fontSize: 15.5 - (showOtherCurrency ? 1 : 0),
                       fontWeight: FontWeight.w500,
-                      textColor:
-                          getTransactionAmountColor(context, transaction),
+                      textColor: corValor,
                     ),
                   ],
                 );

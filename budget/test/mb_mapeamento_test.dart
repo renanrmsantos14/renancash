@@ -210,15 +210,54 @@ void main() {
       expect(r.ignoradas, 1);
     });
 
-    test('regra muda a categoria da transação', () {
-      final r = _pull(_json({}), [
+    test('regra muda a categoria de uma transação anterior ao ciclo', () {
+      final r = _pull(_json({'date': '2026-10-20'}), [
         _reg('regras', 'r1', {'padrao': 'COMPRA*', 'categoria_id': 'cashew:cx'})
       ]);
       expect(r.transacoes.single.categoriaPk, 'cx');
     });
 
-    test('sem regra, converte a categoria do banco para a própria', () {
-      expect(_pull(_json({}), []).transacoes.single.categoriaPk, 'mb:cat:d:Saúde');
+    test('anterior ao ciclo: sem regra, converte a categoria do banco para a própria', () {
+      expect(_pull(_json({'date': '2026-10-20'}), []).transacoes.single.categoriaPk, 'mb:cat:d:Saúde');
+    });
+
+    group('validação do ciclo atual', () {
+      final aClassificar = mbPkCategoria('A classificar', false);
+
+      test('todo lançamento do ciclo fica em "A classificar" até o usuário validar', () {
+        final t = _pull(_json({}), []).transacoes.single;
+        expect(t.categoriaNome, 'A classificar');
+        expect(t.categoriaPk, aClassificar);
+      });
+
+      test('regra, categoria do banco e do painel só sugerem: seguem em "A classificar"', () {
+        final t = _pull(_json({}), [
+          _reg('regras', 'r1', {'padrao': 'COMPRA*', 'categoria_id': 'cashew:cx'})
+        ]).transacoes.single;
+        expect(t.categoriaPk, aClassificar);
+      });
+
+      test('ajuste de categoria é a validação e vale', () {
+        final t = _pull(_json({}), [
+          _reg('ajustes', 't1', {'categoria_id': 'cashew:cx'})
+        ]).transacoes.single;
+        expect(t.categoriaPk, 'cx');
+      });
+
+      test('recebimento do ciclo também espera a validação', () {
+        final t = _pull(_json({'amount': 150.0, 'description': 'PIX RECEBIDO JOAO'}), []).transacoes.single;
+        expect(t.receita, true);
+        expect(t.categoriaNome, 'A classificar');
+      });
+
+      test('sem ciclo no servidor nada é reclassificado', () {
+        final j = _json({})..['ciclo'] = <String, dynamic>{};
+        expect(_pull(j, []).transacoes.single.categoriaPk, 'mb:cat:d:Saúde');
+      });
+
+      test('"A classificar" é criada como categoria própria', () {
+        expect(_pull(_json({}), []).categoriasProprias, contains('A classificar'));
+      });
     });
 
     test('repassa ciclo, faturas, avisos, config e sincronizado_em', () {

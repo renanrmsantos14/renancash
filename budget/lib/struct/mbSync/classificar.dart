@@ -34,12 +34,6 @@ bool mbSemCategoriaUtil(String? nome) {
   return n.isEmpty || mbCategoriasSemUtilidade.contains(n) || n.startsWith('transferência');
 }
 
-/// Marco dos lançamentos "novos": quando a fila foi instalada (gravado na primeira execução). O marco da v5.4.41
-/// (primeira abertura − 7 dias) pegava uma semana de histórico; quem já o tem volta ao dia da instalação.
-DateTime mbMarcoNovos(DateTime? marcoAntigo, DateTime agora) => marcoAntigo == null
-    ? agora
-    : DateTime(marcoAntigo.year, marcoAntigo.month, marcoAntigo.day + 7);
-
 const double mbLimiarPergunta = 0.7; // igual a LIMIAR_PERGUNTA do Worker (src/ia.js)
 const int mbMaxPadroes = 300;
 const int mbMaxExemplos = 20;
@@ -145,20 +139,17 @@ class MbLancamentoIa {
       };
 }
 
-/// Fila: fora os pendentes, os já revisados, o ajuste de saldo e os investimentos; entra o antigo sem categoria útil
-/// e o novo (data a partir de `desde`, quando a fila foi instalada) que o usuário ainda não editou. Mais recentes
-/// primeiro.
-List<MbLancamentoIa> mbFilaClassificar(Iterable<MbLancamentoIa> lancamentos,
-    {required DateTime desde, Set<String> revisados = const {}}) {
+/// Fila "Para validar": fora os pendentes, os já revisados, o ajuste de saldo e os investimentos. Entra tudo que o
+/// mapeamento deixou em "A classificar" (todo lançamento do ciclo atual até o usuário validar, além do antigo sem
+/// categoria útil) e o que o Worker pede para revisar. Mais recentes primeiro.
+List<MbLancamentoIa> mbFilaClassificar(Iterable<MbLancamentoIa> lancamentos, {Set<String> revisados = const {}}) {
   final fila = [
     for (final l in lancamentos)
       if (!l.pendente &&
           !revisados.contains(l.pk) &&
           l.categoriaPk != mbCategoriaAjuste &&
           !l.pk.startsWith(mbPkInvestimento('')) &&
-          (l.revisao != null ||
-              mbSemCategoriaUtil(l.categoriaNome) ||
-              (!l.editado && !l.data.isBefore(desde))))
+          (l.revisao != null || mbSemCategoriaUtil(l.categoriaNome)))
         l
   ];
   return fila..sort((a, b) => b.data.compareTo(a.data));

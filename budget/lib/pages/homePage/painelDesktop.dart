@@ -4,6 +4,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart' show meuBancoEmprestimos;
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbMudouGeral;
@@ -409,12 +410,20 @@ class _Tabela extends StatelessWidget {
                       ),
                       Expanded(
                         flex: 3,
-                        child: Text(
-                            '${x.income ? '+' : '−'}${brl(x.amount.abs())}',
-                            textAlign: TextAlign.end,
-                            style: EdTexto.corpo(context).copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: x.income ? e.pos : e.tx)),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                          IconeTipo(mbTipoDaTransacao(x, t.category.name), tamanho: 22),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('${x.income ? '+' : '−'}${brl(x.amount.abs())}',
+                                  textAlign: TextAlign.end,
+                                  style: EdTexto.corpo(context).copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      color: mbTipoDaTransacao(x, t.category.name).cor(context))),
+                            ),
+                          ),
+                        ]),
                       ),
                     ],
                   ),

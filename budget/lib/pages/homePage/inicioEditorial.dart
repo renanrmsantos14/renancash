@@ -18,6 +18,7 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
@@ -730,8 +731,8 @@ class BancosPorBanco extends StatelessWidget {
       : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir, recolher: recolher);
 }
 
-/// "N para classificar · R$ total" com atalho para as Pendências. Some sem itens na fila
-/// (Para revisar + Para classificar, a mesma contagem do selo, sem bancos desconectados nem contas vencidas).
+/// "N para validar · R$ total" com atalho para as Pendências. Some sem itens na fila
+/// (Para validar, a mesma contagem do selo, sem bancos desconectados nem contas vencidas).
 class AlertaPendenciasInicio extends StatelessWidget {
   const AlertaPendenciasInicio({super.key});
 
@@ -752,7 +753,7 @@ class AlertaPendenciasInicio extends StatelessWidget {
             padding: const EdgeInsets.only(top: 14),
             child: Semantics(
               button: true,
-              label: '$n para classificar, revisar',
+              label: '$n para validar',
               excludeSemantics: true,
               onTap: abrir,
               child: ToqueEscala(
@@ -767,7 +768,7 @@ class AlertaPendenciasInicio extends StatelessWidget {
                       child: Text.rich(
                         TextSpan(children: [
                           TextSpan(
-                              text: '$n para classificar',
+                              text: '$n para validar',
                               style: const TextStyle(fontWeight: FontWeight.w600)),
                           if (total > 0) TextSpan(text: ' · ${brl(total)}'),
                         ]),
@@ -960,11 +961,13 @@ class UltimasInicio extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              IconeTipo(mbTipoDaTransacao(t.transaction, t.category.name), tamanho: 22),
+              const SizedBox(width: 8),
               Text(
                   '${t.transaction.income ? '+' : '−'}${brl(t.transaction.amount.abs())}',
                   style: EdTexto.corpo(context).copyWith(
                       fontWeight: FontWeight.w500,
-                      color: t.transaction.income ? e.pos : e.tx)),
+                      color: mbTipoDaTransacao(t.transaction, t.category.name).cor(context))),
             ]),
           ),
       ],

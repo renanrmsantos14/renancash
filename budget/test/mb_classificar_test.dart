@@ -1,4 +1,4 @@
-// Fila "Para classificar" da aba Pendências: normalização do favorecido, fila, padrões, fallback sem IA,
+// Fila "Para validar" da aba Pendências: normalização do favorecido, fila, padrões, fallback sem IA,
 // validação da resposta da IA no aparelho e o cartão (sem rede nem banco).
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
@@ -9,8 +9,6 @@ import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-final _desde = DateTime(2026, 11, 1);
 
 MbLancamentoIa _l(String pk,
         {String descricao = 'PIX ENVIADO FABIANA SILVA',
@@ -67,34 +65,22 @@ void main() {
       expect(mbChavePadrao('123 - *'), '');
     });
 
-    test('fila: novos não editados, antigos sem categoria útil e Pix do Worker; mais recentes primeiro', () {
+    test('fila: tudo que o mapeamento deixou em "A classificar", antigo sem categoria útil e Pix do Worker', () {
       final fila = mbFilaClassificar([
-        _l('mb:novo', categoria: 'Transporte', data: DateTime(2026, 11, 3)),
-        _l('mb:novoEditado', categoria: 'Transporte', editado: true),
-        _l('mb:antigoUtil', categoria: 'Transporte', data: DateTime(2026, 9, 1)),
+        _l('mb:novo', data: DateTime(2026, 11, 3)),
+        // Já validado (categoria útil escolhida pelo usuário): fora da fila, editado ou não.
+        _l('mb:validado', categoria: 'Transporte', editado: true),
+        _l('mb:historico', categoria: 'Transporte', data: DateTime(2026, 9, 1)),
         _l('mb:antigoPix', categoria: 'Pix', data: DateTime(2026, 9, 2), editado: true),
         _l('mb:pendente', pendente: true),
         _l('mb:revisado'),
         _l('mb:worker', categoria: 'Transporte', data: DateTime(2026, 8, 1), editado: true,
             revisao: const MbItemRevisao('w', 'pix_enviado', txId: 'worker')),
-        // Ajuste de saldo e investimento (CDB) nunca entram, mesmo novos.
+        // Ajuste de saldo e investimento (CDB) nunca entram.
         _l('mb:ajuste', categoria: 'Balance Correction', categoriaPk: '0', valor: 28.01),
         _l('mb:inv:cdb1', descricao: 'CDB - BANCO INTER S.A', categoria: 'Ajuste de saldo', valor: 550.03),
-        // Véspera do marco: histórico com categoria útil não entra.
-        _l('mb:vespera', categoria: 'Compras', data: DateTime(2026, 10, 31, 23)),
-      ], desde: _desde, revisados: {'mb:revisado'});
+      ], revisados: {'mb:revisado'});
       expect(fila.map((l) => l.pk), ['mb:novo', 'mb:antigoPix', 'mb:worker']);
-    });
-
-    test('marco dos novos: instalação nova grava agora; o antigo (−7 dias) volta ao dia da instalação', () {
-      final agora = DateTime(2026, 11, 17, 11, 53);
-      expect(mbMarcoNovos(null, agora), agora);
-      expect(mbMarcoNovos(DateTime(2026, 11, 10), agora), DateTime(2026, 11, 17));
-      // "Compra no débito - Mundo Do Cabeleireiro" de 15/11 já em Compras: com o marco antigo entrava; agora não.
-      final compra = _l('mb:cab', descricao: 'Compra no débito - Mundo Do Cabeleireiro', categoria: 'Compras',
-          categoriaPk: 'compras', data: DateTime(2026, 11, 15, 10));
-      expect(mbFilaClassificar([compra], desde: DateTime(2026, 11, 10)), hasLength(1));
-      expect(mbFilaClassificar([compra], desde: mbMarcoNovos(DateTime(2026, 11, 10), agora)), isEmpty);
     });
 
     test('opções: uma categoria por nome (a do usuário), sem as inúteis nem a de ajuste, com subs', () {
@@ -225,47 +211,52 @@ void main() {
       meuBancoIaEstado.value = const {};
     });
 
-    testWidgets('mostra valor, sugestão da IA com pergunta e Confirmar; chip troca a escolha', (t) async {
+    testWidgets('um por vez: estabelecimento, valor grande, "A IA sugere" em chip, Confirmar e as categorias prováveis',
+        (t) async {
+      await abrir(t, [
+        _l('mb:1', descricao: 'Republic CA', valor: -48.9),
+        _l('mb:2', descricao: 'Uber Trip', valor: -22),
+      ], sugestoes: {
+        'mb:1': const MbSugestao('mb:1', 'alim', confianca: 0.9, fonte: MbFonteSugestao.ia),
+      });
+      expect(find.text('Para validar'), findsOneWidget);
+      expect(find.text('1 de 2'), findsOneWidget);
+      expect(find.text('Republic CA'), findsOneWidget);
+      expect(find.text('Uber Trip'), findsNothing); // só o primeiro
+      expect(find.text('−R\$ 48,90'), findsOneWidget);
+      expect(find.text('A IA sugere'), findsOneWidget);
+      expect(find.text('GASTO · Alimentação'), findsOneWidget);
+      expect(find.text('Confirmar'), findsOneWidget);
+      expect(find.text('Não é isso? Toque na certa'), findsOneWidget);
+      expect(find.text('Transporte'), findsOneWidget); // chip provável
+      expect(find.text('Outras'), findsOneWidget);
+      expect(find.text('Explicar o que foi'), findsNothing);
+      expect(mbTotalPendencias(), 2);
+    });
+
+    testWidgets('pergunta da IA aparece junto da sugestão', (t) async {
       await abrir(t, [
         _l('mb:1')
       ], sugestoes: {
         'mb:1': const MbSugestao('mb:1', 'alim',
-            titulo: 'Empréstimo Mãe',
-            vinculoPk: 'mae',
             confianca: 0.4,
-            pergunta: 'Esse Pix de R\$ 500 para Fabiana foi empréstimo para a Mãe?',
+            pergunta: 'Esse Pix de R\$ 500 para Fabiana foi almoço?',
             fonte: MbFonteSugestao.ia),
       });
-      expect(find.text('Para classificar'), findsOneWidget);
-      expect(find.text('1 de 1'), findsOneWidget);
-      expect(find.text('−R\$ 500,00'), findsOneWidget);
-      expect(find.text('Sugestão da IA'), findsOneWidget);
-      expect(find.text('40% · na dúvida'), findsOneWidget);
-      expect(find.text('Título: Empréstimo Mãe'), findsOneWidget);
-      expect(find.textContaining('foi empréstimo para a Mãe?'), findsOneWidget);
-      expect(find.text('Alimentação'), findsOneWidget);
-      expect(find.text('Empréstimo: Mãe'), findsOneWidget);
+      expect(find.textContaining('foi almoço?'), findsOneWidget);
       expect(find.text('Confirmar'), findsOneWidget);
-      expect(mbTotalPendencias(), 1);
-
-      await t.tap(find.text('Transporte'));
-      await t.pump();
-      expect(find.text('Sua escolha'), findsOneWidget);
-      expect(find.text('Uber'), findsOneWidget); // subcategorias da nova escolha
-      await t.tap(find.text('Uber'));
-      await t.pump();
-      expect(find.text('Transporte › Uber'), findsOneWidget);
     });
 
-    testWidgets('sem sugestão e sem IA: pede a categoria e avisa discretamente', (t) async {
+    testWidgets('sem sugestão e sem IA: só chips, sem Confirmar, e avisa discretamente', (t) async {
       await abrir(t, [_l('mb:1')], iaOk: false);
       expect(find.textContaining('Sem sugestão para este'), findsOneWidget);
       expect(find.text('Qual é a categoria?'), findsOneWidget);
       expect(find.text('Sem IA agora: sugestões pelos seus padrões.'), findsOneWidget);
       expect(find.text('Confirmar'), findsNothing);
+      expect(find.text('Outras'), findsOneWidget);
     });
 
-    testWidgets('estado da IA visível no cartão: pedindo, sem sugestão, falhou; título do banco editável', (t) async {
+    testWidgets('estado da IA visível no cartão: pedindo, sem sugestão, falhou', (t) async {
       final atual = {
         'mb:1': const MbSugestao('mb:1', 'transp', confianca: 0.5, fonte: MbFonteSugestao.atual),
       };
@@ -273,8 +264,7 @@ void main() {
           sugestoes: atual, estado: {'mb:1': MbEstadoIa.pedindo});
       expect(find.text('Categoria do banco'), findsOneWidget);
       expect(find.text('Pedindo sugestão à IA…'), findsOneWidget);
-      expect(find.text('Título: Compra no débito - Mundo Do Cabeleireiro'), findsOneWidget);
-      expect(find.text('Manter o texto do banco'), findsNothing);
+      expect(find.text('Compra no débito - Mundo Do Cabeleireiro'), findsOneWidget);
 
       meuBancoIaEstado.value = {'mb:1': MbEstadoIa.semSugestao};
       await t.pump();
@@ -285,12 +275,12 @@ void main() {
       expect(find.text('Sem IA agora: sugestões pelos seus padrões.'), findsOneWidget);
     });
 
-    testWidgets('Pix enviado do Worker na fila de classificar aparece uma vez só', (t) async {
+    testWidgets('Pix enviado do Worker na fila aparece uma vez só', (t) async {
       const pix = MbItemRevisao('p1', 'pix_enviado',
           txId: '1', data: '2026-11-10', descricao: 'PIX ENVIADO FABIANA', destinatario: 'FABIANA', valor: -500);
       await abrir(t, [_l('mb:1', revisao: pix)], revisar: const [pix]);
       expect(find.text('1 de 1'), findsOneWidget);
-      expect(find.text('Para classificar'), findsOneWidget);
+      expect(find.text('Para validar'), findsOneWidget);
       expect(mbTotalPendencias(), 1);
     });
   });

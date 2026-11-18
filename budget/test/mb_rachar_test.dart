@@ -204,6 +204,7 @@ void main() {
 
     test('aprendizado: o gasto na categoria em que o pagador já rachou sobe na próxima vez', () async {
       final ontem = DateTime.now().subtract(const Duration(days: 1));
+      cliente.semCiclo = true;
       cliente.transacoes = [
         _tx('g1', 'RESTAURANTE DO ZE', -120, categoria: 'Eating out', data: ontem),
         _tx('g2', 'RESTAURANTE NOVO', -90, categoria: 'Eating out', data: ontem),
@@ -227,6 +228,8 @@ class _Cliente extends MbCliente {
   _Cliente() : super(base: 'https://teste');
   final List<Registro> enviados = [];
   List<Map<String, dynamic>> transacoes = [];
+  // Sem ciclo no Worker, o histórico guarda as categorias de sempre (no ciclo atual tudo espera validação).
+  bool semCiclo = false;
 
   @override
   Future<Map<String, dynamic>> puxar(String? desde) async {
@@ -237,10 +240,12 @@ class _Cliente extends MbCliente {
       'contas': [{'id': 'cc', 'type': 'BANK', 'name': 'Conta Inter'}],
       'transacoes': desde == null ? transacoes : [], // como o Worker: o incremental não repete as antigas
       'pendentes': [],
-      'ciclo': {
-        'inicio': _dia(hoje.subtract(const Duration(days: 5))),
-        'fim': _dia(hoje.add(const Duration(days: 25))),
-      },
+      'ciclo': semCiclo
+          ? <String, dynamic>{}
+          : {
+              'inicio': _dia(hoje.subtract(const Duration(days: 5))),
+              'fim': _dia(hoje.add(const Duration(days: 25))),
+            },
     };
   }
 

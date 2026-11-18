@@ -12,6 +12,11 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 - `widgets/editorial/resumoTransacoes.dart`: `ResumoPeriodo`, `TotalDestaque`, `AcaoVazio`, `contagemTransacoes`.
 - Textos pt em `assets/translations/generated/pt.json` e na coluna `pt` de `translations.csv` (as duas mudam juntas).
 
+## Código de cores por tipo (vale no app inteiro)
+- Definido em `budget/lib/struct/tipoMovimento.dart` (`TipoMov`, `mbTipoMov`, `mbTipoDaTransacao`, `IconeTipo`, `SeloTipo`) e nos tokens `tGasto/tReceita/tInvest/tEmpr/tTransf` de `EditorialCores` (claro e escuro, contraste AA testado em `test/tipo_movimento_test.dart`).
+- Gasto vermelho ↓ (−R$), Receita verde ↑ (+R$), Investimento azul ↗, Empréstimo âmbar ⇄, Transferência/fatura cinza ↻, A classificar neutro com borda.
+- Confira nos prints (claro e escuro): ícone e valor na cor do tipo em Transações, Últimas da Início, detalhe e Para validar; selo "GASTO · Categoria"; botões de alternativa com ponto na cor do tipo; Confirmar continua verde.
+
 ## Preparar ambiente
 - Windows local: `export PATH=/c/Users/mendo/development/flutter-3.24.5/bin:$PATH`; nuvem/Linux: `export PATH=$HOME/dev/flutter/bin:$PATH`. Depois `cd budget`.
 - Se a máquina local não puder rodar Flutter (pedido do Renan: o PC fica pesado), rode tudo no GitHub Actions do PR e confira os artefatos.

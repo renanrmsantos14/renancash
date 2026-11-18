@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
 import 'package:flutter/material.dart';
@@ -281,7 +282,8 @@ class _LinhaState extends State<_Linha> {
     final l = widget.linha;
     final t = l.transacao;
     final prevista = !t.paid;
-    final cor = prevista ? e.mu : (t.income ? e.pos : e.tx);
+    final tipo = mbTipoDaTransacao(t, l.categoria);
+    final cor = prevista ? e.mu : tipo.cor(context);
     final carteiras = Provider.of<AllWallets>(context);
     // Valor na moeda da própria conta (os totais do mês usam a moeda principal).
     final valor = convertToMoney(carteiras, t.amount.abs(),
@@ -325,11 +327,18 @@ class _LinhaState extends State<_Linha> {
                       .copyWith(color: e.tx, fontWeight: FontWeight.w500)),
               celula(2, l.categoria),
               celula(3, l.conta),
-              celula(4,
-                  '${t.income ? '+' : '−'}$valor${prevista ? ' · previsto' : ''}',
-                  direita: true,
-                  estilo: EdTexto.corpo(context)
-                      .copyWith(color: cor, fontWeight: FontWeight.w500)),
+              Expanded(
+                flex: _colunas[4],
+                child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  if (!prevista) ...[IconeTipo(tipo, tamanho: 20), const SizedBox(width: 8)],
+                  Flexible(
+                    child: Text('${t.income ? '+' : '−'}$valor${prevista ? ' · previsto' : ''}',
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: EdTexto.corpo(context).copyWith(color: cor, fontWeight: FontWeight.w500)),
+                  ),
+                ]),
+              ),
             ]),
           ),
         ),

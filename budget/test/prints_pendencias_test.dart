@@ -1,4 +1,4 @@
-// Prints da área Pendências (aba Pendências, Para classificar, cartão Para revisar e folha de rachar conta).
+// Prints da área Pendências (aba Pendências, Para validar, cartão Para revisar e folha de rachar conta).
 // Só roda com PRINTS=1:
 //   PRINTS=1 flutter test test/prints_pendencias_test.dart --update-goldens
 // Os PNGs vão para .verificacao/prints/pendencias_*.png (fora do git).
@@ -119,6 +119,17 @@ void main() {
           find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/pendencias_vazia_aviso_$modo.png'));
     });
 
+    testWidgets('print pendências tudo validado $modo', skip: _pular, (t) async {
+      appStateSettings = _ajustes(modo);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(_app(modo, const Scaffold(body: PendenciasPage(atualizar: false))));
+      await t.pump(const Duration(seconds: 1));
+      await expectLater(
+          find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/prints/pendencias_tudo_validado_$modo.png'));
+    });
+
     testWidgets('print pendências carregando $modo', skip: _pular, (t) async {
       appStateSettings = _ajustes(modo);
       t.view.physicalSize = const Size(390 * 2, 844 * 2);
@@ -137,7 +148,7 @@ void main() {
       meuBancoClassificar.value = [
         MbLancamentoIa(
           pk: 'mb:c1',
-          descricao: 'Compra no débito  -  RESTAURANTE   SABOR DA PRACA',
+          descricao: 'Republic CA',
           valor: -68.90,
           data: _dia,
           conta: 'Inter',
@@ -155,8 +166,6 @@ void main() {
         'mb:c1': MbSugestao(
           'mb:c1',
           'alim',
-          subPk: 'rest',
-          titulo: 'Almoço executivo',
           confianca: 0.92,
           fonte: MbFonteSugestao.ia,
         ),
