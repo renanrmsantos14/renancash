@@ -1,6 +1,7 @@
 // Mapeamento puro (sem Flutter/Drift) da resposta do Meu Banco para dados do RenanCash.
 // Espelha public/regras.js do painel do Meu Banco (CATEGORIAS, traduzir, naoEhGasto, valorGasto).
 
+import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
@@ -338,6 +339,27 @@ bool mbContaIgnorada(Map c) =>
             (c["subtype"] == null || c["subtype"] == "CHECKING_ACCOUNT"))) &&
     _bancoIgnorado.hasMatch("${c["name"] ?? ""} ${c["bank"] ?? ""}");
 
+/// Conta sem banco reconhecível (o Worker manda `bank: null`; cartão "GOLD") herda o banco de outra conta da
+/// mesma conexão (`item_id`), ignoradas inclusive. Só preenche `bank`; quem já é reconhecível não muda.
+List<Map<String, dynamic>> mbHerdarBanco(Iterable<dynamic> contas) {
+  final mapas = [for (final c in contas) if (c is Map) c.cast<String, dynamic>()];
+  String texto(Map c) => "${c["bank"] ?? c["name"] ?? ""}";
+  final porItem = <String, Map<String, dynamic>>{};
+  for (final c in mapas) {
+    final item = c["item_id"];
+    if (item != null && mbBancoConhecido(texto(c)) != null) porItem.putIfAbsent("$item", () => c);
+  }
+  return [
+    for (final c in mapas)
+      if (c["item_id"] != null &&
+          mbBancoConhecido(texto(c)) == null &&
+          porItem["${c["item_id"]}"] != null)
+        {...c, "bank": mbNomeDoBancoLimpo(texto(porItem["${c["item_id"]}"]!))}
+      else
+        c
+  ];
+}
+
 /// Poupança (Pluggy SAVINGS_ACCOUNT) própria, não ignorada: no app ela é uma aplicação da carteira
 /// Investimentos (saldo em "Investido", meta possível), não uma conta/carteira.
 bool mbEhPoupanca(Map c) =>
@@ -352,8 +374,9 @@ MbInvestimento? mbPoupancaComoInvestimento(Map c) {
   if (!mbEhPoupanca(c) || c["balance"] is! num || c["removida"] == 1 || c["removida"] == true) {
     return null;
   }
-  final banco = (c["bank"] ?? "").toString().trim();
-  final curto = banco
+  // O Worker manda `bank: null`: o banco sai do nome da conta ("BANCO INTER ·69-6").
+  final banco = (c["bank"] ?? c["name"] ?? "").toString().trim();
+  final curto = (mbBancoConhecido(banco)?.nome ?? banco)
       .replaceFirst(RegExp(r"^banco\s+", caseSensitive: false), "")
       .replaceFirst(RegExp(r"\s*·\s*[\d-]+$"), "")
       .trim();
@@ -501,7 +524,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
   final cartoes = <String, bool>{};
   final bancos = <String, String>{};
   final ignoradasPks = <String>{};
-  for (final c in (json["contas"] as List? ?? const [])) {
+  final todas = mbHerdarBanco(json["contas"] as List? ?? const []);
+  for (final c in todas) {
     final id = c["id"].toString();
     // Poupança não é carteira: vira aplicação (abaixo) e a carteira antiga, se existir, é apagada.
     if (mbContaIgnorada(c) || mbEhPoupanca(c)) {
@@ -677,8 +701,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
                     (i["nome"] ?? "Investimento").toString().trim(),
                     (i["saldo"] as num).toDouble(),
                     i["banco"]?.toString()),
-            for (final c in (json["contas"] as List? ?? const []))
-              if (c is Map && mbPoupancaComoInvestimento(c) != null)
+            for (final c in todas)
+              if (mbPoupancaComoInvestimento(c) != null)
                 mbPoupancaComoInvestimento(c)!,
           ]
         : null,
