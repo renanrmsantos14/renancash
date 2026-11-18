@@ -259,6 +259,27 @@ void main() {
       expect(inter.itens.last.destaque, true); // vence em 1 dia
     });
 
+    test('cartão sem banco entra no banco da mesma conexão e a poupança vem do banco da conta', () {
+      final b = mbAgruparPorBanco(
+          contas: [
+            {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'BANCO INTER ·69-6', 'bank': null, 'balance': 100.0, 'item_id': 'i1'},
+            {'id': 'g', 'type': 'CREDIT', 'name': 'GOLD', 'bank': null, 'balance': 40.0, 'due_date': '2026-11-10', 'item_id': 'i1'},
+          ],
+          faturas: const {},
+          investimentos: const [
+            (nome: 'Poupança Inter', banco: 'BANCO INTER ·69-6', saldo: 600.33),
+            (nome: 'Poupança Santander', banco: 'Banco Santander Pessoa Física ·24-1', saldo: 1.06),
+          ],
+          sincronizadoEm: _agora.toUtc().toIso8601String(),
+          agora: _agora);
+      expect(b.map((x) => x.id), ['inter', 'santander']);
+      final inter = b.first;
+      expect(inter.logo, 'inter');
+      expect(inter.itens.map((i) => i.rotulo), ['Conta corrente', 'Poupança Inter', 'Fatura · vence 10/11']);
+      expect(inter.total, closeTo(100 + 600.33 - 40, .001));
+      expect(b.last.itens.map((i) => i.rotulo), ['Poupança Santander']);
+    });
+
     test('só investimentos, sem banco (Outros) e banco desconhecido sem logo', () {
       final b = agrupar();
       final xp = b.firstWhere((x) => x.id == 'xp');

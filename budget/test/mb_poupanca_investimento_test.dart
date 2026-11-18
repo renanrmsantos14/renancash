@@ -48,6 +48,29 @@ void main() {
   tearDown(() => database.close());
 
   group('poupança como aplicação', () {
+    test('Worker sem `bank`: a poupança leva o banco pelo nome da conta (Inter e Santander)', () {
+      const inter = {'id': 'p1', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'BANCO INTER ·69-6', 'bank': null, 'balance': 600.33, 'item_id': 'i1'};
+      const santander = {'id': 'p2', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Banco Santander Pessoa Física ·24-1', 'bank': null, 'balance': 1.06, 'item_id': 's1'};
+      final a = mbPoupancaComoInvestimento(inter)!;
+      expect((a.nome, a.banco), ('Poupança Inter', 'BANCO INTER ·69-6'));
+      final b = mbPoupancaComoInvestimento(santander)!;
+      expect((b.nome, mbBancoConhecido(b.banco)?.id), ('Poupança Santander', 'santander'));
+    });
+
+    test('conta sem banco reconhecível herda o da mesma conexão (item_id), ignoradas inclusive', () {
+      final r = mbHerdarBanco([
+        {'id': 'c1', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'BANCO INTER ·69-6', 'item_id': 'i1'},
+        {'id': 'g', 'type': 'CREDIT', 'name': 'GOLD', 'item_id': 'i1'},
+        {'id': 'x', 'type': 'CREDIT', 'name': 'GOLD', 'item_id': 'outra'},
+        {'id': 'pai', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Banco Santander Pessoa Física ·57-2', 'item_id': 's1'},
+        {'id': 'poup', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança', 'item_id': 's1'},
+      ]);
+      expect(r.firstWhere((c) => c['id'] == 'g')['bank'], 'Banco Inter');
+      expect(r.firstWhere((c) => c['id'] == 'x')['bank'], isNull);
+      expect(r.firstWhere((c) => c['id'] == 'c1')['bank'], isNull);
+      expect(mbPoupancaComoInvestimento(r.last)!.nome, 'Poupança Santander');
+    });
+
     test('o mapeamento a troca de carteira por aplicação "Poupança Inter"', () {
       expect(mbEhPoupanca(_inter), true);
       expect(mbEhPoupanca(_corrente), false);

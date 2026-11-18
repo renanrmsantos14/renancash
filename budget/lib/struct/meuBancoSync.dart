@@ -312,9 +312,9 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
 
     final estado = <String, String>{
       'contas': jsonEncode([
-        for (final c in (json['contas'] as List? ?? const []))
+        for (final c in mbHerdarBanco(json['contas'] as List? ?? const []))
           // Conta de conexão removida segue no pull (mapeia transações antigas), mas não aparece.
-          if (c is Map && !mbContaIgnorada(c) && c['removida'] != 1 && c['removida'] != true) c
+          if (!mbContaIgnorada(c) && c['removida'] != 1 && c['removida'] != true) c
       ]),
       'faturas': jsonEncode(json['faturas'] ?? const {}),
       'ciclo': jsonEncode(json['ciclo']),

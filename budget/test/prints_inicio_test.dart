@@ -65,7 +65,9 @@ const _limitesExemplo = [
 // Contas, cartões e aplicações do print: Inter e Nubank com logo, um banco sem logo (Pan: selo com
 // iniciais) com fatura vencendo em 2 dias (destaque), XP só com investimentos e aplicações sem banco (Outros).
 final _contasBancos = <Map<String, dynamic>>[
-  {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Banco Inter ·69-6', 'balance': 893.47},
+  {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Banco Inter ·69-6', 'balance': 893.47, 'item_id': 'inter-1'},
+  // Como o Worker manda: cartão sem `bank`, só o item_id da conexão do Inter o liga ao banco.
+  {'id': 'g', 'type': 'CREDIT', 'name': 'GOLD', 'bank': null, 'balance': 320.0, 'due_date': '2026-11-25', 'item_id': 'inter-1'},
   {'id': 'b', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Nubank', 'bank': 'Nubank', 'balance': 1115.50},
   {'id': 'd', 'type': 'CREDIT', 'name': 'Ultravioleta ·4412', 'bank': 'Nubank', 'balance': 1240.0, 'due_date': '2026-11-22'},
   {'id': 'e', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Pan', 'bank': 'Banco Pan', 'balance': 215.40},
@@ -79,8 +81,8 @@ const _investimentosBancos = <InvestimentoBanco>[
   (nome: 'Fundo DI', banco: 'XP Investimentos', saldo: 7000.0),
   (nome: 'Tesouro Selic', banco: null, saldo: 2081.0),
   // Poupanças são aplicações (mb:inv:cc-<id>), não contas.
-  (nome: 'Poupança Inter', banco: 'Banco Inter', saldo: 500.0),
-  (nome: 'Poupança Santander', banco: 'Banco Santander', saldo: 120.0),
+  (nome: 'Poupança Inter', banco: 'BANCO INTER ·69-6', saldo: 500.0),
+  (nome: 'Poupança Santander', banco: 'Banco Santander Pessoa Física ·24-1', saldo: 120.0),
 ];
 
 PatrimonioInicio _patrimonioDe(List<Map<String, dynamic>> contas,

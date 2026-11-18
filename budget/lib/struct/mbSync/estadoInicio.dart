@@ -546,6 +546,7 @@ List<BancoInicio> mbAgruparPorBanco({
   required String? sincronizadoEm,
   required DateTime agora,
 }) {
+  contas = mbHerdarBanco(contas);
   final grupos = <String, _GrupoBanco>{};
   _GrupoBanco grupo(Object? bruto) {
     final texto = bruto == null ? '' : '$bruto'.trim();
