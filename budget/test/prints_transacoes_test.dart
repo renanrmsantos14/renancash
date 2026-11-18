@@ -356,6 +356,14 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
   _diag('pump final');
   await t.runAsync(() => Future.delayed(const Duration(milliseconds: 200)));
   _diag('runAsync final');
+  await t.pump();
+  _diag('b2 pump');
+  await t.idle();
+  _diag('b3 idle');
+  await t.pumpWidget(Container(key: UniqueKey()));
+  _diag('b4 pumpWidget vazio');
+  await t.pump(const Duration(seconds: 1));
+  _diag('b5 pump 1s');
   if (_variante == 'A' && _bancoAberto) {
     await t.runAsync(() => database.close());
     _bancoAberto = false;
