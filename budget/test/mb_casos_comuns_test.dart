@@ -1,6 +1,5 @@
 // Casos mais comuns com menos toques: iguais na fila, rendimentos de poupança, estornos, "como no mês passado",
-// rachar recorrente e os atalhos de lançamento rápido da Início.
-import 'package:budget/pages/homePage/inicioEditorial.dart' show LancamentoRapidoInicio;
+// rachar recorrente.
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/casosComuns.dart';
@@ -170,50 +169,6 @@ void main() {
     });
   });
 
-  group('atalhos de lançamento rápido', () {
-    final hist = [
-      for (var i = 0; i < 5; i++)
-        _h('mb:a$i', i.isEven ? 'Almoço Betinhos' : 'almoco betinhos', i == 0 ? -25 : -20.98, _diasAtras(i + 1),
-            sub: 'almoco', subNome: 'Almoço Betinhos'),
-      for (var i = 0; i < 3; i++)
-        _h('s$i', 'salgado', i == 2 ? -12.5 : -7, _diasAtras(i + 2), sub: 'normal', subNome: 'Normal'),
-      _h('mb:u1', 'Uber', -10.08, _diasAtras(3), cat: 'transp', sub: 'uber', catNome: 'Transporte', subNome: 'Uber'),
-      _h('mb:u2', 'Uber', -9.5, _diasAtras(1), cat: 'transp', sub: 'uber', catNome: 'Transporte', subNome: 'Uber'),
-      _h('mb:u3', 'Uber', -11, _diasAtras(4), cat: 'transp', sub: 'uber', catNome: 'Transporte', subNome: 'Uber'),
-      // Fora: texto do banco, uma vez só, antigo, ajuste de saldo, categoria sem utilidade, entrada, investimento.
-      _h('mb:b1', 'Compra no débito - Sete Estrelas', -20, _diasAtras(1)),
-      _h('mb:b2', 'Compra no débito - Sete Estrelas', -20, _diasAtras(2)),
-      _h('p1', 'pastel', -15, _diasAtras(2)),
-      _h('v1', 'pizza', -40, _diasAtras(100)),
-      _h('v2', 'pizza', -40, _diasAtras(120)),
-      _h('c1', 'reserva', -50, _diasAtras(1), cat: '0', catNome: 'Ajuste de saldo'),
-      _h('c2', 'reserva', -50, _diasAtras(2), cat: '0', catNome: 'Ajuste de saldo'),
-      _h('x1', 'transferencia', -30, _diasAtras(1), cat: 'pix', catNome: 'Pix'),
-      _h('x2', 'transferencia', -30, _diasAtras(2), cat: 'pix', catNome: 'Pix'),
-      _h('r1', 'salario', 1900, _diasAtras(1), cat: 'trab', catNome: 'Trabalho'),
-      _h('r2', 'salario', 1900, _diasAtras(30), cat: 'trab', catNome: 'Trabalho'),
-      _h('mb:inv:1', 'CDB', -100, _diasAtras(1)),
-      _h('mb:inv:2', 'CDB', -100, _diasAtras(2)),
-    ];
-
-    test('mais vezes primeiro, com o valor e a categoria mais comuns; só título dado pelo usuário', () {
-      final a = mbAtalhosRapidos(hist, _hoje);
-      expect([for (final x in a) (x.titulo, x.valor, x.categoria, x.vezes)], [
-        ('Almoço Betinhos', 20.98, 'Alimentação › Almoço Betinhos', 5), // título do mais recente
-        ('Uber', 9.5, 'Transporte › Uber', 3), // empate de valor: o mais recente; empate de vezes: o usado por último
-        ('salgado', 7.0, 'Alimentação › Normal', 3),
-      ]);
-    });
-
-    test('no máximo 6', () {
-      final muitos = [
-        for (var g = 0; g < 8; g++)
-          for (var i = 0; i < 2; i++) _h('g$g$i', 'item ${String.fromCharCode(97 + g)}', -5, _diasAtras(g + i + 1))
-      ];
-      expect(mbAtalhosRapidos(muitos, _hoje).length, 6);
-    });
-  });
-
   group('telas', () {
     Future<void> abrir(WidgetTester t, List<MbLancamentoIa> fila,
         {Map<String, MbSugestao> sugestoes = const {}}) async {
@@ -339,30 +294,6 @@ void main() {
       await t.pump();
       expect(find.text('É a parte de uma conta que eu paguei'), findsOneWidget);
       expect(find.textContaining('Sem sugestão para este'), findsOneWidget);
-    });
-
-    testWidgets('Início: lançar rápido mostra os atalhos e some com o ajuste desligado', (t) async {
-      const atalhos = [
-        MbAtalhoRapido('salgado', 'alim', 'Alimentação', 7, subPk: 'normal', subNome: 'Normal', vezes: 11),
-        MbAtalhoRapido('Uber', 'transp', 'Transporte', 10.08, vezes: 16),
-      ];
-      for (final ligado in [true, false]) {
-        appStateSettings = {
-          'materialYou': false,
-          'accentSystemColor': false,
-          'batterySaver': false,
-          'increaseTextContrast': false,
-          'forceFullDarkBackground': false,
-          if (!ligado) 'inicioLancamentoRapido': false,
-        };
-        await t.pumpWidget(MaterialApp(
-          theme: temaEditorial(Brightness.light),
-          home: Scaffold(body: LancamentoRapidoInicio(key: ValueKey(ligado), atalhos: atalhos)),
-        ));
-        expect(find.text('Lançar rápido'), ligado ? findsOneWidget : findsNothing);
-        expect(find.text('Salgado'), ligado ? findsOneWidget : findsNothing);
-        expect(find.text('R\$ 10,08'), ligado ? findsOneWidget : findsNothing);
-      }
     });
   });
 }
