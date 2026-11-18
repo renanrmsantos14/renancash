@@ -14,17 +14,20 @@ bool? isSetting24HourFormat() {
 }
 
 bool isSystem24HourFormat(BuildContext context) {
-  final String? localeName =
-      EasyLocalization.of(context)?.locale.toString() ??
-          appStateSettings["locale"]?.toString();
-  DateFormat format =
-      localeName != null && localeName != "system"
-          ? DateFormat.jm(localeName)
-          : DateFormat.jm();
-  String formattedTime =
-      format.format(DateTime.now()).toUpperCase().replaceAll(".", "");
-  return MediaQuery.alwaysUse24HourFormatOf(context) ||
-      !formattedTime.contains("AM") && !formattedTime.contains("PM");
+  if (MediaQuery.alwaysUse24HourFormatOf(context)) return true;
+  try {
+    final String? localeName =
+        EasyLocalization.of(context)?.locale.toString();
+    DateFormat format =
+        localeName != null && localeName != "system"
+            ? DateFormat.jm(localeName)
+            : DateFormat.jm();
+    String formattedTime =
+        format.format(DateTime.now()).toUpperCase().replaceAll(".", "");
+    return !formattedTime.contains("AM") && !formattedTime.contains("PM");
+  } catch (_) {
+    return true;
+  }
 }
 
 class TimeDigits extends StatelessWidget {
