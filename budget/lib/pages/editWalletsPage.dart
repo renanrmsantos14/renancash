@@ -4,6 +4,7 @@ import 'package:budget/struct/mbSync/conexoes.dart'
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
+import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
@@ -249,7 +250,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                   listen: false),
                             );
                           },
-                          // Excluir fica no menu da conta (com confirmação):
+                          // Excluir fica no menu ⋮ do formulário da conta (com
+                          // confirmação), aberto por "Editar conta" no detalhe:
                           // a linha mantém só principal e reordenar.
                           canDelete: false,
                           canReorder: searchValue == "" &&
@@ -274,10 +276,10 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                     addCurrencyName:
                                         !allWallets.allContainSameCurrency())),
                           ),
-                          openPage: AddWalletPage(
-                              wallet: wallet,
-                              routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.One),
+                          // Tocar abre o detalhe (saldo e movimentos); editar fica
+                          // no botão "Editar conta" do próprio detalhe.
+                          openPage:
+                              WatchedWalletDetailsPage(walletPk: wallet.walletPk),
                         ),
                       );
                     },
