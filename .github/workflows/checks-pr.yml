@@ -48,9 +48,9 @@ jobs:
         run: |
           for v in Z; do
             rm -f /tmp/prints_diag.log
-            PRINTS=1 timeout 70 flutter test test/prints_transacoes_test.dart --plain-name "print AddTransactionPage nova claro" --update-goldens --dart-define=VARIANTE=$v > /tmp/var_$v.log 2>&1 || echo "variante $v rc=$?"
+            PRINTS=1 timeout 70 flutter test test/prints_transacoes_test.dart --plain-name "print AddTransactionPage nova claro" --update-goldens --reporter expanded --dart-define=VARIANTE=$v > /tmp/var_$v.log 2>&1 || echo "variante $v rc=$?"
             tail -5 /tmp/prints_diag.log || true
-            grep -E 'tests? passed|failed|Some tests' /tmp/var_$v.log | tail -2 || true
+            grep -v 'Easy Localization' /tmp/var_$v.log | tail -70 | cut -c1-200 || true
           done
 
       - name: Prints visuais
