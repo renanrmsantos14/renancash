@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addAssociatedTitlePage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
@@ -29,7 +30,10 @@ import 'package:budget/modified/reorderable_list.dart';
 class EditAssociatedTitlesPage extends StatefulWidget {
   EditAssociatedTitlesPage({
     Key? key,
+    this.titlesForTest,
   }) : super(key: key);
+
+  final List<TransactionAssociatedTitleWithCategory>? titlesForTest;
 
   @override
   _EditAssociatedTitlesPageState createState() =>
@@ -44,10 +48,12 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
 
   @override
   void initState() {
-    Future.delayed(Duration.zero, () async {
-      await database.fixDuplicateAssociatedTitles();
-      await database.fixOrderAssociatedTitles();
-    });
+    if (widget.titlesForTest == null) {
+      Future.delayed(Duration.zero, () async {
+        await database.fixDuplicateAssociatedTitles();
+        await database.fixOrderAssociatedTitles();
+      });
+    }
     super.initState();
   }
 
@@ -155,8 +161,16 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
           //   ),
           // ),
           StreamBuilder<List<TransactionAssociatedTitleWithCategory>>(
-            stream: database.watchAllAssociatedTitles(
-                searchFor: searchValue == "" ? null : searchValue),
+            stream: widget.titlesForTest != null
+                ? Stream.value(searchValue == ""
+                    ? widget.titlesForTest!
+                    : widget.titlesForTest!
+                        .where((t) => t.title.title
+                            .toLowerCase()
+                            .contains(searchValue.toLowerCase().trim()))
+                        .toList())
+                : database.watchAllAssociatedTitles(
+                    searchFor: searchValue == "" ? null : searchValue),
             builder: (context, snapshot) {
               List<TransactionAssociatedTitleWithCategory> titles =
                   snapshot.data ?? [];
@@ -178,12 +192,16 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                             "Nenhum título ainda. Um título liga o nome de uma transação a uma categoria.",
                       ),
                       SizedBox(height: 16),
-                      Button(
-                        label: "add-title".tr(),
-                        onTap: () => openBottomSheet(
-                          context,
-                          popupWithKeyboard: true,
-                          AddAssociatedTitlePage(),
+                      Padding(
+                        padding: const EdgeInsetsDirectional.symmetric(
+                            horizontal: 18),
+                        child: Button(
+                          label: "add-title".tr(),
+                          onTap: () => openBottomSheet(
+                            context,
+                            popupWithKeyboard: true,
+                            AddAssociatedTitlePage(),
+                          ),
                         ),
                       ),
                     ],
@@ -244,11 +262,23 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                           ),
                           SizedBox(width: 15),
                           Expanded(
-                            child: TextFont(
-                              text: associatedTitle.title,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              maxLines: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextFont(
+                                  text: associatedTitle.title,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  maxLines: 2,
+                                ),
+                                TextFont(
+                                  text: titles[index].category.name,
+                                  fontSize: 13,
+                                  textColor: cores(context).mu,
+                                  maxLines: 1,
+                                ),
+                              ],
                             ),
                           ),
                         ],

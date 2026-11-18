@@ -6,6 +6,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/initializeNotifications.dart';
 import 'package:budget/struct/notificationsGlobal.dart';
 import 'package:budget/struct/settings.dart';
@@ -165,10 +166,10 @@ class _DailyNotificationsSettingsState
               ],
             )),
         Divider(
-          indent: 20,
-          endIndent: 20,
-          thickness: 2,
-          color: getColor(context, "dividerColor"),
+          indent: 18,
+          endIndent: 18,
+          thickness: 1,
+          color: cores(context).line,
         ),
       ],
     );
@@ -176,7 +177,12 @@ class _DailyNotificationsSettingsState
 }
 
 class UpcomingTransactionsNotificationsSettings extends StatefulWidget {
-  const UpcomingTransactionsNotificationsSettings({super.key});
+  const UpcomingTransactionsNotificationsSettings({
+    super.key,
+    this.upcomingForTest,
+  });
+
+  final List<(Transaction, TransactionCategory)>? upcomingForTest;
 
   @override
   State<UpcomingTransactionsNotificationsSettings> createState() =>
@@ -222,21 +228,37 @@ class _UpcomingTransactionsNotificationsSettingsState
               padding:
                   EdgeInsetsDirectional.symmetric(horizontal: 0, vertical: 0),
               margin:
-                  EdgeInsetsDirectional.symmetric(horizontal: 20, vertical: 10),
+                  EdgeInsetsDirectional.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadiusDirectional.circular(
-                    getPlatform() == PlatformOS.isIOS ? 10 : 15),
-                color: appStateSettings["materialYou"]
-                    ? dynamicPastel(context,
-                        Theme.of(context).colorScheme.secondaryContainer,
-                        amountLight: 0, amountDark: 0.6)
-                    : getColor(context, "lightDarkAccent"),
+                borderRadius: BorderRadiusDirectional.circular(12),
+                color: cores(context).surf,
+                border: Border.all(color: cores(context).line),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadiusDirectional.circular(
-                    getPlatform() == PlatformOS.isIOS ? 10 : 15),
-                child: StreamBuilder<List<Transaction>>(
-                  stream: database.watchAllOverdueUpcomingTransactions(false),
+                borderRadius: BorderRadiusDirectional.circular(12),
+                child: widget.upcomingForTest != null
+                    ? Column(
+                        children: [
+                          for (final (transaction, cat)
+                              in widget.upcomingForTest!)
+                            SettingsContainerSwitch(
+                              icon: getTransactionTypeIcon(transaction.type),
+                              title: getTransactionLabelSync(transaction, cat),
+                              description: getWordedDateShortMore(
+                                      transaction.dateCreated) +
+                                  ", " +
+                                  getWordedTime(null, transaction.dateCreated),
+                              onSwitched: (_) {},
+                              syncWithInitialValue: false,
+                              initialValue: transaction
+                                      .upcomingTransactionNotification ??
+                                  true,
+                            ),
+                        ],
+                      )
+                    : StreamBuilder<List<Transaction>>(
+                        stream:
+                            database.watchAllOverdueUpcomingTransactions(false),
                   builder: (context, snapshot) {
                     if (snapshot.hasData) {
                       return Column(

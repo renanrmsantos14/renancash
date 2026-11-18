@@ -133,7 +133,9 @@ void restoreTransaction(
 }
 
 class ActivityPage extends StatefulWidget {
-  const ActivityPage({super.key});
+  const ActivityPage({super.key, this.logsForTest});
+
+  final List<TransactionActivityLog>? logsForTest;
 
   @override
   State<ActivityPage> createState() => ActivityPageState();
@@ -166,12 +168,16 @@ class ActivityPageState extends State<ActivityPage> {
         listID: pageId,
         slivers: [
           StreamBuilder<List<TransactionActivityLog>>(
-            stream: database.watchAllTransactionActivityLog(limit: 30),
+            stream: widget.logsForTest != null
+                ? Stream.value(widget.logsForTest!)
+                : database.watchAllTransactionActivityLog(limit: 30),
             builder: (context, snapshot1) {
               return Container(
                 child: StreamBuilder<List<TransactionActivityLog>>(
-                  stream:
-                      database.watchAllTransactionDeleteActivityLog(limit: 30),
+                  stream: widget.logsForTest != null
+                      ? Stream.value(const <TransactionActivityLog>[])
+                      : database.watchAllTransactionDeleteActivityLog(
+                          limit: 30),
                   builder: (context, snapshot2) {
                     // print(snapshot1.data);
                     // print(snapshot2.data);
@@ -219,18 +225,28 @@ class ActivityPageState extends State<ActivityPage> {
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: Tappable(
-                                    color: cores(context).surf,
-                                    borderRadius: 12,
-                                    child: Padding(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 44,
+                                    ),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: cores(context).surf,
+                                        borderRadius:
+                                            BorderRadiusDirectional.circular(12),
+                                        border: Border.all(
+                                          color: cores(context).line,
+                                        ),
+                                      ),
+                                      alignment:
+                                          AlignmentDirectional.centerStart,
                                       padding:
                                           const EdgeInsetsDirectional.symmetric(
-                                              vertical: 8.0, horizontal: 10),
+                                              vertical: 12.0, horizontal: 14),
                                       child: TextFont(
                                         text: "transaction-no-longer-available"
                                             .tr(),
-                                        textColor:
-                                            getColor(context, "textLight"),
+                                        textColor: cores(context).mu,
                                         fontSize: 15,
                                         maxLines: 2,
                                       ),
@@ -318,9 +334,11 @@ class ActivityPageState extends State<ActivityPage> {
             child: SizedBox(height: 75),
           ),
         ],
-        selectedTransactionsAppBar: SelectedTransactionsAppBar(
-          pageID: pageId,
-        ),
+        selectedTransactionsAppBar: widget.logsForTest != null
+            ? null
+            : SelectedTransactionsAppBar(
+                pageID: pageId,
+              ),
       ),
     );
   }

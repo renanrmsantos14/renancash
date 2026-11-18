@@ -10,7 +10,6 @@ import 'package:budget/widgets/noResults.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openPopup.dart';
-import 'package:budget/widgets/outlinedButtonStacked.dart';
 import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textInput.dart';
@@ -65,6 +64,19 @@ class _ExchangeRatesState extends State<ExchangeRates> {
       setState(() {});
     }
     return action;
+  }
+
+  String _formatarTaxa(double valor) {
+    if (!valor.isFinite) return "1";
+    if ((valor - valor.roundToDouble()).abs() < 1e-9) {
+      return valor.round().toString();
+    }
+    int casas = valor.abs() < 0.01 ? 6 : 4;
+    String texto = valor
+        .toStringAsFixed(casas)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+    return texto.replaceAll('.', ',');
   }
 
   @override
@@ -168,6 +180,8 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                 ),
                 SizedBox(width: 10),
                 ButtonIcon(
+                  color: cores(context).surf,
+                  iconColor: cores(context).tx,
                   onTap: () {
                     openBottomSheet(
                       context,
@@ -222,9 +236,10 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                   horizontal: 17, vertical: 5),
               child: TextFont(
                 text: "1 " +
-                    Provider.of<AllWallets>(context)
-                        .indexedByPk[appStateSettings["selectedWalletPk"]]!
-                        .currency
+                    (Provider.of<AllWallets>(context)
+                            .indexedByPk[appStateSettings["selectedWalletPk"]]
+                            ?.currency ??
+                        "brl")
                         .toString()
                         .allCaps,
                 maxLines: 2,
@@ -245,23 +260,27 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                         .toList()[index]
                         .toString();
                     bool isCustomCurrency = customCurrencies.contains(key);
-                    bool isUnsetCustomCurrency = isCustomCurrency &&
-                        appStateSettings["customCurrencyAmounts"]?[key] == null;
+                    bool hasCustomRate =
+                        appStateSettings["customCurrencyAmounts"]?[key] != null;
+                    bool isUnsetCustomCurrency =
+                        isCustomCurrency && !hasCustomRate;
                     String calculatedExchangeRateString = isUnsetCustomCurrency
                         ? "1"
-                        : (1 /
-                                ((amountRatioToPrimaryCurrency(
-                                    Provider.of<AllWallets>(context), key))))
-                            .toStringAsFixed(14);
+                        : _formatarTaxa(1 /
+                            ((amountRatioToPrimaryCurrency(
+                                Provider.of<AllWallets>(context), key))));
+                    String? currencyName =
+                        currenciesJSON[key]?["Currency"]?.toString();
                     return ScaledAnimatedSwitcher(
                       keyToWatch: (appStateSettings["customCurrencyAmounts"]
                               ?[key])
                           .toString(),
                       key: ValueKey(key),
                       child: Padding(
-                        padding: EdgeInsetsDirectional.only(
-                            bottom: isCustomCurrency ? 5 : 0),
+                        padding: const EdgeInsetsDirectional.symmetric(
+                            horizontal: 15, vertical: 3),
                         child: Tappable(
+                          borderRadius: 12,
                           onTap: () async {
                             await openBottomSheet(
                               context,
@@ -269,41 +288,47 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                             );
                             setState(() {});
                           },
-                          color: isCustomCurrency ||
-                                  appStateSettings["customCurrencyAmounts"]
-                                          ?[key] ==
-                                      null
-                              ? Colors.transparent
-                              : cores(context).surf,
-                          child: Padding(
-                            padding:
-                                EdgeInsetsDirectional.symmetric(horizontal: 8),
-                            child: OutlinedContainer(
-                              enabled: isCustomCurrency,
-                              filled: appStateSettings["customCurrencyAmounts"]
-                                      ?[key] !=
-                                  null,
-                              child: Padding(
-                                padding: const EdgeInsetsDirectional.symmetric(
-                                    horizontal: 7),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextFont(
+                          color: hasCustomRate
+                              ? cores(context).surf
+                              : Colors.transparent,
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadiusDirectional.circular(12),
+                              border: isCustomCurrency || hasCustomRate
+                                  ? Border.all(color: cores(context).line)
+                                  : null,
+                            ),
+                            padding: EdgeInsetsDirectional.only(
+                              start: 14,
+                              end: isCustomCurrency ? 4 : 14,
+                              top: 10,
+                              bottom: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextFont(
                                         text: "",
-                                        maxLines: 3,
+                                        maxLines: 2,
                                         richTextSpan: [
                                           TextSpan(
                                             text: (isUnsetCustomCurrency
-                                                    ? " " + "1 USD"
-                                                    : "") +
-                                                " = " +
+                                                    ? "1 USD = "
+                                                    : "= ") +
                                                 calculatedExchangeRateString,
                                             style: TextStyle(
                                               color: getColor(context, "black"),
                                               fontFamily:
                                                   appStateSettings["font"],
-                                              fontFamilyFallback: ['Inter'],
+                                              fontFamilyFallback: const [
+                                                'Inter'
+                                              ],
                                               fontSize: 16,
                                             ),
                                           ),
@@ -313,30 +338,47 @@ class _ExchangeRatesState extends State<ExchangeRates> {
                                               fontWeight: FontWeight.bold,
                                               fontFamily:
                                                   appStateSettings["font"],
-                                              fontFamilyFallback: ['Inter'],
+                                              fontFamilyFallback: const [
+                                                'Inter'
+                                              ],
                                               color: getColor(context, "black"),
                                               fontSize: 16,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    if (isCustomCurrency)
-                                      IconButton(
-                                        padding: EdgeInsetsDirectional.all(15),
-                                        tooltip: "delete-currency".tr(),
-                                        onPressed: () {
-                                          deleteCustomCurrency(key);
-                                        },
-                                        icon: Icon(
-                                          appStateSettings["outlinedIcons"]
-                                              ? Icons.delete_outlined
-                                              : Icons.delete_rounded,
+                                      if (currencyName != null &&
+                                          currencyName.isNotEmpty)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsetsDirectional.only(
+                                                  top: 2),
+                                          child: TextFont(
+                                            text: currencyName,
+                                            fontSize: 12.5,
+                                            textColor: cores(context).mu,
+                                            maxLines: 1,
+                                          ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                                if (isCustomCurrency)
+                                  IconButton(
+                                    padding: const EdgeInsetsDirectional.all(12),
+                                    tooltip: "delete-currency".tr(),
+                                    onPressed: () {
+                                      deleteCustomCurrency(key);
+                                    },
+                                    icon: Icon(
+                                      appStateSettings["outlinedIcons"]
+                                          ? Icons.delete_outlined
+                                          : Icons.delete_rounded,
+                                      size: 20,
+                                      color: cores(context).mu,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),

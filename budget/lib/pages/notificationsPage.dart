@@ -1,3 +1,4 @@
+import 'package:budget/database/tables.dart' show Transaction, TransactionCategory;
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
@@ -10,25 +11,35 @@ import 'package:flutter/material.dart';
 import 'package:app_settings/app_settings.dart';
 
 class NotificationsPage extends StatefulWidget {
-  const NotificationsPage({Key? key}) : super(key: key);
+  const NotificationsPage({
+    Key? key,
+    this.notificationsEnabledForTest,
+    this.upcomingForTest,
+  }) : super(key: key);
+
+  final bool? notificationsEnabledForTest;
+  final List<(Transaction, TransactionCategory)>? upcomingForTest;
 
   @override
   State<NotificationsPage> createState() => _NotificationsPageState();
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  bool notificationsEnabled = false;
+  late bool notificationsEnabled = widget.notificationsEnabledForTest ?? false;
 
   @override
   void initState() {
-    Future.delayed(Duration.zero, () async {
-      await _checkNotificationEnabled();
-    });
+    if (widget.notificationsEnabledForTest == null) {
+      Future.delayed(Duration.zero, () async {
+        await _checkNotificationEnabled();
+      });
+    }
     super.initState();
   }
 
   _checkNotificationEnabled() async {
-    bool status = await checkNotificationsPermissionAll();
+    bool status = widget.notificationsEnabledForTest ??
+        await checkNotificationsPermissionAll();
     setState(() {
       notificationsEnabled = status;
     });
@@ -66,7 +77,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
             child: Column(
               children: [
                 DailyNotificationsSettings(),
-                UpcomingTransactionsNotificationsSettings()
+                UpcomingTransactionsNotificationsSettings(
+                  upcomingForTest: widget.upcomingForTest,
+                )
               ],
             ),
           )

@@ -45,6 +45,11 @@ class AddCategoryPage extends StatefulWidget {
     required this.routesToPopAfterDelete,
     this.mainCategoryPkWhenSubCategory,
     this.initiallyIsExpense = true,
+    this.mainCategoriesForTest,
+    this.subCategoriesForTest,
+    this.subCategoryCountsForTest,
+    this.titlesForTest,
+    this.testMode = false,
   }) : super(key: key);
 
   //When a category is passed in, we are editing that category
@@ -53,6 +58,11 @@ class AddCategoryPage extends StatefulWidget {
   final String?
       mainCategoryPkWhenSubCategory; //When this is null, it is a main category not a sub category
   final bool initiallyIsExpense;
+  final List<TransactionCategory>? mainCategoriesForTest;
+  final List<TransactionCategory>? subCategoriesForTest;
+  final Map<String, int>? subCategoryCountsForTest;
+  final List<TransactionAssociatedTitle>? titlesForTest;
+  final bool testMode;
   @override
   _AddCategoryPageState createState() => _AddCategoryPageState();
 }
@@ -254,9 +264,11 @@ class _AddCategoryPageState extends State<AddCategoryPage>
         _titleController.text = selectedTitle ?? "";
         _titleController.selection = TextSelection.fromPosition(
             TextPosition(offset: _titleController.text.length));
-        await database.fixOrderCategories(
-            mainCategoryPkIfSubCategoryOrderFixing:
-                widget.category!.categoryPk);
+        if (!widget.testMode) {
+          await database.fixOrderCategories(
+              mainCategoryPkIfSubCategoryOrderFixing:
+                  widget.category!.categoryPk);
+        }
       });
     }
 
@@ -270,7 +282,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
     setState(() {
       canAddCategory = false;
     });
-    if (widget.category == null) {
+    if (widget.category == null && !widget.testMode) {
       Future.delayed(Duration.zero, () async {
         categoryInitial = await createTransactionCategory();
       });
@@ -427,55 +439,60 @@ class _AddCategoryPageState extends State<AddCategoryPage>
         ],
         staticOverlay: Align(
           alignment: AlignmentDirectional.bottomCenter,
-          child: selectedTitle == "" || selectedTitle == null
-              ? SaveBottomButton(
-                  label: "set-name".tr(),
-                  onTap: () async {
-                    FocusScope.of(context).unfocus();
-                    Future.delayed(Duration(milliseconds: 100), () {
-                      _titleFocusNode.requestFocus();
-                    });
-                  },
-                  disabled: false,
-                )
-              : canSelectIfSubCategoryOrMainCategory() &&
-                      mainCategoryPkForSubcategoryWhenCreating == null &&
-                      isMainCategoryWhenCreating == false
-                  ? SaveBottomButton(
-                      label: "select-main-category".tr(),
-                      onTap: () async {
-                        openBottomSheet(
-                          context,
-                          PopupFramework(
-                            title: "select-category".tr(),
-                            subtitle:
-                                "select-the-main-category-for-this-subcategory"
-                                    .tr(),
-                            child: SelectCategory(
-                              setSelectedCategory:
-                                  (TransactionCategory category) {
-                                mainCategoryPkForSubcategoryWhenCreating =
-                                    category.categoryPk;
-                              },
-                              next: () async {
-                                await addCategory();
-                              },
-                              addButton: false,
+          child: Padding(
+            padding: EdgeInsetsDirectional.symmetric(
+              horizontal: getHorizontalPaddingConstrained(context),
+            ),
+            child: selectedTitle == "" || selectedTitle == null
+                ? SaveBottomButton(
+                    label: "set-name".tr(),
+                    onTap: () async {
+                      FocusScope.of(context).unfocus();
+                      Future.delayed(Duration(milliseconds: 100), () {
+                        _titleFocusNode.requestFocus();
+                      });
+                    },
+                    disabled: false,
+                  )
+                : canSelectIfSubCategoryOrMainCategory() &&
+                        mainCategoryPkForSubcategoryWhenCreating == null &&
+                        isMainCategoryWhenCreating == false
+                    ? SaveBottomButton(
+                        label: "select-main-category".tr(),
+                        onTap: () async {
+                          openBottomSheet(
+                            context,
+                            PopupFramework(
+                              title: "select-category".tr(),
+                              subtitle:
+                                  "select-the-main-category-for-this-subcategory"
+                                      .tr(),
+                              child: SelectCategory(
+                                setSelectedCategory:
+                                    (TransactionCategory category) {
+                                  mainCategoryPkForSubcategoryWhenCreating =
+                                      category.categoryPk;
+                                },
+                                next: () async {
+                                  await addCategory();
+                                },
+                                addButton: false,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      disabled: !(canAddCategory ?? false),
-                    )
-                  : SaveBottomButton(
-                      label: widget.category == null
-                          ? "add-category".tr()
-                          : "save-changes".tr(),
-                      onTap: () async {
-                        await addCategory();
-                      },
-                      disabled: !(canAddCategory ?? false),
-                    ),
+                          );
+                        },
+                        disabled: !(canAddCategory ?? false),
+                      )
+                    : SaveBottomButton(
+                        label: widget.category == null
+                            ? "add-category".tr()
+                            : "save-changes".tr(),
+                        onTap: () async {
+                          await addCategory();
+                        },
+                        disabled: !(canAddCategory ?? false),
+                      ),
+          ),
         ),
         slivers: [
           SliverToBoxAdapter(
@@ -541,18 +558,17 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                   autoFocus: kIsWeb && getIsFullScreen(context),
                                   focusNode: _titleFocusNode,
                                   labelText: "name-placeholder".tr(),
-                                  bubbly: false,
                                   controller: _titleController,
                                   onChanged: (text) {
                                     setSelectedTitle(text,
                                         userAttemptedToChangeTitlePassed: true);
                                   },
                                   padding: EdgeInsetsDirectional.zero,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 if (widget.category?.categoryPk != "0")
-                                  SizedBox(height: 17),
+                                  SizedBox(height: 10),
                                 if (widget.category?.categoryPk == "0")
                                   AnimatedOpacity(
                                     opacity: selectedTitle !=
@@ -696,6 +712,7 @@ class _AddCategoryPageState extends State<AddCategoryPage>
               padding: const EdgeInsetsDirectional.only(top: 20),
               child: SelectIsSubcategory(
                 isMainCategoryWhenCreating: isMainCategoryWhenCreating,
+                mainCategoriesForTest: widget.mainCategoriesForTest,
                 onTap: (value) {
                   setState(() {
                     isMainCategoryWhenCreating = value;
@@ -711,8 +728,10 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                   isSubCategory) ==
               false)
             StreamBuilder<List<TransactionCategory>>(
-              stream: database.watchAllSubCategoriesOfMainCategory(
-                  widget.category!.categoryPk),
+              stream: widget.subCategoriesForTest != null
+                  ? Stream.value(widget.subCategoriesForTest!)
+                  : database.watchAllSubCategoriesOfMainCategory(
+                      widget.category!.categoryPk),
               builder: (context, snapshot) {
                 List<TransactionCategory> subCategories = snapshot.data ?? [];
                 if (subCategories.length <= 0 &&
@@ -805,9 +824,16 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                     fontSize: 15,
                                   ),
                                   StreamBuilder<List<int?>>(
-                                    stream: database
-                                        .watchTotalCountOfTransactionsInSubCategory(
-                                            category.categoryPk),
+                                    stream: widget.subCategoryCountsForTest !=
+                                            null
+                                        ? Stream.value([
+                                            widget.subCategoryCountsForTest![
+                                                    category.categoryPk] ??
+                                                0
+                                          ])
+                                        : database
+                                            .watchTotalCountOfTransactionsInSubCategory(
+                                                category.categoryPk),
                                     builder: (context, snapshot) {
                                       if (snapshot.hasData &&
                                           snapshot.data != null) {
@@ -967,12 +993,14 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                   ),
                 if (widget.category != null)
                   StreamBuilder<List<TransactionAssociatedTitle>>(
-                      stream: database.watchAllAssociatedTitlesInCategory(
-                        widget.category == null
-                            ? "-1"
-                            : widget.category!.categoryPk,
-                        limit: 30,
-                      ),
+                      stream: widget.titlesForTest != null
+                          ? Stream.value(widget.titlesForTest!)
+                          : database.watchAllAssociatedTitlesInCategory(
+                              widget.category == null
+                                  ? "-1"
+                                  : widget.category!.categoryPk,
+                              limit: 30,
+                            ),
                       builder: (context, snapshot) {
                         // print(snapshot.data);
                         if (snapshot.hasData &&
@@ -1086,63 +1114,69 @@ class AssociatedTitleContainer extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-      child: Tappable(
-        onTap: () {
-          openBottomSheet(
-            context,
-            popupWithKeyboard: true,
-            PopupFramework(
-              title: "set-title".tr(),
-              child: SelectText(
-                buttonLabel: "set-title".tr(),
-                setSelectedText: (text) {
-                  titleName = text;
-                  setTitle(text);
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadiusDirectional.circular(12),
+          border: Border.all(color: cores(context).line),
+        ),
+        child: Tappable(
+          onTap: () {
+            openBottomSheet(
+              context,
+              popupWithKeyboard: true,
+              PopupFramework(
+                title: "set-title".tr(),
+                child: SelectText(
+                  buttonLabel: "set-title".tr(),
+                  setSelectedText: (text) {
+                    titleName = text;
+                    setTitle(text);
+                  },
+                  labelText: "set-title".tr(),
+                  selectedText: titleName,
+                  placeholder: "title-placeholder".tr(),
+                ),
+              ),
+            );
+          },
+          borderRadius: 12,
+          color: backgroundColor,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.symmetric(
+                      horizontal: 18, vertical: 14),
+                  child: TextFont(
+                    text: title.title,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              Tappable(
+                onTap: () async {
+                  deleteAssociatedTitlePopup(
+                    context,
+                    title: title,
+                    routesToPopAfterDelete: RoutesToPopAfterDelete.None,
+                  );
                 },
-                labelText: "set-title".tr(),
-                selectedText: titleName,
-                placeholder: "title-placeholder".tr(),
-              ),
-            ),
-          );
-        },
-        borderRadius: 15,
-        color: backgroundColor,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsetsDirectional.symmetric(
-                    horizontal: 25, vertical: 15),
-                child: TextFont(
-                  text: title.title,
-                  fontSize: 16.5,
+                borderRadius: 12,
+                color: backgroundColor,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.all(14),
+                  child: Icon(
+                    appStateSettings["outlinedIcons"]
+                        ? Icons.close_outlined
+                        : Icons.close_rounded,
+                    size: 20,
+                    color: cores(context).mu,
+                  ),
                 ),
               ),
-            ),
-            Tappable(
-              onTap: () async {
-                deleteAssociatedTitlePopup(
-                  context,
-                  title: title,
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-                );
-              },
-              borderRadius: 15,
-              color: backgroundColor,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.all(14),
-                child: Icon(
-                  appStateSettings["outlinedIcons"]
-                      ? Icons.close_outlined
-                      : Icons.close_rounded,
-                  size: 25,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1191,11 +1225,13 @@ class SelectIsSubcategory extends StatelessWidget {
       {required this.isMainCategoryWhenCreating,
       required this.onTap,
       required this.setMainCategoryPkForSubcategoryWhenCreating,
+      this.mainCategoriesForTest,
       super.key});
   final bool isMainCategoryWhenCreating;
   final Function(bool isMainCategoryWhenCreating) onTap;
   final Function(String mainCategoryPkForSubcategoryWhenCreating)
       setMainCategoryPkForSubcategoryWhenCreating;
+  final List<TransactionCategory>? mainCategoriesForTest;
 
   @override
   Widget build(BuildContext context) {
@@ -1242,8 +1278,9 @@ class SelectIsSubcategory extends StatelessWidget {
                     iconData: appStateSettings["outlinedIcons"]
                         ? Icons.info_outlined
                         : Icons.info_outline_rounded,
-                    iconSize: 16,
-                    scale: 1.6,
+                    iconSize: 20,
+                    scale: 1.0,
+                    padding: const EdgeInsetsDirectional.all(12.0),
                     onTap: () {
                       openBottomSheet(
                         context,
@@ -1262,18 +1299,44 @@ class SelectIsSubcategory extends StatelessWidget {
                         padding: const EdgeInsetsDirectional.symmetric(
                             horizontal: 1),
                         child: ClipRRect(
-                          child: SelectCategory(
-                            horizontalList: true,
-                            listPadding:
-                                EdgeInsetsDirectional.symmetric(horizontal: 10),
-                            addButton: false,
-                            setSelectedCategory: (category) {
-                              setMainCategoryPkForSubcategoryWhenCreating(
-                                  category.categoryPk);
-                              onTap(false);
-                            },
-                            popRoute: false,
-                          ),
+                          child: mainCategoriesForTest != null
+                              ? SizedBox(
+                                  height: 100,
+                                  child: ListView(
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsetsDirectional
+                                        .symmetric(horizontal: 10),
+                                    children: [
+                                      for (final c in mainCategoriesForTest!)
+                                        CategoryIcon(
+                                          categoryPk: c.categoryPk,
+                                          category: c,
+                                          size: 42,
+                                          sizePadding: 28,
+                                          label: true,
+                                          canEditByLongPress: false,
+                                          onTap: () {
+                                            setMainCategoryPkForSubcategoryWhenCreating(
+                                                c.categoryPk);
+                                            onTap(false);
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              : SelectCategory(
+                                  horizontalList: true,
+                                  listPadding:
+                                      EdgeInsetsDirectional.symmetric(
+                                          horizontal: 10),
+                                  addButton: false,
+                                  setSelectedCategory: (category) {
+                                    setMainCategoryPkForSubcategoryWhenCreating(
+                                        category.categoryPk);
+                                    onTap(false);
+                                  },
+                                  popRoute: false,
+                                ),
                         ),
                       )
                     ],

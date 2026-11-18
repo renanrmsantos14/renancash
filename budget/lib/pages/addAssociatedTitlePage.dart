@@ -19,10 +19,12 @@ class AddAssociatedTitlePage extends StatefulWidget {
   AddAssociatedTitlePage({
     Key? key,
     this.associatedTitle,
+    this.initialCategory,
   }) : super(key: key);
 
   //When a Title is passed in, we are editing that Title
   final TransactionAssociatedTitle? associatedTitle;
+  final TransactionCategory? initialCategory;
 
   @override
   _AddAssociatedTitlePageState createState() => _AddAssociatedTitlePageState();
@@ -78,6 +80,9 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
   void initState() {
     super.initState();
     _focusNode = new FocusNode();
+    if (widget.initialCategory != null) {
+      selectedCategory = widget.initialCategory;
+    }
     if (widget.associatedTitle != null) {
       //We are editing a Title
       //Fill in the information from the passed in Title
@@ -85,9 +90,12 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
         // selectedColor = HexColor(widget.Title!.colour);
         selectedTitle = widget.associatedTitle!.title;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        updateInitial();
-      });
+      determineBottomButton();
+      if (widget.initialCategory == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          updateInitial();
+        });
+      }
     } else {}
     // requestLateAutoFocus
     // if (widget.associatedTitle == null)
@@ -96,7 +104,9 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
     //   Future.delayed(Duration(milliseconds: 250), () {
     //     _focusNode.requestFocus();
     //   });
-    _focusNode.requestFocus();
+    if (widget.associatedTitle == null) {
+      _focusNode.requestFocus();
+    }
   }
 
   updateInitial() async {
@@ -157,7 +167,7 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
           Row(
             children: [
               Tappable(
-                borderRadius: 15,
+                borderRadius: 12,
                 onTap: () {
                   selectCategory();
                 },
@@ -168,7 +178,10 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
                   children: [
                     CategoryIcon(
                       category: selectedCategory,
-                      size: getIsFullScreen(context) ? 40 : 30,
+                      size: 28,
+                      sizePadding: 20,
+                      borderRadius: 15,
+                      margin: EdgeInsetsDirectional.zero,
                       onTap: () {
                         selectCategory();
                       },
@@ -185,15 +198,11 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
               Expanded(
                 child: TextInput(
                   labelText: "title-placeholder".tr(),
-                  bubbly: false,
                   initialValue: selectedTitle,
                   onChanged: (text) {
                     setSelectedTitle(text);
                   },
-                  padding: EdgeInsetsDirectional.only(start: 7, end: 7),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  topContentPadding: 0,
+                  padding: const EdgeInsetsDirectional.only(start: 10),
                   focusNode: _focusNode,
                   autoFocus: kIsWeb && getIsFullScreen(context),
                 ),

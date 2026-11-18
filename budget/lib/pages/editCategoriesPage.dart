@@ -8,6 +8,7 @@ import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/fab.dart';
@@ -32,7 +33,12 @@ import 'package:budget/modified/reorderable_list.dart';
 class EditCategoriesPage extends StatefulWidget {
   EditCategoriesPage({
     Key? key,
+    this.categoriesForTest,
+    this.subCategoriesForTest,
   }) : super(key: key);
+
+  final List<CategoryWithDetails>? categoriesForTest;
+  final Map<String, List<TransactionCategory>>? subCategoriesForTest;
 
   @override
   _EditCategoriesPageState createState() => _EditCategoriesPageState();
@@ -45,9 +51,11 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
 
   @override
   void initState() {
-    Future.delayed(Duration.zero, () {
-      database.fixOrderCategories();
-    });
+    if (widget.categoriesForTest == null) {
+      Future.delayed(Duration.zero, () {
+        database.fixOrderCategories();
+      });
+    }
     super.initState();
   }
 
@@ -134,14 +142,18 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
             ),
           ),
           StreamBuilder<Map<String, List<TransactionCategory>>>(
-              stream: database.watchAllSubCategoriesIndexedByMainCategoryPk(),
+              stream: widget.subCategoriesForTest != null
+                  ? Stream.value(widget.subCategoriesForTest!)
+                  : database.watchAllSubCategoriesIndexedByMainCategoryPk(),
               builder: (context, snapshotSubCategories) {
                 Map<String, List<TransactionCategory>>
                     subCategoriesIndexedByMainPk =
                     snapshotSubCategories.data ?? {};
                 return StreamBuilder<List<CategoryWithDetails>>(
-                  stream: database.watchAllMainCategoriesWithDetails(
-                      searchFor: null),
+                  stream: widget.categoriesForTest != null
+                      ? Stream.value(widget.categoriesForTest!)
+                      : database.watchAllMainCategoriesWithDetails(
+                          searchFor: null),
                   // Do the search below, we search through any subcategories that may have a name
                   builder: (context, snapshot) {
                     List<CategoryWithDetails> categoriesToShow =
@@ -171,10 +183,36 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
                         .toList();
 
                     if (snapshot.hasData && categoriesToShow.length <= 0) {
+                      if (searchValue != "") {
+                        return SliverToBoxAdapter(
+                          child: NoResults(
+                            message: "no-categories-found".tr(),
+                            noSearchResultsVariation: true,
+                          ),
+                        );
+                      }
                       return SliverToBoxAdapter(
-                        child: NoResults(
-                          message: "no-categories-found".tr(),
-                          noSearchResultsVariation: searchValue != "",
+                        child: Column(
+                          children: [
+                            NoResults(
+                              message: "no-categories-found".tr(),
+                            ),
+                            const SizedBox(height: 16),
+                            Padding(
+                              padding: const EdgeInsetsDirectional.symmetric(
+                                  horizontal: 18),
+                              child: Button(
+                                label: "add-category".tr(),
+                                onTap: () => pushRoute(
+                                  context,
+                                  AddCategoryPage(
+                                    routesToPopAfterDelete:
+                                        RoutesToPopAfterDelete.None,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }
