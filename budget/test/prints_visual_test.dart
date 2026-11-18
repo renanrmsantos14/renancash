@@ -73,13 +73,50 @@ ModeloInicio _modelo() => montarModeloInicio(
       ],
       faturas: {},
       sincronizadoEm: _agora.subtract(const Duration(minutes: 4)).toUtc().toIso8601String(),
-      ultimas: [
-        (nome: 'Pão de Açúcar', categoria: 'Mercado', data: DateTime(2026, 11, 12), valor: -182.30, receita: false),
-        (nome: 'Uber', categoria: 'Transporte', data: DateTime(2026, 11, 11), valor: -27.90, receita: false),
-        (nome: 'Salário', categoria: 'Renda', data: DateTime(2026, 11, 5), valor: 6500.0, receita: true),
-      ],
       nome: 'Renan',
       agora: _agora,
+    );
+
+/// Linha da tabela "Últimas transações" do painel desktop (o modelo da Início não carrega mais as últimas).
+TransacaoInicio _ultima(String pk, String nome, String categoria, double valor, DateTime data) => (
+      category: TransactionCategory(
+          categoryPk: 'c-$categoria',
+          name: categoria,
+          dateCreated: DateTime(2026),
+          dateTimeModified: null,
+          order: 0,
+          income: valor > 0,
+          methodAdded: null),
+      transaction: Transaction(
+          transactionPk: pk,
+          name: nome,
+          amount: valor,
+          note: '',
+          categoryFk: 'c-$categoria',
+          walletFk: '0',
+          dateCreated: data,
+          income: valor > 0,
+          paid: true,
+          skipPaid: false,
+          createdAnotherFutureTransaction: false,
+          type: null,
+          methodAdded: null,
+          reoccurrence: null,
+          endDate: null,
+          periodLength: null,
+          dateTimeModified: null,
+          originalDateDue: null,
+          sharedKey: null,
+          sharedOldKey: null,
+          sharedStatus: null,
+          sharedDateUpdated: null,
+          sharedReferenceBudgetPk: null,
+          objectiveFk: null,
+          objectiveLoanFk: null,
+          upcomingTransactionNotification: null,
+          subCategoryFk: null,
+          transactionOwnerEmail: null,
+          transactionOriginalOwnerEmail: null),
     );
 
 final _pular = Platform.environment['PRINTS'] != '1';
@@ -353,6 +390,7 @@ void main() {
         addTearDown(t.view.reset);
         await t.pumpWidget(_herdado(modo, const Scaffold(body: PendenciasPage(atualizar: false))));
         await t.pump(const Duration(seconds: 1));
+        await t.pump(); // o destaque avisa o cartão depois do quadro (esconde "Sem sugestão")
         await expectLater(find.byType(MaterialApp),
             matchesGoldenFile('../../.verificacao/prints/pendencias_rachar_${forte ? 'forte' : 'acao'}_$modo.png'));
       });
@@ -463,7 +501,12 @@ void main() {
       await t.pumpWidget(MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: temaFlutter(temaAtivo(b)),
-        home: Scaffold(body: PainelDesktop.comDados(_modelo())),
+        home: Scaffold(
+            body: PainelDesktop.comDados(_modelo(), transacoes: [
+          _ultima('u1', 'Pão de Açúcar', 'Mercado', -182.30, DateTime(2026, 11, 12)),
+          _ultima('u2', 'Uber', 'Transporte', -27.90, DateTime(2026, 11, 11)),
+          _ultima('u3', 'Salário', 'Renda', 6500.0, DateTime(2026, 11, 5)),
+        ])),
       ));
       await t.pump(const Duration(seconds: 3));
       await expectLater(find.byType(MaterialApp),

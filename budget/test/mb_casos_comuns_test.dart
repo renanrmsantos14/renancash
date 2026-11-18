@@ -301,10 +301,14 @@ void main() {
       addTearDown(() => mbBuscarCandidatosReembolso = original);
       await abrir(t, [_l('mb:e', 'Estorno Uber', 16.95)]);
       await t.pump();
+      await t.pump(); // o destaque avisa o cartão depois do quadro: a caixa "Sem sugestão" sai no seguinte
       expect(find.text('Estorno de uma compra'), findsOneWidget);
       expect(find.text('Uber — compra estornada'), findsOneWidget);
       expect(find.text('Abater da compra'), findsOneWidget);
       expect(find.text('É de outra compra'), findsOneWidget);
+      // Com o destaque do estorno, "Sem sugestão" só competiria com ele; as categorias seguem abaixo.
+      expect(find.textContaining('Sem sugestão para este'), findsNothing);
+      expect(find.text('Qual é a categoria?'), findsOneWidget);
     });
 
     testWidgets('rachar recorrente: quem já mandou 2 partes tem o gasto em destaque sem parte exata', (t) async {
@@ -319,9 +323,22 @@ void main() {
       ];
       await abrir(t, [_l('mb:r', 'PIX RECEBIDO JUNIOR SILVA', 32)]);
       await t.pump();
+      await t.pump();
       expect(find.text('Junior Silva já mandou a parte de 2 contas'), findsOneWidget);
       expect(find.text('RESTAURANTE DO ZE'), findsOneWidget);
       expect(find.text('É de outra conta'), findsOneWidget);
+      expect(find.textContaining('Sem sugestão para este'), findsNothing);
+      expect(find.text('Qual é a categoria?'), findsOneWidget);
+    });
+
+    testWidgets('entrada sem gasto em destaque continua com "Sem sugestão para este"', (t) async {
+      final original = mbBuscarCandidatosReembolso;
+      mbBuscarCandidatosReembolso = (_, valor, data, __) async => mbSugerirReembolso(const [], valor: valor, data: data);
+      addTearDown(() => mbBuscarCandidatosReembolso = original);
+      await abrir(t, [_l('mb:r', 'PIX RECEBIDO JUNIOR SILVA', 32)]);
+      await t.pump();
+      expect(find.text('É a parte de uma conta que eu paguei'), findsOneWidget);
+      expect(find.textContaining('Sem sugestão para este'), findsOneWidget);
     });
 
     testWidgets('Início: lançar rápido mostra os atalhos e some com o ajuste desligado', (t) async {

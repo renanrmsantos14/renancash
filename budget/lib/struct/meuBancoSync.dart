@@ -137,8 +137,24 @@ Future<void> _enviarFila(MbCliente cliente) async {
   }
 }
 
-// Puxa e grava no espelho o que venceu. `revisoes` diz se chegou decisão da fila "Para revisar".
-Future<({Map<String, dynamic> json, bool revisoes})> _puxarEAplicar(
+// Ajuste que muda como a transação é mapeada (categoria, "não é gasto"), agora ou antes.
+// Só a escolha de orçamentos não conta: ela é aplicada direto, sem remapear.
+bool _ajusteMudaMapeamento(Registro novo, Registro? antigo) {
+  bool tem(Registro? r) {
+    final d = r?.dados;
+    return r != null &&
+        r.deletedAt == null &&
+        d != null &&
+        (d['categoria_id'] != null || d['category'] != null || d['gasto'] != null);
+  }
+
+  return tem(novo) || tem(antigo);
+}
+
+// Puxa e grava no espelho o que venceu. `refazer` diz se chegou algo que muda o mapeamento de transações antigas
+// (decisão da fila "Para revisar" ou ajuste de categoria / "não é gasto"): o pull incremental não as traz de volta.
+// Ajuste remoto novo "não é gasto" vale também para a transação já importada: ela sai do app, sem gerar ajuste de volta.
+Future<({Map<String, dynamic> json, bool refazer})> _puxarEAplicar(
     MbCliente cliente, String? desde) async {
   final json = await cliente.puxar(desde);
   final registros = [
@@ -148,13 +164,72 @@ Future<({Map<String, dynamic> json, bool revisoes})> _puxarEAplicar(
   final espelho = await mbLerEspelho();
   final vencedores = remotosVencedores(espelho, registros);
   await mbAplicarRegistros(vencedores, espelho);
-  return (json: json, revisoes: vencedores.any((r) => r.tabela == 'revisoes'));
+  final gastoZero = [
+    for (final r in vencedores)
+      if (r.tabela == 'ajustes' && r.deletedAt == null && r.dados?['gasto'] == 0)
+        mbPkTransacao(r.id)
+  ];
+  if (gastoZero.isNotEmpty) {
+    await (database.delete(database.transactions)
+          ..where((t) => t.transactionPk.isIn(gastoZero)))
+        .go();
+    await mbGravarAplicado(const {}, gastoZero);
+  }
+  return (
+    json: json,
+    refazer: vencedores.any((r) =>
+        r.tabela == 'revisoes' ||
+        (r.tabela == 'ajustes' &&
+            _ajusteMudaMapeamento(r, espelho[r.chave]?.registro))),
+  );
 }
 
+// Gastos que algum reembolso aponta (decisão `reembolso_de`): quando a categoria deles muda, o reembolso acompanha.
+Set<String> _gastosVinculados(Map<String, Espelho> espelho) => {
+      for (final e in espelho.values)
+        if (e.registro.tabela == 'revisoes' &&
+            e.registro.deletedAt == null &&
+            e.registro.dados?['reembolso_de'] is String)
+          e.registro.dados!['reembolso_de'] as String
+    };
+
+// Rodada em andamento e, no máximo, uma rodada extra à espera. Chamada que chega durante um sync (pull da Início
+// junto com "Atualizar", pull depois do Pluggy) não se perde nem forma fila: todas dividem a mesma rodada extra,
+// que roda uma única vez quando a atual termina e devolve o resultado dela a quem chamou.
+Future<bool>? _rodadaEmCurso;
+Completer<bool>? _rodadaExtra;
+MbCliente? _clienteDaRodadaExtra;
+
 // Retorna true se sincronizou. Nunca lança: guarda a última mensagem em meuBancoUltimoErro.
-Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) async {
-  if (meuBancoSincronizando.value) return false;
+Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) {
+  if (_rodadaEmCurso != null) {
+    _clienteDaRodadaExtra ??= clienteParaTeste;
+    return (_rodadaExtra ??= Completer<bool>()).future;
+  }
+  return _rodar(clienteParaTeste);
+}
+
+Future<bool> _rodar(MbCliente? clienteParaTeste) async {
   meuBancoSincronizando.value = true;
+  final atual = _rodadaEmCurso = _sincronizarUmaVez(clienteParaTeste);
+  // Nunca deve lançar (os erros viram meuBancoUltimoErro), mas se lançar não pode deixar a rodada presa:
+  // sem isto _rodadaEmCurso ficaria preenchido e toda chamada seguinte esperaria para sempre.
+  final ok = await atual.catchError((_) => false);
+  final extra = _rodadaExtra;
+  final clienteExtra = _clienteDaRodadaExtra;
+  _rodadaEmCurso = null;
+  _rodadaExtra = null;
+  _clienteDaRodadaExtra = null;
+  if (extra == null) {
+    meuBancoSincronizando.value = false;
+    return ok;
+  }
+  // A flag segue ligada entre as duas rodadas (a Início não pisca "sincronizado").
+  extra.complete(_rodar(clienteExtra));
+  return ok;
+}
+
+Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
   try {
     final cliente = clienteParaTeste ?? await mbClienteConfigurado();
     if (cliente == null) return false; // não configurado: silencioso
@@ -181,11 +256,27 @@ Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) async {
 
     final convertido = await mbLerEstado(_chaveConversao) != null;
     final desde = convertido ? await mbLerEstado('cursor') : null;
-    final repuxar = await mbLerEstado(_chaveRepuxar);
+    var repuxar = await mbLerEstado(_chaveRepuxar);
+    // Trocar a categoria de um gasto com reembolso ligado: o reembolso (que não vem no pull incremental) acompanha.
+    final ajustesLocais = [
+      for (final m in mudancas)
+        if (m.registro.tabela == 'ajustes') m.registro.id
+    ];
+    if (repuxar == null &&
+        ajustesLocais.isNotEmpty &&
+        ajustesLocais.any(_gastosVinculados(espelho).contains)) {
+      repuxar = agora;
+      await mbGravarEstado({_chaveRepuxar: repuxar});
+    }
     final puxado = await _puxarEAplicar(cliente, desde);
     var json = puxado.json;
-    if (convertido &&
-        (puxado.revisoes || repuxar != null)) {
+    // A marca vai para o disco antes do pull completo: se ele falhar, a próxima rodada refaz (o ajuste remoto já
+    // está no espelho e não "venceria" de novo).
+    if (convertido && puxado.refazer && repuxar == null) {
+      repuxar = isoMs(DateTime.now());
+      await mbGravarEstado({_chaveRepuxar: repuxar});
+    }
+    if (convertido && repuxar != null) {
       json = (await _puxarEAplicar(cliente, null)).json;
     }
     espelho = await mbLerEspelho();
@@ -261,7 +352,6 @@ Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) async {
     if (kDebugMode) debugPrint("Meu Banco: falha na sincronização: $e");
     meuBancoUltimoErro.value = "Não foi possível sincronizar agora.";
   } finally {
-    meuBancoSincronizando.value = false;
     await meuBancoAtualizarFila();
   }
   return false;
