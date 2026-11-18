@@ -290,6 +290,8 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
     bool scaffold = true,
     bool versaoCanto = false,
     Future<void> Function(WidgetTester)? aposMontar}) async {
+  // ignore: avoid_print
+  print('>>> PRINT $nome $modo');
   appStateSettings = _ajustes(modo);
   t.view.physicalSize = Size(largura * 2, altura * 2);
   t.view.devicePixelRatio = 2;
