@@ -712,13 +712,13 @@ String _brl0(double v) => _brlInteiro
     .replaceAll(' ', ' ')
     .replaceFirst(RegExp(r'^-'), '−');
 
-/// Seção "Agrupado por banco": lê os saldos do aparelho (`CarregaPatrimonio`); `fixo` só nos prints.
+/// Seção "Seu dinheiro": lê os saldos do aparelho (`CarregaPatrimonio`); `fixo` só nos prints.
 /// Sem contas, some.
 class BancosPorBanco extends StatelessWidget {
-  const BancosPorBanco({super.key, this.fixo, this.onAbrir, this.colunas = 1});
+  const BancosPorBanco({super.key, this.fixo, this.onAbrir, this.recolher = true});
   final PatrimonioInicio? fixo;
   final void Function(String carteiras)? onAbrir;
-  final int colunas;
+  final bool recolher;
 
   @override
   Widget build(BuildContext context) => fixo != null
@@ -727,7 +727,7 @@ class BancosPorBanco extends StatelessWidget {
 
   Widget _corpo(BuildContext context, PatrimonioInicio d) => d.bancos.isEmpty
       ? const SizedBox.shrink()
-      : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir, colunas: colunas);
+      : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir, recolher: recolher);
 }
 
 /// "N para classificar · R$ total" com atalho para as Pendências. Some sem itens na fila

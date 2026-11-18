@@ -53,51 +53,31 @@ class LogoBanco extends StatelessWidget {
   }
 }
 
-/// "Agrupado por banco": os totais Nas contas e Investido e um bloco por banco, com conta, aplicações e fatura.
-/// [colunas] 2 no painel do desktop. [onAbrir] recebe as carteiras do item tocado (`mb:<id>`, separadas por '|').
+/// "Seu dinheiro": os totais Nas contas e Investido e um bloco por banco, com conta, aplicações e fatura.
+/// [recolher] (celular): cada banco começa só com o cabeçalho e abre ao toque; o banco com fatura em
+/// destaque já começa aberto. No desktop fica tudo aberto. [onAbrir] recebe as carteiras do item tocado
+/// (`mb:<id>`, separadas por '|').
 class BancosInicio extends StatelessWidget {
   const BancosInicio(
       {super.key,
       required this.dados,
       required this.formatar,
       this.onAbrir,
-      this.colunas = 1});
+      this.recolher = true});
   final PatrimonioInicio dados;
   final String Function(double) formatar;
   final void Function(String carteiras)? onAbrir;
-  final int colunas;
+  final bool recolher;
 
   @override
   Widget build(BuildContext context) {
     final p = dados.patrimonio;
-    final blocos = [
-      for (final b in dados.bancos)
-        _BlocoBanco(banco: b, formatar: formatar, onAbrir: onAbrir)
-    ];
-    Widget grade() {
-      if (colunas < 2) {
-        return Column(children: [
-          for (final b in blocos) Padding(padding: const EdgeInsets.only(top: 10), child: b)
-        ]);
-      }
-      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        for (var c = 0; c < colunas; c++) ...[
-          if (c > 0) const SizedBox(width: 10),
-          Expanded(
-              child: Column(children: [
-            for (var i = c; i < blocos.length; i += colunas)
-              Padding(padding: const EdgeInsets.only(top: 10), child: blocos[i])
-          ])),
-        ],
-      ]);
-    }
-
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Agrupado por banco', style: EdTexto.h2(context)),
+          Text('Seu dinheiro', style: EdTexto.h2(context)),
           const SizedBox(height: 10),
           IntrinsicHeight(
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -107,7 +87,15 @@ class BancosInicio extends StatelessWidget {
               Expanded(child: _Total('Investido', formatar(p.investimentos))),
             ]),
           ),
-          grade(),
+          for (final b in dados.bancos)
+            Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _BlocoBanco(
+                    key: ValueKey(b.id),
+                    banco: b,
+                    formatar: formatar,
+                    onAbrir: onAbrir,
+                    recolher: recolher)),
         ],
       ),
     );
@@ -153,17 +141,70 @@ class _Total extends StatelessWidget {
   }
 }
 
-class _BlocoBanco extends StatelessWidget {
-  const _BlocoBanco({required this.banco, required this.formatar, this.onAbrir});
+class _BlocoBanco extends StatefulWidget {
+  const _BlocoBanco(
+      {super.key,
+      required this.banco,
+      required this.formatar,
+      required this.recolher,
+      this.onAbrir});
   final BancoInicio banco;
   final String Function(double) formatar;
+  final bool recolher;
   final void Function(String carteiras)? onAbrir;
+
+  @override
+  State<_BlocoBanco> createState() => _BlocoBancoState();
+}
+
+class _BlocoBancoState extends State<_BlocoBanco> {
+  late bool _aberto =
+      !widget.recolher || widget.banco.itens.any((i) => i.destaque);
+
+  void _alternar() => setState(() => _aberto = !_aberto);
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
+    final banco = widget.banco, formatar = widget.formatar;
+    final aberto = !widget.recolher || _aberto;
+    final cabecalho = Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        LogoBanco(banco: banco),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(banco.nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontWeight: FontWeight.w600)),
+              Text(banco.subtitulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.rotulo(context)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(formatar(banco.total),
+            style: EdTexto.corpo(context)
+                .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
+        if (widget.recolher) ...[
+          const SizedBox(width: 4),
+          AnimatedRotation(
+              turns: _aberto ? .5 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: e.mu)),
+        ],
+      ]),
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
       decoration: BoxDecoration(
           color: e.surf,
           borderRadius: BorderRadius.circular(16),
@@ -173,37 +214,32 @@ class _BlocoBanco extends StatelessWidget {
         children: [
           Semantics(
             container: true,
+            button: widget.recolher,
+            expanded: widget.recolher ? _aberto : null,
+            onTap: widget.recolher ? _alternar : null,
             label: '${banco.nome}, ${banco.subtitulo}, total ${formatar(banco.total)}',
             excludeSemantics: true,
-            child: Row(children: [
-              LogoBanco(banco: banco),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(banco.nome,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.corpo(context)
-                            .copyWith(fontWeight: FontWeight.w600)),
-                    Text(banco.subtitulo,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.rotulo(context)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(formatar(banco.total),
-                  style: EdTexto.corpo(context)
-                      .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-            ]),
+            child: widget.recolher
+                ? ToqueEscala(onTap: _alternar, child: cabecalho)
+                : cabecalho,
           ),
-          const SizedBox(height: 6),
-          Divider(height: 1, thickness: 1, color: e.line),
-          for (final i in banco.itens)
-            _LinhaItem(item: i, formatar: formatar, onAbrir: onAbrir),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: aberto
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 2),
+                      Divider(height: 1, thickness: 1, color: e.line),
+                      for (final i in banco.itens)
+                        _LinhaItem(
+                            item: i, formatar: formatar, onAbrir: widget.onAbrir),
+                    ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
     );

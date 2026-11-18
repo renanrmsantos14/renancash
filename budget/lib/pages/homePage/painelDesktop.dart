@@ -150,7 +150,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
                     atualizando: _atualizando,
                     onAtualizar: _atualizar),
                 const SizedBox(height: 28),
-                // Mesmas seções do celular em duas colunas: ciclo e atalhos à esquerda,
+                // Mesmas seções do celular em duas colunas: ciclo, atalhos, gráfico e "Seu dinheiro" à esquerda,
                 // limites, metas, empréstimos e transações à direita.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,6 +177,14 @@ class _PainelDesktopState extends State<PainelDesktop> {
                           if (real || meuBancoPareadoConferido.value)
                             const AtalhosInicio(),
                           GastoPorDiaInicio(modelo: m),
+                          // Empilhado na coluna estreita e sempre aberto.
+                          if (!m.semDados && (real || widget._patrimonio != null))
+                            BancosPorBanco(
+                                fixo: widget._patrimonio,
+                                recolher: false,
+                                onAbrir: real
+                                    ? (c) => mbAbrirCarteiras(context, c)
+                                    : null),
                         ],
                       ),
                     ),
@@ -201,12 +209,6 @@ class _PainelDesktopState extends State<PainelDesktop> {
                     ),
                   ],
                 ),
-                // Largura toda, em duas colunas de bancos.
-                if (!m.semDados && (real || widget._patrimonio != null))
-                  BancosPorBanco(
-                      fixo: widget._patrimonio,
-                      colunas: 2,
-                      onAbrir: real ? (c) => mbAbrirCarteiras(context, c) : null),
               ],
             ),
     );

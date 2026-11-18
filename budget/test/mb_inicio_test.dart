@@ -212,7 +212,7 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  group('Agrupado por banco', () {
+  group('Seu dinheiro', () {
     final contas = <Map<String, dynamic>>[
       {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'BANCO INTER ·69-6', 'balance': 893.47},
       {'id': 'n', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Nu', 'bank': 'Nu Pagamentos S.A.', 'balance': 50.0},
@@ -280,7 +280,7 @@ void main() {
       expect(total, closeTo(893.47 + 50 + 10 + 2000 + 300 + 7000 - 569, .001));
     });
 
-    testWidgets('seção mostra totais, blocos, fatura em destaque e abre pelo toque', (t) async {
+    testWidgets('seção mostra totais, bancos recolhidos (menos o da fatura em destaque) e abre pelo toque', (t) async {
       appStateSettings = {
         'materialYou': false,
         'accentSystemColor': false,
@@ -306,7 +306,7 @@ void main() {
                 child: BancosPorBanco(fixo: dados, onAbrir: (c) => aberto = c))),
       ));
       await t.pump();
-      expect(find.text('Agrupado por banco'), findsOneWidget);
+      expect(find.text('Seu dinheiro'), findsOneWidget);
       expect(find.text('Nas contas'), findsOneWidget);
       expect(find.text('R\$ 953,47'), findsOneWidget);
       expect(find.text('Investido'), findsOneWidget);
@@ -317,9 +317,53 @@ void main() {
       await t.tap(find.text('Fatura · vence 10/11'));
       await t.pump();
       expect(aberto, mbPkConta('c'));
-      await t.tap(find.text('Conta corrente').first);
+      await t.tap(find.text('Conta corrente'));
       await t.pump();
       expect(aberto, mbPkConta('a'));
+      // Só o Inter (fatura vence em 1 dia) começa aberto; os outros mostram só o cabeçalho.
+      expect(find.text('Fundo DI'), findsNothing);
+      expect(find.text('Tesouro Selic'), findsNothing);
+      expect(find.text('Poupança'), findsNothing);
+      await t.tap(find.text('XP'));
+      await t.pumpAndSettle();
+      expect(find.text('Fundo DI'), findsOneWidget);
+      await t.tap(find.text('XP'));
+      await t.pumpAndSettle();
+      expect(find.text('Fundo DI'), findsNothing);
+      await t.tap(find.text('Banco Inter'));
+      await t.pumpAndSettle();
+      expect(find.text('Conta corrente'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('sem recolher (desktop) todos os bancos ficam abertos', (t) async {
+      appStateSettings = {
+        'materialYou': false,
+        'accentSystemColor': false,
+        'batterySaver': false,
+        'increaseTextContrast': false,
+        'forceFullDarkBackground': false,
+      };
+      t.view.physicalSize = const Size(390 * 2, 3000 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      final dados = (
+        patrimonio: mbPatrimonio(correntes: 943.47, poupancas: 10, investimentos: 9300, fatura: 569),
+        faturas: const <FaturaAberta>[],
+        carteiras: const <CarteiraInicio>[],
+        bancos: agrupar(),
+        semDados: false,
+      );
+      await t.pumpWidget(MaterialApp(
+        theme: temaEditorial(Brightness.light),
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: BancosPorBanco(fixo: dados, recolher: false))),
+      ));
+      await t.pump();
+      expect(find.text('Fundo DI'), findsOneWidget);
+      expect(find.text('Tesouro Selic'), findsOneWidget);
+      expect(find.text('Poupança'), findsWidgets);
       await t.pumpWidget(const SizedBox());
     });
   });
