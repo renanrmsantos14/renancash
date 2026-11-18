@@ -24,6 +24,7 @@ const String mbMetaReservaPk = 'mb:meta:reserva';
 const String mbMetaReservaNome = 'Reserva de emergência';
 const String _prefixoAplicacao = 'mb:inv:';
 const String _chaveReservaCriada = 'reserva_criada';
+const String _chaveAplicacoesVistas = 'aplicacoes_vistas';
 
 /// Id da aplicação no sync (id Pluggy, sem o prefixo local).
 String mbIdAplicacao(String pk) =>
@@ -182,6 +183,44 @@ Future<void> mbGarantirReserva({DateTime? agora}) async {
         mode: InsertMode.insertOrIgnore);
   }
   await mbGravarEstado({_chaveReservaCriada: '1'});
+}
+
+/// Vínculo inicial: toda aplicação (inclusive poupança) que o app ainda não tinha visto e que está sem meta vai para
+/// a Reserva, uma única vez. Os ids vistos ficam em `mb_estado`; quem desvincula depois não é vinculado de novo.
+/// Sem a Reserva (apagada ou ainda não criada) nada é marcado como visto. Chamar depois de `mbGarantirReserva`.
+Future<void> mbVincularAplicacoesNovas() async {
+  final reserva = await (database.select(database.objectives)
+        ..where((o) => o.objectivePk.equals(mbMetaReservaPk)))
+      .getSingleOrNull();
+  if (reserva == null) return;
+  final aplicacoes = await mbAplicacoes();
+  final bruto = await mbLerEstado(_chaveAplicacoesVistas);
+  final vistas = <String>{
+    if (bruto != null) ...(jsonDecode(bruto) as List).cast<String>()
+  };
+  final novas = [for (final a in aplicacoes) if (!vistas.contains(a.pk)) a];
+  if (novas.isEmpty) return;
+  final livres = [for (final a in novas) if (a.metaPk == null) a.pk];
+  if (livres.isNotEmpty) {
+    // Toca a meta (o sync leva as aplicações por LWW) e só acrescenta: vínculos de aplicações ainda sem transação ficam.
+    await database.createOrUpdateObjective(reserva);
+    await database.transaction(() async {
+      for (final pk in livres) {
+        await database.customStatement(
+            'INSERT OR IGNORE INTO mb_meta_aplicacao (aplicacao_pk, meta_pk) VALUES (?, ?)',
+            [pk, mbMetaReservaPk]);
+      }
+      await database.customUpdate(
+          'UPDATE objectives SET income = 1 WHERE objective_pk = ? AND income = 0',
+          variables: [Variable.withString(mbMetaReservaPk)],
+          updates: {database.objectives},
+          updateKind: UpdateKind.update);
+      await mbReconciliarVinculos();
+    });
+  }
+  await mbGravarEstado({
+    _chaveAplicacoesVistas: jsonEncode(([...vistas, ...novas.map((a) => a.pk)]..sort()))
+  });
 }
 
 Future<int> _contarObjetivos() async => (await database

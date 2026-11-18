@@ -7,7 +7,7 @@ import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
 import 'package:budget/struct/ritmoCiclo.dart' show fracaoDoCiclo;
 import 'package:budget/struct/meuBancoMapping.dart'
-    show mbCarteiraInvestimentos, mbPkConta, mbPrefixo;
+    show mbCarteiraInvestimentos, mbPkConta, mbPrefixo, mbSemPoupancas;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:intl/intl.dart' show NumberFormat;
@@ -301,10 +301,11 @@ ModeloInicio montarModeloInicio({
 
 Object? _decodificar(String? s) => s == null ? null : jsonDecode(s);
 
-List<Map<String, dynamic>> _contasSalvas(String? json) => [
+// Poupança não é conta no app: é aplicação (carteira Investimentos), então fica fora de contas e patrimônio.
+List<Map<String, dynamic>> _contasSalvas(String? json) => mbSemPoupancas([
       for (final c in (_decodificar(json) as List? ?? const []))
         (c as Map).cast<String, dynamic>()
-    ];
+    ]);
 
 /// Saldo real (o da Início) de cada carteira de conta bancária do Meu Banco (`mb:<id>`).
 /// A soma das transações da carteira não é saldo: transferências, pagamento de fatura e
@@ -366,10 +367,10 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
   final modelo = montarModeloInicio(
     geral: await mbLerCicloGeral(agora),
     ciclo: ((mapa['ciclo'] as Map?) ?? const {}).cast<String, dynamic>(),
-    contas: [
+    contas: mbSemPoupancas([
       for (final c in (mapa['contas'] as List? ?? const []))
         (c as Map).cast<String, dynamic>()
-    ],
+    ]),
     faturas: ((mapa['faturas'] as Map?) ?? const {}).cast<String, dynamic>(),
     sincronizadoEm: await mbLerEstado('sincronizado_em'),
     nome: nome,

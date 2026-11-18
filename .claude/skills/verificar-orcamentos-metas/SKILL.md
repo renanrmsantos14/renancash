@@ -62,3 +62,4 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 
 ## Limites
 - Sem banco local nos testes: a tela inteira do orçamento (pizza, gráfico de linha, transações) só se confere no app com dados.
+- Reserva de emergência: aplicação nova (e poupança `mb:inv:cc-*`) sem meta é vinculada à Reserva uma única vez (`mbVincularAplicacoesNovas`, ids vistos em `mb_estado`); desvincular na tela da meta persiste. A carteira da poupança some do Geral (pk antigo fica obsoleto na lista, sem efeito).

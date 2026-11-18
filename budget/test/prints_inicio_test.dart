@@ -66,10 +66,8 @@ const _limitesExemplo = [
 // iniciais) com fatura vencendo em 2 dias (destaque), XP só com investimentos e aplicações sem banco (Outros).
 final _contasBancos = <Map<String, dynamic>>[
   {'id': 'a', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'bank': 'Banco Inter ·69-6', 'balance': 893.47},
-  {'id': 'p1', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança Inter', 'bank': 'Banco Inter', 'balance': 500.0},
   {'id': 'b', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Nubank', 'bank': 'Nubank', 'balance': 1115.50},
   {'id': 'd', 'type': 'CREDIT', 'name': 'Ultravioleta ·4412', 'bank': 'Nubank', 'balance': 1240.0, 'due_date': '2026-11-22'},
-  {'id': 'p2', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança Santander', 'bank': 'Banco Santander', 'balance': 120.0},
   {'id': 'e', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Pan', 'bank': 'Banco Pan', 'balance': 215.40},
   {'id': 'f', 'type': 'CREDIT', 'name': 'Pan Mastercard ·7788', 'bank': 'Banco Pan', 'balance': 569.0, 'due_date': '2026-11-14'},
 ];
@@ -80,6 +78,9 @@ const _investimentosBancos = <InvestimentoBanco>[
   (nome: 'LCI - BANCO INTER', banco: 'BANCO INTER', saldo: 3100.0),
   (nome: 'Fundo DI', banco: 'XP Investimentos', saldo: 7000.0),
   (nome: 'Tesouro Selic', banco: null, saldo: 2081.0),
+  // Poupanças são aplicações (mb:inv:cc-<id>), não contas.
+  (nome: 'Poupança Inter', banco: 'Banco Inter', saldo: 500.0),
+  (nome: 'Poupança Santander', banco: 'Banco Santander', saldo: 120.0),
 ];
 
 PatrimonioInicio _patrimonioDe(List<Map<String, dynamic>> contas,
@@ -114,8 +115,8 @@ final _patrimonioExemplo = _patrimonioDe(_contasBancos, _investimentosBancos);
 // Sem investimentos e com um banco desconhecido: só conta, e a fatura em destaque.
 final _patrimonioSemInvestimentos = _patrimonioDe([
   _contasBancos[0],
-  _contasBancos[5],
-  _contasBancos[6],
+  _contasBancos[3],
+  _contasBancos[4],
 ], const []);
 
 /// Imagens de `assets/` só carregam fora do relógio falso do teste: decodifica antes do print.
@@ -197,22 +198,6 @@ ModeloInicio _modeloCompleto() => montarModeloInicio(
           'balance': 1115.50
         },
         {
-          'id': 'p1',
-          'type': 'BANK',
-          'subtype': 'SAVINGS_ACCOUNT',
-          'name': 'Poupança Inter',
-          'bank': 'Banco Inter',
-          'balance': 500.00
-        },
-        {
-          'id': 'p2',
-          'type': 'BANK',
-          'subtype': 'SAVINGS_ACCOUNT',
-          'name': 'Poupança Santander',
-          'bank': 'Banco Santander',
-          'balance': 120.00
-        },
-        {
           'id': 'd',
           'type': 'CREDIT',
           'name': 'Ultravioleta ·4412',
@@ -245,25 +230,8 @@ ModeloInicio _modeloSemLimite() => montarModeloInicio(
           'bank': 'Banco Inter',
           'balance': 2410.00
         },
-        {
-          'id': 'p1',
-          'type': 'BANK',
-          'subtype': 'SAVINGS_ACCOUNT',
-          'name': 'Conta Poupança',
-          'bank': 'Banco Inter',
-          'balance': 500.00
-        },
-        {
-          'id': 'p2',
-          'type': 'BANK',
-          'subtype': 'SAVINGS_ACCOUNT',
-          'name': 'Cartão Poup',
-          'bank': 'Banco Santander',
-          'balance': 120.00
-        },
       ],
       faturas: {},
-      agruparPoupancas: false,
       sincronizadoEm:
           _agora.subtract(const Duration(minutes: 4)).toUtc().toIso8601String(),
       nome: 'Renan',
@@ -575,8 +543,7 @@ void main() {
       final dados = (
         patrimonio: mbPatrimonio(
           correntes: 4218.40,
-          poupancas: 620.00,
-          investimentos: 12450.00,
+          investimentos: 13070.00,
           fatura: 1240.00,
         ),
         faturas: mbFaturasAbertas(
