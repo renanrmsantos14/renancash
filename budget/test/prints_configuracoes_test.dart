@@ -130,12 +130,14 @@ final _titulo2 = TransactionAssociatedTitle(
   order: 1,
 );
 
-final _titulosComCategoria = [
+final List<TransactionAssociatedTitleWithCategory> _titulosComCategoria = [
   TransactionAssociatedTitleWithCategory(
+    type: TitleType.TitleExists,
     title: _titulo1,
     category: _catAlimentacao,
   ),
   TransactionAssociatedTitleWithCategory(
+    type: TitleType.TitleExists,
     title: _titulo2,
     category: _catTransporte,
   ),
@@ -201,6 +203,7 @@ List<TransactionActivityLog> _logsHistorico() {
       transactionWithCategory: TransactionWithCategory(
         category: _catTransporte,
         transaction: _txApagada,
+        objectiveLoan: null,
       ),
     ),
     TransactionActivityLog(
@@ -210,6 +213,7 @@ List<TransactionActivityLog> _logsHistorico() {
         category: _catAlimentacao,
         subCategory: _subDelivery,
         transaction: _txEditada,
+        objectiveLoan: null,
       ),
     ),
     TransactionActivityLog(
