@@ -4,6 +4,7 @@ import 'package:budget/struct/mbSync/conexoes.dart'
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addWalletPage.dart';
+import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
@@ -249,7 +250,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                   listen: false),
                             );
                           },
-                          // Excluir fica no menu da conta (com confirmação):
+                          // Excluir fica no menu ⋮ do formulário da conta (com
+                          // confirmação), aberto por "Editar conta" no detalhe:
                           // a linha mantém só principal e reordenar.
                           canDelete: false,
                           canReorder: searchValue == "" &&
@@ -274,10 +276,10 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                     addCurrencyName:
                                         !allWallets.allContainSameCurrency())),
                           ),
-                          openPage: AddWalletPage(
-                              wallet: wallet,
-                              routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.One),
+                          // Tocar abre o detalhe (saldo e movimentos); editar fica
+                          // no botão "Editar conta" do próprio detalhe.
+                          openPage:
+                              WatchedWalletDetailsPage(walletPk: wallet.walletPk),
                         ),
                       );
                     },
@@ -310,6 +312,21 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
         ],
       ),
     );
+  }
+}
+
+/// Fecha as telas depois de excluir ou juntar uma conta. [RoutesToPopAfterDelete.Two]
+/// fecha o formulário e o detalhe que o abriu, voltando à lista de contas (ou à Início).
+void fecharTelasAposExcluirConta(
+    BuildContext context, RoutesToPopAfterDelete routesToPopAfterDelete) {
+  if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
+    popAllRoutes(context);
+  } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
+    popRoute(context);
+  } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.Two) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.maybePop();
   }
 }
 
@@ -356,11 +373,7 @@ Future<DeletePopupAction?> deleteWalletPopup(
       );
     }
     if (result == true) {
-      if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
-        popAllRoutes(context);
-      } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
-        popRoute(context);
-      }
+      fecharTelasAposExcluirConta(context, routesToPopAfterDelete);
       openLoadingPopupTryCatch(() async {
         await database.deleteWallet(wallet.walletPk, wallet.order);
         openSnackbar(
@@ -405,11 +418,7 @@ void mergeWalletPopup(
       },
     );
     if (result == true) {
-      if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
-        popAllRoutes(context);
-      } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
-        popRoute(context);
-      }
+      fecharTelasAposExcluirConta(context, routesToPopAfterDelete);
       openLoadingPopupTryCatch(() async {
         await database.moveWalletTransactions(
           Provider.of<AllWallets>(context, listen: false),

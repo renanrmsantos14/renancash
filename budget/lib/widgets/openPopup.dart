@@ -274,6 +274,9 @@ enum DeletePopupAction {
 enum RoutesToPopAfterDelete {
   None,
   One,
+  // Fecha o formulário e a tela que o abriu (ex.: detalhe da conta),
+  // voltando para quem abriu o detalhe (lista de contas ou Início).
+  Two,
   All,
   PreventDelete,
 }

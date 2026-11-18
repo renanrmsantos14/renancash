@@ -1195,14 +1195,8 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
                     showButtons: enableDoubleColumn(context),
                     keepOutFirst: true,
                     items: [
-                      if (widget.wallet?.walletPk == mbCarteiraInvestimentos)
-                        DropdownItemMenu(
-                          id: "evolucao-investimentos",
-                          label: "Evolução mensal",
-                          icon: Icons.show_chart_rounded,
-                          action: () => pushRoute(
-                              context, const InvestimentosEvolucaoPage()),
-                        ),
+                      // Editar conta fica sempre como primeiro item: vira o botão
+                      // visível da barra (os demais ficam no menu ⋮).
                       DropdownItemMenu(
                         id: "edit-account",
                         label: "edit-account".tr(),
@@ -1215,11 +1209,19 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
                             AddWalletPage(
                               wallet: widget.wallet,
                               routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.All,
+                                  RoutesToPopAfterDelete.Two,
                             ),
                           );
                         },
                       ),
+                      if (widget.wallet?.walletPk == mbCarteiraInvestimentos)
+                        DropdownItemMenu(
+                          id: "evolucao-investimentos",
+                          label: "Evolução mensal",
+                          icon: Icons.show_chart_rounded,
+                          action: () => pushRoute(
+                              context, const InvestimentosEvolucaoPage()),
+                        ),
                       DropdownItemMenu(
                         id: "correct-total-balance",
                         label: "correct-total-balance".tr(),
