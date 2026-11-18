@@ -329,6 +329,7 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
   // ignore: avoid_print
   print('>>> PRINT $nome $modo');
   _diag('PRINT $nome $modo');
+  WidgetsBinding.instance.addPersistentFrameCallback((_) => _diag('quadro'));
   appStateSettings = _ajustes(modo);
   t.view.physicalSize = Size(largura * 2, altura * 2);
   t.view.devicePixelRatio = 2;
