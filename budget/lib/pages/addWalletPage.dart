@@ -113,7 +113,12 @@ class _AddWalletPageState extends State<AddWalletPage> {
   }
 
   Future<TransactionWallet> createTransactionWallet() async {
-    int numberOfWallets = (await database.getTotalCountOfWallets())[0] ?? 0;
+    int numberOfWallets = 0;
+    if (widget.wallet == null) {
+      try {
+        numberOfWallets = (await database.getTotalCountOfWallets())[0] ?? 0;
+      } catch (_) {}
+    }
     return TransactionWallet(
       walletPk: widget.wallet != null ? widget.wallet!.walletPk : "-1",
       name: selectedTitle ?? "",
