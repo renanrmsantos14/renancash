@@ -454,15 +454,15 @@ class _BotaoPrincipal extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     return SizedBox(
-      height: 44,
+      height: 52,
       child: FilledButton(
         style: FilledButton.styleFrom(
-            backgroundColor: secundario ? e.bg : e.tx,
+            backgroundColor: secundario ? e.bg : e.pos,
             foregroundColor: secundario ? e.tx : e.bg,
             side: secundario ? BorderSide(color: e.line) : null,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
         onPressed: onTap,
-        child: Text(rotulo, style: const TextStyle(fontWeight: FontWeight.w600)),
+        child: Text(rotulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
       ),
     );
   }
