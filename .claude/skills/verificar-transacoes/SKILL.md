@@ -49,7 +49,7 @@ description: "Verifica as telas de transações no padrão editorial: lista do m
 - Versão no desktop (`VersaoCanto`): fica no canto inferior esquerdo e só aparece com página empilhada; não pode cobrir o "Salvar" do canto direito (B3).
 
 ## Acabamento
-- Valores da lista (celular e tabela desktop), do cabeçalho do mês e do resumo do período sempre com 2 casas (`+R$ 6.500,00`, `−R$ 85,00`): `convertToMoney(..., allDecimals: true)`. Na tabela desktop (`desktop_tabela`) a versão aparece uma única vez no canto inferior esquerdo (a lateral reserva o espaço mas não a desenha enquanto `mbRotaEmpilhada` está ativo); o teste confere `find.textContaining('· dev')` com `findsOneWidget`.
+- Valores da lista (celular e tabela desktop), do cabeçalho do mês e do resumo do período sempre com 2 casas (`+R$ 6.500,00`, `−R$ 85,00`): `convertToMoney(..., allDecimals: true)`. Na tabela desktop (`desktop_tabela`) a versão aparece uma única vez no canto inferior esquerdo (a lateral não a desenha enquanto `mbRotaEmpilhada` está ativo); o teste confere `find.textContaining('· dev')` com `findsOneWidget`.
 
 ## Evidência obrigatória
 - Tail do analyze e dos testes, os 6 PNGs do passo 2 e os prints do navegador (claro e escuro) em `.verificacao/<data>-<branch>/`.
