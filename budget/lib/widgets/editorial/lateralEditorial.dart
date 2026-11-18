@@ -26,6 +26,7 @@ const List<ItemLateral> mbItensLateral = [
   (chave: 'goals', rotulo: 'Metas'),
   (chave: 'loans', rotulo: 'Dívidas'),
   (chave: 'subscriptions', rotulo: 'Assinaturas'),
+  (chave: 'settings', rotulo: 'Configurações'),
 ];
 
 /// Itens da lateral e da busca: Pendências só existe no modo pareado.
