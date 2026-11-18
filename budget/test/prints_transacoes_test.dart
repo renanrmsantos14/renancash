@@ -270,8 +270,9 @@ Widget _envolverApp(String modo, Widget home,
   return MultiProvider(
     providers: [
       Provider<AllWallets>.value(value: _allWallets()),
-      Provider<SelectedWalletPk>.value(
-          value: SelectedWalletPk(selectedWalletPk: '0')),
+      StreamProvider<SelectedWalletPk>.value(
+          initialData: SelectedWalletPk(selectedWalletPk: '0'),
+          value: const Stream<SelectedWalletPk>.empty()),
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
