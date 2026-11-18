@@ -294,8 +294,9 @@ final RegExp _descFora = RegExp(
     r"pagamento (de |da )?fatura|pgto\.? ?fatura|pagamento recebido|aplica[cç][aã]o|resgate|\bcdb\b|\blci\b|\blca\b|poupan[cç]a|porquinho|tesouro direto",
     caseSensitive: false);
 
-bool mbNaoEhGasto(String? categoria, String? descricao) =>
-    _catFora.hasMatch(categoria ?? "") || _descFora.hasMatch(descricao ?? "");
+// `entreMinhas`: o Worker viu que a outra ponta é o próprio titular (campo `entre_minhas` = 1, mesmo CPF do /identity).
+bool mbNaoEhGasto(String? categoria, String? descricao, {bool entreMinhas = false}) =>
+    entreMinhas || _catFora.hasMatch(categoria ?? "") || _descFora.hasMatch(descricao ?? "");
 
 // Resgate do Santander que chega ao Inter: entrada vinda do Santander é transferência, não renda.
 final RegExp _descSantander = RegExp(r"santander", caseSensitive: false);
@@ -555,6 +556,7 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     }
     final categoria = t["category"] as String?;
     final descricao = (t["description"] ?? t["merchant"] ?? "").toString();
+    final entreMinhas = t["entre_minhas"] == 1;
     final bruto = (t["amount"] as num).toDouble();
     final contaId = t["account_id"].toString();
     final cartao = cartoes[contaId] ?? false;
@@ -566,7 +568,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         ((t["date"] ?? "").toString().compareTo(inicioCiclo) >= 0);
     final rev = cartao || !(noCiclo || revisoes.decisoes.containsKey(id))
         ? null
-        : mbTipoDeRevisao(descricao: descricao, valor: valor, categoria: categoria);
+        : mbTipoDeRevisao(
+            descricao: descricao, valor: valor, categoria: categoria, entreMinhas: entreMinhas);
     // Reembolso ligado pelo usuário (Pendências, editar transação) vale para qualquer entrada, não só "Pix recebido".
     final resposta = rev != null
         ? revisoes.resposta(id, rev)
@@ -585,7 +588,7 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     if (foraPelaResposta ||
         (gasto != 1 &&
             !(envioSantander && resposta == 'ajuda') &&
-            (mbNaoEhGasto(categoria, descricao) ||
+            (mbNaoEhGasto(categoria, descricao, entreMinhas: entreMinhas && !envioSantander) ||
                 mbEhResgateSantander(bancos[contaId], valor, descricao)))) {
       naoGasto.add(mbPkTransacao(id));
       ignoradas++;
@@ -688,6 +691,10 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     for (final id in (json["pendentes"] as List? ?? const []))
       mbPkTransacao(id.toString())
   };
+  // Apagadas no banco (webhook transactions/deleted): saem do app como as que não são gasto.
+  for (final id in (json["removidas"] as List? ?? const [])) {
+    naoGasto.add(mbPkTransacao(id.toString()));
+  }
   return MbResultado(
     (json["agora"] ?? "").toString(),
     contas,

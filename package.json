@@ -1,0 +1,15 @@
+{
+  "name": "meu-banco",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -r test",
+    "mock": "pnpm --filter @meu-banco/worker mock",
+    "dev": "pnpm --filter @meu-banco/worker dev",
+    "push": "pnpm --filter @meu-banco/worker push",
+    "logs": "pnpm --filter @meu-banco/worker logs",
+    "db:local": "pnpm --filter @meu-banco/worker db:local",
+    "db:remote": "pnpm --filter @meu-banco/worker db:remote"
+  },
+  "packageManager": "pnpm@12.18.0"
+}

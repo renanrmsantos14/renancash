@@ -8,6 +8,7 @@ import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/extrasTransacao.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
@@ -32,6 +33,8 @@ class DetalheModelo {
   final double valor;
   final bool receita;
   final String? fatura, pluggy, descricaoRegra;
+  /// "Pix para Maria Souza" (paymentData do Pluggy). Null quando o banco não informa.
+  final String? contraparte;
   final RegraDetalhe? regra;
   final List<HistoricoDetalhe> historico;
   final double media;
@@ -47,6 +50,7 @@ class DetalheModelo {
     required this.valor,
     required this.receita,
     this.fatura,
+    this.contraparte,
     this.pluggy,
     this.regra,
     this.descricaoRegra,
@@ -82,11 +86,18 @@ Future<DetalheModelo?> mbCarregarDetalhe(String pk) async {
       ? t.walletFk.substring(mbPrefixo.length)
       : null;
   String? fatura;
+  final extra = ehMb ? await mbLerExtraTransacao(pk.substring(mbPrefixo.length)) : null;
   if (contaId != null && contasJson != null) {
     for (final c in jsonDecode(contasJson) as List) {
       if (c is Map && '${c['id']}' == contaId && c['type'] == 'CREDIT') {
+        // A fatura que o banco prevê para a compra vale mais que o próximo fechamento do cartão.
+        final mes = mbRotuloFaturaMes(extra?.faturaMes);
         final f = mbProximoDiaMes(c['closing_date'], agora);
-        if (f != null) fatura = 'Fecha $f';
+        if (mes != null) {
+          fatura = mes;
+        } else if (f != null) {
+          fatura = 'Fecha $f';
+        }
       }
     }
   }
@@ -151,6 +162,7 @@ Future<DetalheModelo?> mbCarregarDetalhe(String pk) async {
     valor: t.amount,
     receita: t.income,
     fatura: fatura,
+    contraparte: mbRotuloContraparte(extra, receita: t.income),
     regra: regra,
     descricaoRegra: chave.isEmpty ? null : chave.toUpperCase(),
     historico: [
@@ -311,6 +323,8 @@ class _DetalheTransacaoState extends State<DetalheTransacao> {
     final linhas = <(String, Widget)>[
       ('Conta', Text(m.conta, style: EdTexto.corpo(context))),
       ('Categoria', ChipCategoria(m.categoria, receita: m.receita)),
+      if (m.contraparte != null)
+        (m.receita ? 'De' : 'Para', Text(m.contraparte!, style: EdTexto.corpo(context))),
       if (m.pluggy != null)
         ('Pluggy', Text(m.pluggy!, style: EdTexto.corpo(context))),
       if (m.fatura != null)

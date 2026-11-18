@@ -4,7 +4,7 @@ name: Release Android
 # 1. versao: usa a versão do pubspec se ela ainda não tem tag (bump manual);
 #    senão incrementa PATCH e build, commita "Versão X [skip ci]" e cria a tag.
 #    O push com GITHUB_TOKEN não dispara workflows, então não há laço.
-# 2. web: avisa o meu-banco para recompilar o web (já com a versão nova).
+# 2. web: republica o Worker com o web recompilado (deploy.yml, já com a versão nova).
 # 3. apk: compila, assina e publica a Release da tag.
 on:
   push:
@@ -55,13 +55,8 @@ jobs:
 
   web:
     needs: versao
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Disparar deploy no meu-banco
-        env:
-          GH_TOKEN: ${{ secrets.MEU_BANCO_DISPATCH_TOKEN }}
-        run: gh api repos/renanrmsantos14/meu-banco/dispatches -f event_type=cashew-main
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
 
   apk:
     needs: versao

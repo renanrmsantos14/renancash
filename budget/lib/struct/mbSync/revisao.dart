@@ -60,21 +60,21 @@ const int _maxDestinatario = 60;
 
 /// Que pergunta a transação gera (ou null). `valor` no sinal do RenanCash; só vale para conta (cartão não pergunta).
 MbTipoRevisao? mbTipoDeRevisao(
-    {required String descricao, required double valor, String? categoria}) {
+    {required String descricao, required double valor, String? categoria, bool entreMinhas = false}) {
   final d = mbNormalizarRevisao(descricao);
   if (valor < 0) {
     // Dinheiro do Inter para o Santander: a categoria "transferência entre minhas contas" não impede a pergunta.
     if (_santander.hasMatch(d)) {
       return mbNaoEhGasto(null, descricao) ? null : const MbTipoRevisao('envio_santander');
     }
-    if (mbNaoEhGasto(categoria, descricao)) return null;
+    if (mbNaoEhGasto(categoria, descricao, entreMinhas: entreMinhas)) return null;
     final m = _pixEnviado.firstMatch(d);
     if (m == null) return null;
     final fim = (m.end + _maxDestinatario) > d.length ? d.length : m.end + _maxDestinatario;
     final nome = d.substring(m.end, fim).trim();
     return MbTipoRevisao('pix_enviado', nome.isEmpty ? null : nome);
   }
-  if (valor > 0 && !mbNaoEhGasto(categoria, descricao) && _pixRecebido.hasMatch(d)) {
+  if (valor > 0 && !mbNaoEhGasto(categoria, descricao, entreMinhas: entreMinhas) && _pixRecebido.hasMatch(d)) {
     return const MbTipoRevisao('pix_recebido');
   }
   return null;

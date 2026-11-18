@@ -1,0 +1,50 @@
+name = "renancash"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true
+
+# Front-end estático. run_worker_first = true faz TODA requisição passar pelo Worker (checagem de sessão).
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# Banco D1. Cole aqui o database_id que o comando "wrangler d1 create meu-banco" mostrar.
+[[d1_databases]]
+binding = "DB"
+database_name = "meu-banco"
+database_id = "54fa38a4-1175-4e54-abb3-358d84d1ef04"
+
+# Backup diário do D1 (JSON gzip). O bucket é criado à parte; retenção de 30 dias por regra de ciclo de vida.
+[[r2_buckets]]
+binding = "BACKUP"
+bucket_name = "meu-banco-backups"
+
+# Cron em UTC (BRT = UTC-3), de 3 em 3 h no minuto 7 (fugir do pico): 22h07, 01h07, 04h07, 07h07 (fim do silêncio: entrega o que ficou retido),
+# 10h07, 13h07, 16h07 e 19h07 BRT (no domingo, resumo semanal). O backup roda no tick de 04h07 BRT.
+[triggers]
+crons = ["7 1,4,7,10,13,16,19,22 * * *"]
+
+# Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
+[dev]
+port = 8787
+
+[observability]
+enabled = true
+
+# Variáveis NÃO secretas. Credenciais do Pluggy vão com "wrangler secret put PLUGGY_CLIENT_ID" e "PLUGGY_CLIENT_SECRET".
+# Se o Pluggy não listar suas conexões, defina também o secret PLUGGY_ITEM_IDS (ids do Meu Pluggy, separados por vírgula).
+[vars]
+IMPORT_DAYS = "180"
+VAPID_ASSUNTO = "https://renancash.renanrmsantos14.workers.dev"
+VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"
+
+# Limite de tentativas de login por IP (5 por minuto).
+# Workers AI (plano gratuito: 10.000 neurons/dia). Sugestões da aba Pendências do app (src/ia.js).
+[ai]
+binding = "AI"
+
+[[ratelimits]]
+name = "LIMITE_LOGIN"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
