@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -24,16 +26,29 @@ const int _tamanhoMaximoApk = 300 * 1024 * 1024;
 const String _chaveOferta = "atualizacaoOfertada";
 
 /// Resultado de procurar atualização. [versao] é a versão da tag (ex. "5.4.3").
+///
+/// [urlSha256] é o arquivo `<apk>.sha256` publicado na mesma Release (formato do
+/// `sha256sum`: "<64 hex>  <nome>"). Sem ele a Release é recusada.
 class AtualizacaoDisponivel {
   final String versao;
   final int build;
   final String urlApk;
   final int tamanhoApk;
+  final String urlSha256;
   const AtualizacaoDisponivel(
       {required this.versao,
       required this.build,
       required this.urlApk,
-      required this.tamanhoApk});
+      required this.tamanhoApk,
+      required this.urlSha256});
+}
+
+/// Falha esperada do atualizador, com mensagem em pt-BR pronta para o usuário.
+class AtualizadorException implements Exception {
+  final String mensagem;
+  const AtualizadorException(this.mensagem);
+  @override
+  String toString() => mensagem;
 }
 
 /// Extrai o buildNumber de uma tag `v<versão>+<build>` (ex. v5.4.3+417 -> 417).
@@ -48,15 +63,60 @@ String atualizadorVersaoDaTag(String tag) =>
     tag.trim().replaceFirst(RegExp(r'^v'), '').split('+').first;
 
 /// True se a tag tem buildNumber maior que o do app instalado.
+/// [buildAtual] <= 0 (versão instalada ilegível) nunca conta como atualização.
 bool atualizadorTagEhMaisNova(String tag, int buildAtual) {
   final build = atualizadorBuildDaTag(tag);
-  return build != null && build > buildAtual;
+  return buildAtual > 0 && build != null && build > buildAtual;
 }
 
 /// True só para APKs hospedados nas Releases deste repositório, via https.
 bool atualizadorUrlConfiavel(String url) {
   final uri = Uri.tryParse(url)?.normalizePath();
   return uri != null && _prefixosDownload.any(uri.toString().startsWith);
+}
+
+/// Monta a atualização a partir do JSON da Release. Retorna null se a tag não é
+/// mais nova que [buildAtual]. Lança [AtualizadorException] se a Release não
+/// puder ser instalada com segurança (sem APK, sem `.sha256`, link ou tamanho ruins).
+AtualizacaoDisponivel? atualizadorInterpretarRelease(
+    Map<String, dynamic> dados, int buildAtual) {
+  if (buildAtual <= 0) {
+    throw const AtualizadorException(
+        "Não consegui ler a versão instalada do app. Baixe o APK mais recente manualmente na página de Releases do RenanCash.");
+  }
+  final tag = (dados["tag_name"] ?? "").toString();
+  if (!atualizadorTagEhMaisNova(tag, buildAtual)) return null;
+  final assets = (dados["assets"] as List? ?? []).cast<Map<String, dynamic>>();
+  String nome(Map<String, dynamic> a) => (a["name"] ?? "").toString();
+  final apk = assets.firstWhere((a) => nome(a).toLowerCase().endsWith(".apk"),
+      orElse: () => {});
+  if (apk.isEmpty) throw const AtualizadorException("Release sem arquivo .apk");
+  final hash = assets.firstWhere(
+      (a) => nome(a).toLowerCase() == "${nome(apk).toLowerCase()}.sha256",
+      orElse: () => {});
+  if (hash.isEmpty) {
+    // Releases publicadas antes da verificação não têm hash: recusa, não instala às cegas.
+    throw AtualizadorException(
+        "A versão ${atualizadorVersaoDaTag(tag)} foi publicada sem o hash SHA-256 e não pode ser instalada pelo app. Baixe o APK manualmente na página de Releases do RenanCash.");
+  }
+  final url = apk["browser_download_url"].toString();
+  final urlHash = hash["browser_download_url"].toString();
+  final tamanho = (apk["size"] as num).toInt();
+  if (!atualizadorUrlConfiavel(url) || !atualizadorUrlConfiavel(urlHash)) {
+    throw const AtualizadorException(
+        "Release com endereço de download não confiável");
+  }
+  if (tamanho <= 0 || tamanho > _tamanhoMaximoApk) {
+    throw AtualizadorException(
+        "Release com tamanho de APK inválido ($tamanho bytes)");
+  }
+  return AtualizacaoDisponivel(
+    versao: atualizadorVersaoDaTag(tag),
+    build: atualizadorBuildDaTag(tag)!,
+    urlApk: url,
+    tamanhoApk: tamanho,
+    urlSha256: urlHash,
+  );
 }
 
 /// Consulta a última Release. Retorna null se não há versão mais nova.
@@ -69,28 +129,8 @@ Future<AtualizacaoDisponivel?> atualizadorProcurar() async {
   if (resp.statusCode != 200) {
     throw Exception("GitHub respondeu ${resp.statusCode}");
   }
-  final dados = json.decode(resp.body) as Map<String, dynamic>;
-  final tag = (dados["tag_name"] ?? "").toString();
-  if (!atualizadorTagEhMaisNova(tag, buildAtual)) return null;
-  final assets = (dados["assets"] as List? ?? []).cast<Map<String, dynamic>>();
-  final apk = assets.firstWhere(
-      (a) => (a["name"] ?? "").toString().toLowerCase().endsWith(".apk"),
-      orElse: () => {});
-  if (apk.isEmpty) throw Exception("Release sem arquivo .apk");
-  final url = apk["browser_download_url"].toString();
-  final tamanho = (apk["size"] as num).toInt();
-  if (!atualizadorUrlConfiavel(url)) {
-    throw Exception("Release com endereço de download não confiável");
-  }
-  if (tamanho <= 0 || tamanho > _tamanhoMaximoApk) {
-    throw Exception("Release com tamanho de APK inválido ($tamanho bytes)");
-  }
-  return AtualizacaoDisponivel(
-    versao: atualizadorVersaoDaTag(tag),
-    build: atualizadorBuildDaTag(tag)!,
-    urlApk: url,
-    tamanhoApk: tamanho,
-  );
+  return atualizadorInterpretarRelease(
+      json.decode(resp.body) as Map<String, dynamic>, buildAtual);
 }
 
 String _hoje() => DateTime.now().toIso8601String().substring(0, 10);
@@ -145,7 +185,97 @@ Future<void> atualizadorMostrarDialogo(
   );
 }
 
-/// Baixa o APK mostrando progresso, confere o tamanho e abre o instalador.
+Future<T> _comTimeout<T>(Future<T> f, Duration limite, String quando) =>
+    f.timeout(limite,
+        onTimeout: () => throw AtualizadorException(
+            "O servidor não respondeu $quando (${limite.inSeconds} s). Verifique a internet e tente de novo."));
+
+/// Lê o SHA-256 esperado do arquivo `.sha256` ("<64 hex>  <nome>").
+Future<String> _baixarHashEsperado(
+    http.Client cliente, String url, Duration inatividade) async {
+  final resp = await _comTimeout(
+      cliente.get(Uri.parse(url)), inatividade, "ao baixar o hash SHA-256");
+  if (resp.statusCode != 200) {
+    throw AtualizadorException(
+        "Não foi possível baixar o hash SHA-256 (HTTP ${resp.statusCode}).");
+  }
+  final m = resp.bodyBytes.length > 1024
+      ? null
+      : RegExp(r'^\s*([0-9a-fA-F]{64})(?:\s|$)').firstMatch(resp.body);
+  if (m == null) {
+    throw const AtualizadorException("Arquivo de hash SHA-256 inválido.");
+  }
+  return m.group(1)!.toLowerCase();
+}
+
+/// Baixa o APK para [pasta], com timeout de [inatividade] sem receber bytes,
+/// confere o tamanho e o SHA-256 publicado. Devolve o arquivo só se tudo bater;
+/// em qualquer falha apaga o arquivo e lança [AtualizadorException].
+Future<File> atualizadorBaixarVerificado(
+  AtualizacaoDisponivel nova, {
+  required http.Client cliente,
+  required Directory pasta,
+  void Function(double? progresso)? aoProgredir,
+  Duration inatividade = const Duration(seconds: 30),
+}) async {
+  if (!atualizadorUrlConfiavel(nova.urlApk) ||
+      !atualizadorUrlConfiavel(nova.urlSha256)) {
+    throw const AtualizadorException(
+        "Endereço de download não confiável. Nada foi baixado.");
+  }
+  final esperado = await _baixarHashEsperado(cliente, nova.urlSha256, inatividade);
+  final arquivo = File("${pasta.path}/renancash-${nova.versao}.apk");
+  try {
+    if (await arquivo.exists()) await arquivo.delete();
+    final resp = await _comTimeout(
+        cliente.send(http.Request("GET", Uri.parse(nova.urlApk))),
+        inatividade,
+        "ao iniciar o download");
+    if (resp.statusCode != 200) {
+      throw AtualizadorException(
+          "O servidor respondeu HTTP ${resp.statusCode} ao baixar o APK.");
+    }
+    final total = nova.tamanhoApk;
+    int baixado = 0;
+    final sink = arquivo.openWrite();
+    try {
+      await for (final parte in resp.stream.timeout(inatividade)) {
+        baixado += parte.length;
+        if (baixado > total) {
+          throw const AtualizadorException(
+              "O arquivo baixado é maior que o esperado.");
+        }
+        sink.add(parte);
+        aoProgredir?.call(total > 0 ? (baixado / total).clamp(0.0, 1.0) : null);
+      }
+    } on TimeoutException {
+      throw AtualizadorException(
+          "O download parou: nenhum dado recebido por ${inatividade.inSeconds} s. Verifique a internet e tente de novo.");
+    } finally {
+      await sink.close();
+    }
+    final tamanho = await arquivo.length();
+    if (tamanho != total) {
+      throw AtualizadorException(
+          "Arquivo incompleto ($tamanho de $total bytes). Tente de novo.");
+    }
+    final calculado = (await sha256.bind(arquivo.openRead()).first).toString();
+    if (calculado != esperado) {
+      throw const AtualizadorException(
+          "O arquivo baixado não confere com o SHA-256 publicado (corrompido ou adulterado). A instalação foi cancelada e o arquivo apagado.");
+    }
+    return arquivo;
+  } catch (_) {
+    try {
+      if (await arquivo.exists()) await arquivo.delete();
+    } catch (e) {
+      debugPrint("Atualizador: não apagou APK: $e");
+    }
+    rethrow;
+  }
+}
+
+/// Baixa e confere o APK mostrando progresso; só abre o instalador se o SHA-256 bater.
 Future<void> atualizadorBaixarEInstalar(
     BuildContext context, AtualizacaoDisponivel nova) async {
   final progresso = ValueNotifier<double?>(0);
@@ -168,52 +298,22 @@ Future<void> atualizadorBaixarEInstalar(
   );
   String? erro;
   File? arquivo;
+  final cliente = http.Client();
   try {
-    if (!atualizadorUrlConfiavel(nova.urlApk)) {
-      throw Exception("endereço de download não confiável");
-    }
     final dir = await getTemporaryDirectory();
-    arquivo = File("${dir.path}/renancash-${nova.versao}.apk");
-    if (await arquivo.exists()) await arquivo.delete();
-    final client = http.Client();
-    try {
-      final resp = await client
-          .send(http.Request("GET", Uri.parse(nova.urlApk)))
-          .timeout(const Duration(seconds: 30));
-      if (resp.statusCode != 200) throw Exception("HTTP ${resp.statusCode}");
-      final total = nova.tamanhoApk;
-      int baixado = 0;
-      final sink = arquivo.openWrite();
-      try {
-        await for (final parte in resp.stream) {
-          baixado += parte.length;
-          if (baixado > total) throw Exception("arquivo maior que o esperado");
-          sink.add(parte);
-          progresso.value =
-              total > 0 ? (baixado / total).clamp(0.0, 1.0) : null;
-        }
-      } finally {
-        await sink.close();
-      }
-    } finally {
-      client.close();
-    }
-    final tamanho = await arquivo.length();
-    if (tamanho != nova.tamanhoApk) {
-      await arquivo.delete();
-      throw Exception(
-          "arquivo incompleto ($tamanho de ${nova.tamanhoApk} bytes)");
-    }
+    arquivo = await atualizadorBaixarVerificado(nova,
+        cliente: cliente,
+        pasta: dir,
+        aoProgredir: (p) => progresso.value = p);
+  } on AtualizadorException catch (e) {
+    erro = e.mensagem;
   } catch (e) {
-    erro = e.toString();
-    try {
-      if (arquivo != null && await arquivo.exists()) await arquivo.delete();
-    } catch (e) {
-      debugPrint("Atualizador: não apagou APK parcial: $e");
-    }
+    erro = "Falha de rede ou de armazenamento: $e";
+  } finally {
+    cliente.close();
+    navigator.pop(); // sempre fecha o diálogo, mesmo em falha ou timeout
   }
-  navigator.pop();
-  if (erro != null || arquivo == null) {
+  if (arquivo == null) {
     if (context.mounted) {
       openSnackbar(SnackbarMessage(
           title: "Falha ao baixar a atualização", description: erro));
