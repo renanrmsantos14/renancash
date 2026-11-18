@@ -39,3 +39,13 @@ test("sync por cookie: GET sem Origin passa; POST de origem externa é recusado"
   });
   assert.equal(r.status, 403);
 });
+
+test("manifest e ícones do /app/ são públicos (instalação do PWA); o resto exige sessão", async () => {
+  const { pedir } = criarAmbiente();
+  for (const p of ["/app/manifest.json", "/app/icons/Icon-192.png", "/app/icons/Icon-maskable-512.png", "/app/favicon.ico"]) {
+    assert.equal((await pedir(p)).status, 200, p);
+  }
+  for (const p of ["/app/main.dart.js", "/app/icons/../main.dart.js", "/app/icons/x.js", "/app/index.html"]) {
+    assert.equal((await pedir(p)).status, 302, p);
+  }
+});

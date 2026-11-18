@@ -31,7 +31,8 @@ export default {
       let resp;
       if (caminho === "/app") return seguranca(new Response(null, { status: 301, headers: { location: "/app/" } }));
       if (caminho.startsWith("/app/")) {
-        if (!(await sessaoValida(request, env))) return seguranca(new Response(null, { status: 302, headers: { location: "/login?volta=/app/" } }));
+        // Manifest e ícones ficam públicos: o navegador os busca sem cookie para instalar o PWA.
+        if (!APP_PUBLICO.test(caminho) && !(await sessaoValida(request, env))) return seguranca(new Response(null, { status: 302, headers: { location: "/login?volta=/app/" } }));
         const r = seguranca(await env.ASSETS.fetch(request), CSP_APP);
         r.headers.set("cache-control", "private, no-cache");
         return r;
@@ -96,6 +97,7 @@ export default {
 // ---------- Segurança ----------
 
 // Páginas e arquivos que o navegador precisa antes do login.
+const APP_PUBLICO = /^\/app\/(manifest\.json|favicon\.(png|ico)|icons\/[\w.-]+\.png)$/;
 const PUBLICO = /^\/(login|login\.html|manifest\.webmanifest|sw\.js|apple-touch-icon\.png|icons\/[\w.-]+)$/;
 const SESSAO_SEGUNDOS = 30 * 24 * 3600;
 
