@@ -73,7 +73,10 @@ void main() {
       _pix('b', 'JOAO COSTA'),
     ]);
     expect(find.text('Pix recebido de Maria Silva'), findsOneWidget);
-    expect(t.getSize(find.widgetWithText(TextButton, 'Pular')).height, greaterThanOrEqualTo(44));
+    // TextButton.icon é subclasse de TextButton; widgetWithText compara o tipo exato.
+    final pular = find.ancestor(
+        of: find.text('Pular'), matching: find.byWidgetPredicate((w) => w is TextButton));
+    expect(t.getSize(pular.first).height, greaterThanOrEqualTo(44));
     expect(t.getSize(find.text('Reembolso')).height, greaterThan(0));
   });
 
