@@ -201,6 +201,69 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  group('Início sem Meu Banco', () {
+    ModeloInicio semBanco({List<CarteiraInicio> manuais = const []}) => montarModeloInicio(
+        ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, nome: 'Renan', agora: _agora,
+        manuais: manuais);
+    const manuais = [(nome: 'Principal', saldo: 250.0), (nome: 'Dinheiro', saldo: -40.5)];
+
+    test('semDados só sem Meu Banco e sem conta manual com lançamentos', () {
+      expect(semBanco().semDados, true);
+      expect(semBanco(manuais: manuais).semDados, false);
+      expect(semBanco(manuais: manuais).soManuais, true);
+      // Com Meu Banco (regra de sempre): não é "só manuais" e as manuais não mudam o resultado.
+      expect(_montar().semDados, false);
+      expect(_montar().soManuais, false);
+    });
+
+    test('manuais entram na igualdade do modelo (a recarga não ignora conta nova)', () {
+      expect(semBanco(manuais: manuais), semBanco(manuais: manuais));
+      expect(semBanco(manuais: manuais) == semBanco(), false);
+    });
+
+    testWidgets('só manuais: mostra o saldo e as contas, não "sem dados"', (t) async {
+      await abrir(t, semBanco(manuais: manuais));
+      expect(find.text('Saldo nas 2 contas manuais'), findsOneWidget);
+      expect(find.text('R\$ 209,50'), findsOneWidget);
+      expect(find.text('Suas contas'), findsOneWidget);
+      expect(find.text('Principal'), findsOneWidget);
+      expect(find.text('R\$ 250,00'), findsOneWidget);
+      expect(find.text('−R\$ 40,50'), findsOneWidget);
+      expect(find.textContaining('Ainda sem dados'), findsNothing);
+      expect(find.textContaining('Adicione uma conta ou transação'), findsNothing);
+      expect(find.text('Para gastar no ciclo'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('vazia: orienta o primeiro uso, com ações', (t) async {
+      await abrir(t, semBanco());
+      expect(find.textContaining('Adicione uma conta ou transação'), findsOneWidget);
+      expect(find.textContaining('Puxe a tela'), findsNothing);
+      expect(find.text('Nova transação'), findsOneWidget);
+      expect(find.text('Adicionar conta'), findsOneWidget);
+      expect(find.text('Conectar banco'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('vazia e pareada: lembra de puxar a tela e ainda oferece adicionar', (t) async {
+      meuBancoPareado.value = true;
+      addTearDown(() => meuBancoPareado.value = false);
+      await abrir(t, semBanco());
+      expect(find.textContaining('Puxe a tela para atualizar'), findsOneWidget);
+      expect(find.text('Nova transação'), findsOneWidget);
+      expect(find.text('Conectar banco'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('com Meu Banco: cartão do ciclo como antes, sem bloco de manuais', (t) async {
+      await abrir(t, _montar());
+      expect(find.text('Para gastar no ciclo'), findsOneWidget);
+      expect(find.text('Suas contas'), findsNothing);
+      expect(find.textContaining('Adicione uma conta ou transação'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+    });
+  });
+
   testWidgets('InicioEditorial não mostra Contas, Resumo nem Lançar rápido', (t) async {
     await abrir(t, _montar());
     expect(find.text('Contas'), findsNothing);
@@ -427,7 +490,7 @@ void main() {
     addTearDown(() => meuBancoPareado.value = false);
     await abrir(t, montarModeloInicio(
         ciclo: {}, contas: [], faturas: {}, sincronizadoEm: null, nome: '', agora: _agora));
-    expect(find.text('Ainda sem dados. Puxe a tela para atualizar.'), findsOneWidget);
+    expect(find.textContaining('Ainda sem dados do banco. Puxe a tela para atualizar.'), findsOneWidget);
     expect(find.textContaining('Disponível'), findsNothing);
     await t.pumpWidget(const SizedBox());
   });

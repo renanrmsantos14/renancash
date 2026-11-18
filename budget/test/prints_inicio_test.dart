@@ -511,6 +511,41 @@ void main() {
               '../../.verificacao/prints/inicio_editorial_sem_dados_$modo.png'));
     });
 
+    testWidgets('print inicio so contas manuais $modo', skip: _pular,
+        (t) async {
+      appStateSettings = _ajustes(modo);
+      meuBancoPareado.value = false;
+      meuBancoPareadoConferido.value = true;
+      addTearDown(() => meuBancoPareadoConferido.value = false);
+      t.view.physicalSize = const Size(390 * 2, 844 * 2);
+      t.view.devicePixelRatio = 2;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: temaFlutter(temaAtivo(b)),
+        home: Scaffold(
+          body: InicioEditorial.comModelo(montarModeloInicio(
+            ciclo: {},
+            contas: const [],
+            faturas: const {},
+            sincronizadoEm: null,
+            nome: 'Renan',
+            agora: _agora,
+            manuais: const [
+              (nome: 'Carteira', saldo: 250.0),
+              (nome: 'Poupança do pai', saldo: -40.5),
+            ],
+          )),
+        ),
+      ));
+      await t.pump(const Duration(seconds: 1));
+      await t.pump(const Duration(seconds: 3));
+      await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+              '../../.verificacao/prints/inicio_editorial_so_manuais_$modo.png'));
+    });
+
     testWidgets('print inicio sem banco pareado $modo', skip: _pular,
         (t) async {
       appStateSettings = _ajustes(modo);

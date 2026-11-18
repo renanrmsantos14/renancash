@@ -1126,6 +1126,20 @@ void main() {
     });
   }
 
+  // Estado vazio na aba, celular 412x915: o botão "Criar orçamento" fica acima da Análise.
+  testWidgets('print BudgetsListPage vazio celular 412x915', skip: _pular,
+      (t) async {
+    await _printPaginaComBanco(
+      t,
+      'claro',
+      'orcamentos_vazio_celular_412x915',
+      (_) => const BudgetsListPage(enableBackButton: false),
+      largura: 412,
+      altura: 915,
+      vazio: true,
+    );
+  });
+
   // --- Layouts Desktop (1440x900 claro) ---
   testWidgets('print BudgetsListPage + AnaliseOrcamentos desktop claro',
       skip: _pular, (t) async {
