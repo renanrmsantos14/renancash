@@ -2,6 +2,7 @@
 // Só roda com PRINTS=1:
 //   PRINTS=1 flutter test test/prints_transacoes_test.dart --update-goldens
 // Os PNGs vão para .verificacao/prints/transacoes_*.png (fora do git).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
@@ -160,14 +161,29 @@ AllWallets _allWallets({bool incluirArquivadaNaLista = true}) => AllWallets(
 
 bool _bancoAberto = false;
 
+bool _bancoQuebrado = false;
+
+/// Um banco que travou uma vez trava as próximas: falha logo, com o passo no log.
 Future<void> _prepararBanco({bool comDados = true}) async {
+  if (_bancoQuebrado) throw StateError('banco travou em teste anterior');
+  try {
+    await _montarBanco(comDados: comDados).timeout(const Duration(seconds: 25));
+  } on TimeoutException {
+    _bancoQuebrado = true;
+    rethrow;
+  }
+}
+
+Future<void> _montarBanco({bool comDados = true}) async {
   if (_bancoAberto) {
     await database.close();
     _bancoAberto = false;
   }
   database = FinanceDatabase(NativeDatabase.memory());
   _bancoAberto = true;
+  print('>>> db: tabelas');
   await mbCriarTabelas();
+  print('>>> db: estado');
   await mbGravarEstado({
     'contas': jsonEncode([
       {
@@ -184,16 +200,20 @@ Future<void> _prepararBanco({bool comDados = true}) async {
       },
     ]),
   });
+  print('>>> db: carteiras');
   for (final w in _todasCarteiras) {
     await database.into(database.wallets).insert(w);
   }
   for (final c in _cats.values) {
     await database.into(database.categories).insert(c);
   }
+  print('>>> db: categorias ok');
   final agora = DateTime.now();
   final hoje = DateTime(agora.year, agora.month, agora.day, 12);
   final ontem = hoje.subtract(const Duration(days: 1));
+  print('>>> db: orcamento');
   await mbGarantirOrcamentoGeral(agora: hoje);
+  print('>>> db: meta');
   await database.into(database.objectives).insert(ObjectivesCompanion.insert(
         objectivePk: const Value('meta1'),
         name: 'Reserva de Emergência',
@@ -205,6 +225,7 @@ Future<void> _prepararBanco({bool comDados = true}) async {
         archived: const Value(false),
         type: const Value(ObjectiveType.goal),
       ));
+  print('>>> db: transacoes');
   if (!comDados) return;
   final lista = [
     _tx('t1', 'Pão de Açúcar', -182.30, hoje,

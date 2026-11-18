@@ -100,8 +100,9 @@ class VersaoCanto extends StatelessWidget {
             ),
             if (mostrar && desktop)
               Positioned(
+                // À esquerda: o botão de salvar das páginas fica no canto direito de baixo.
                 bottom: mq.padding.bottom + 4,
-                right: 10,
+                left: 10,
                 child: IgnorePointer(
                   child: ExcludeSemantics(
                     child: Text(
