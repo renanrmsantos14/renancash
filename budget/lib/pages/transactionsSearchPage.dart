@@ -406,7 +406,11 @@ class AppliedFilterChip extends StatelessWidget {
       padding: const EdgeInsetsDirectional.symmetric(horizontal: 3),
       child: ToqueEscala(
         onTap: () => openFiltersSelection(),
-        child: Container(
+        // Alvo de toque de 44 px, com o visual do chip de 36.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Center(
+            child: Container(
           height: 36,
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 12),
           decoration: BoxDecoration(
@@ -432,6 +436,8 @@ class AppliedFilterChip extends StatelessWidget {
               ],
               Text(label, style: EdTexto.corpo(context).copyWith(fontSize: 13)),
             ],
+          ),
+        ),
           ),
         ),
       ),
