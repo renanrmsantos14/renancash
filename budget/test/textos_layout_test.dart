@@ -106,9 +106,13 @@ void main() {
       ),
     ));
     await t.pump(const Duration(seconds: 2));
-    final dias = find.text('faltam 19 dias');
+    final dias = find.text('19 dias');
     expect(dias, findsOneWidget);
-    expect(find.textContaining('Ideal até hoje'), findsOneWidget);
+    expect(find.textContaining('Ideal até hoje'), findsNothing);
+    expect(find.textContaining('acima do ritmo'), findsOneWidget);
+    expect(find.text('Gasto'), findsOneWidget);
+    expect(find.text('A vencer'), findsOneWidget);
+    expect(find.text('Livre'), findsOneWidget);
     expect(t.getRect(dias).right,
         lessThanOrEqualTo(t.getRect(find.byType(CartaoOrcamento)).right));
     expect(t.takeException(), isNull);

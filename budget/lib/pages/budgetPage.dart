@@ -592,8 +592,18 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (!showingSelectedPeriodAppBar) ...[
-                                  Text(timeRangeString,
-                                      style: EdTexto.rotulo(context)),
+                                  Row(children: [
+                                    Expanded(
+                                      child: Text(timeRangeString,
+                                          style: EdTexto.rotulo(context)),
+                                    ),
+                                    if (!isPastBudget)
+                                      SeloRitmo(
+                                          gasto: s.totalSpent,
+                                          limite: budgetAmount,
+                                          hoje: hoje,
+                                          renda: widget.budget.income),
+                                  ]),
                                   const SizedBox(height: 8),
                                 ],
                                 StreamBuilder<double>(

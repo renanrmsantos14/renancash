@@ -115,7 +115,7 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 600,
-                        mainAxisExtent: 190,
+                        mainAxisExtent: 238,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
                       ),

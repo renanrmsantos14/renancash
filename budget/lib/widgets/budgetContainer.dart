@@ -74,9 +74,13 @@ class ResumoOrcamento extends StatelessWidget {
     this.grande = false,
     this.mostrarGasto = false,
     this.onTapValor,
+    this.periodo,
   });
 
   final double gasto, limite;
+
+  /// Datas do período, no rodapé ("5 nov – 4 dez · limite R$ 4.630").
+  final String? periodo;
 
   /// Orçamento de poupança: o "gasto" é o que entrou.
   final bool renda;
@@ -121,7 +125,6 @@ class ResumoOrcamento extends StatelessWidget {
         .copyWith(color: mostrarGasto ? null : cor);
     final rotulo = EdTexto.rotulo(context);
     final dias = diasRestantes;
-    final fracaoHoje = limite > 0 ? hoje : null;
     Widget numero = ContagemValor(
       valor: mostrarGasto ? gasto : restante.abs(),
       formatar: contando,
@@ -156,15 +159,18 @@ class ResumoOrcamento extends StatelessWidget {
               alerta: passou && !renda)
         else
           const MedidorEditorial(fracao: 0),
+        if (limite > 0) ...[
+          const SizedBox(height: 12),
+          _TresBlocos(
+              gasto: gasto, limite: limite, aVencer: aVencer, renda: renda),
+        ],
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: Text(
-                mostrarGasto
-                    ? '${passou ? (renda ? 'Acima' : 'Passou') : 'Resta'} '
-                        '${dinheiro(restante.abs())} de ${dinheiro(limite)}'
-                    : '$entrou ${dinheiro(gasto)} de ${dinheiro(limite)}',
+                [if (periodo != null) periodo!, 'limite ${dinheiro(limite)}']
+                    .join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: rotulo,
@@ -172,16 +178,10 @@ class ResumoOrcamento extends StatelessWidget {
             ),
             if (dias != null) ...[
               const SizedBox(width: 8),
-              Text(dias <= 1 ? 'último dia' : 'faltam $dias dias',
-                  style: rotulo),
+              Text(dias <= 1 ? 'último dia' : '$dias dias', style: rotulo),
             ],
           ],
         ),
-        if (fracaoHoje != null) ...[
-          const SizedBox(height: 4),
-          Text(textoIdealHoje(gasto, limite, fracaoHoje, dinheiro, renda: renda),
-              maxLines: 2, style: rotulo),
-        ],
         if (grande && dias != null && restante > 0) ...[
           const SizedBox(height: 10),
           Text(
@@ -194,7 +194,148 @@ class ResumoOrcamento extends StatelessWidget {
   }
 }
 
-/// Cartão da lista de orçamentos: nome e período, depois o resumo.
+/// Selo de ritmo do cabeçalho: quanto o gasto está acima/abaixo do ideal até
+/// hoje (limite × fração do ciclo). Sem marca de hoje ou sem limite: nada.
+class SeloRitmo extends StatelessWidget {
+  const SeloRitmo({
+    super.key,
+    required this.gasto,
+    required this.limite,
+    required this.hoje,
+    this.renda = false,
+  });
+
+  final double gasto, limite;
+  final double? hoje;
+  final bool renda;
+
+  @override
+  Widget build(BuildContext context) {
+    final fracao = hoje;
+    if (fracao == null || limite <= 0) return const SizedBox.shrink();
+    final e = cores(context);
+    final dif = gasto - idealAteHoje(limite, fracao);
+    final noRitmo = dif.abs() < .5;
+    final acima = dif > 0;
+    final valor = convertToMoney(Provider.of<AllWallets>(context), dif.abs(),
+        decimals: 0);
+    final texto = noRitmo
+        ? 'No ritmo'
+        : '${acima ? '▲' : '▼'} $valor '
+            '${acima ? 'acima' : 'abaixo'} ${renda ? 'da meta' : 'do ritmo'}';
+    // Despesa acima do ritmo é ruim; poupança acima da meta é boa; poupança
+    // abaixo da meta fica neutra (no começo do ciclo é normal).
+    final (Color fundo, Color letra) = noRitmo || (renda && !acima)
+        ? (e.line, e.mu)
+        : acima == renda
+            ? (e.pos.withOpacity(.14), e.pos)
+            : (e.warnbg, e.warntx);
+    return Semantics(
+      label: texto.replaceAll('▲ ', '').replaceAll('▼ ', ''),
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration:
+            BoxDecoration(color: fundo, borderRadius: BorderRadius.circular(99)),
+        child: Text(texto,
+            maxLines: 1,
+            style: EdTexto.rotulo(context).copyWith(
+                color: letra, fontWeight: FontWeight.w600, fontSize: 11)),
+      ),
+    );
+  }
+}
+
+/// Gasto, a vencer e livre do limite, cada um com a cor da sua faixa na barra.
+/// "A vencer" some quando é zero.
+class _TresBlocos extends StatelessWidget {
+  const _TresBlocos({
+    required this.gasto,
+    required this.limite,
+    required this.aVencer,
+    required this.renda,
+  });
+
+  final double gasto, limite, aVencer;
+  final bool renda;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final carteiras = Provider.of<AllWallets>(context);
+    String dinheiro(double v) => convertToMoney(carteiras, v);
+    final livre = (limite - gasto - aVencer).clamp(0.0, double.infinity);
+    final estourou = gasto > limite && !renda;
+    final blocos = [
+      (renda ? 'Guardado' : 'Gasto', gasto, estourou ? e.warn : e.acc, false),
+      if (aVencer > 0)
+        (renda ? 'A entrar' : 'A vencer', aVencer, e.acc.withOpacity(.35),
+            false),
+      (renda ? 'Falta' : 'Livre', livre, e.line, true),
+    ];
+    final estiloValor = EdTexto.corpo(context)
+        .copyWith(fontSize: 14, fontWeight: FontWeight.w700);
+    return Row(
+      children: [
+        for (var i = 0; i < blocos.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              label: '${blocos[i].$1} ${dinheiro(blocos[i].$2)}',
+              excludeSemantics: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: e.bg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: e.line),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: blocos[i].$3,
+                            borderRadius: BorderRadius.circular(2),
+                            border: blocos[i].$4
+                                ? Border.all(color: e.mu.withOpacity(.4))
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(blocos[i].$1,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: EdTexto.rotulo(context)
+                                  .copyWith(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(dinheiro(blocos[i].$2),
+                          maxLines: 1, style: estiloValor),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Cartão da lista de orçamentos: nome e selo de ritmo, depois o resumo.
 class CartaoOrcamento extends StatelessWidget {
   const CartaoOrcamento({
     super.key,
@@ -250,7 +391,8 @@ class CartaoOrcamento extends StatelessWidget {
                         .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
               ),
               const SizedBox(width: 8),
-              Text(periodo, style: EdTexto.rotulo(context)),
+              SeloRitmo(
+                  gasto: gasto, limite: limite, hoje: hoje, renda: renda),
             ],
           ),
           const SizedBox(height: 12),
@@ -258,6 +400,7 @@ class CartaoOrcamento extends StatelessWidget {
             gasto: gasto,
             limite: limite,
             renda: renda,
+            periodo: periodo,
             diasRestantes: diasRestantes,
             aVencer: aVencer,
             hoje: hoje,
@@ -295,7 +438,7 @@ class BudgetContainer extends StatelessWidget {
       builder: (context, snapshot) {
         final gasto = snapshot.data;
         // Mesma altura do cartão carregado: sem salto ao chegar o total.
-        if (gasto == null) return const SizedBox(height: 185);
+        if (gasto == null) return const SizedBox(height: 230);
         return StreamBuilder<double>(
           stream: mbWatchAVencerOrcamento(budget, carteiras, periodo),
           builder: (context, aVencer) => CartaoOrcamento(

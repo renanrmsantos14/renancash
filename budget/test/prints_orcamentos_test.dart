@@ -650,8 +650,14 @@ void main() {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('5 de nov. – 4 de dez.',
-                          style: EdTexto.rotulo(c)),
+                      Row(children: [
+                        Expanded(
+                          child: Text('5 de nov. – 4 de dez.',
+                              style: EdTexto.rotulo(c)),
+                        ),
+                        SeloRitmo(
+                            gasto: gasto, limite: 4630, hoje: 9 / 30),
+                      ]),
                       const SizedBox(height: 8),
                       ResumoOrcamento(
                         gasto: gasto,
