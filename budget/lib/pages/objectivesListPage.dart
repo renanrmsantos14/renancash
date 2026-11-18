@@ -542,6 +542,7 @@ class CartaoMeta extends StatelessWidget {
                 onPressed: onDefinirValor,
                 style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(44, 44),
                     foregroundColor: e.acc),
                 child: const Text('Definir valor'),
               ),

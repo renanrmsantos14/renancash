@@ -209,7 +209,8 @@ class PainelAplicacoesMeta extends StatelessWidget {
     final decoracao = cartaoPlano(e);
     final depositar = TextButton(
       onPressed: onDepositar,
-      style: TextButton.styleFrom(foregroundColor: e.acc),
+      style: TextButton.styleFrom(
+          foregroundColor: e.acc, minimumSize: const Size(44, 44)),
       child: const Text('Registrar depósito'),
     );
     if (ligadas.isEmpty) {
@@ -269,7 +270,8 @@ class PainelAplicacoesMeta extends StatelessWidget {
             if (onEscolher != null)
               TextButton(
                 onPressed: onEscolher,
-                style: TextButton.styleFrom(foregroundColor: e.acc),
+                style: TextButton.styleFrom(
+                    foregroundColor: e.acc, minimumSize: const Size(44, 44)),
                 child: const Text('Escolher'),
               ),
           ]),
@@ -282,7 +284,7 @@ class PainelAplicacoesMeta extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(a.nome,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: EdTexto.corpo(context)),
                       if (a.banco != null || posicoes[i] != null)

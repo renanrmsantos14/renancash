@@ -295,7 +295,7 @@ class BudgetContainer extends StatelessWidget {
       builder: (context, snapshot) {
         final gasto = snapshot.data;
         // Mesma altura do cartão carregado: sem salto ao chegar o total.
-        if (gasto == null) return const SizedBox(height: 164);
+        if (gasto == null) return const SizedBox(height: 185);
         return StreamBuilder<double>(
           stream: mbWatchAVencerOrcamento(budget, carteiras, periodo),
           builder: (context, aVencer) => CartaoOrcamento(
