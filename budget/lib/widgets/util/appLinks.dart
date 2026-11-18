@@ -18,7 +18,7 @@ import 'package:budget/widgets/transactionEntry/transactionLabel.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:budget/struct/commonDateFormats.dart';
 import 'package:budget/widgets/tableEntry.dart';
 import 'package:provider/provider.dart';
@@ -123,7 +123,28 @@ class _AppLinksNativeState extends State<AppLinksNative> {
 //
 // Don't forget to update the README if this changed
 
-Future<Transaction?> processAddTransactionFromParams(
+// Transação lida de um link, já com categoria, conta e data resolvidas, mas ainda NÃO gravada.
+// Um link externo nunca grava sozinho: o usuário confirma antes (ver confirmarTransacoesDeLink).
+class TransacaoDeLink {
+  const TransacaoDeLink({
+    required this.title,
+    required this.note,
+    required this.amount,
+    required this.walletPk,
+    required this.dateCreated,
+    required this.main,
+    required this.sub,
+  });
+  final String title;
+  final String note;
+  final double amount;
+  final String walletPk;
+  final DateTime? dateCreated;
+  final TransactionCategory main;
+  final TransactionCategory? sub;
+}
+
+Future<TransacaoDeLink?> prepararTransacaoDeLink(
     BuildContext context, Map<String, String?> params) async {
   MainAndSubcategory mainAndSubCategory =
       await getMainAndSubcategoryFromParams(params);
@@ -191,25 +212,99 @@ Future<Transaction?> processAddTransactionFromParams(
     return null;
   }
 
+  return TransacaoDeLink(
+    title: title,
+    note: note,
+    amount: amount,
+    walletPk: walletPk,
+    dateCreated: dateCreated,
+    main: mainAndSubCategory.main!,
+    sub: mainAndSubCategory.sub,
+  );
+}
+
+// Valor, categoria e conta de cada item, mais a contagem e o total quando é lote.
+String _resumoDeTransacoes(BuildContext context, List<TransacaoDeLink> itens) {
+  final allWallets = Provider.of<AllWallets>(context, listen: false);
+  String valor(double v, String walletPk) => convertToMoney(allWallets, v,
+      currencyKey: allWallets.indexedByPk[walletPk]?.currency);
+  String conta(String walletPk) =>
+      allWallets.indexedByPk[walletPk]?.name ?? walletPk;
+  String categoria(TransacaoDeLink t) =>
+      t.sub == null ? t.main.name : "${t.main.name} › ${t.sub!.name}";
+
+  if (itens.length == 1) {
+    final t = itens.first;
+    return [
+      "Valor: ${valor(t.amount, t.walletPk)}",
+      "Categoria: ${categoria(t)}",
+      "Conta: ${conta(t.walletPk)}",
+      if (t.title != "") "Título: ${t.title}",
+      if (t.dateCreated != null) "Data: ${getWordedDate(t.dateCreated!)}",
+    ].join("\n");
+  }
+  // Total por moeda: somar moedas diferentes num número só enganaria o usuário.
+  final Map<String, double> totais = {};
+  for (final t in itens) {
+    final moeda = allWallets.indexedByPk[t.walletPk]?.currency ?? "";
+    totais[moeda] = (totais[moeda] ?? 0) + t.amount;
+  }
+  final total = totais.entries
+      .map((e) => convertToMoney(allWallets, e.value,
+          currencyKey: e.key == "" ? null : e.key))
+      .join(" · ");
+  const maxLinhas = 5;
+  return [
+    "${itens.length} transações. Total: $total",
+    for (final t in itens.take(maxLinhas))
+      "• ${valor(t.amount, t.walletPk)} · ${categoria(t)}${t.title != "" ? " · ${t.title}" : ""}",
+    if (itens.length > maxLinhas) "… e mais ${itens.length - maxLinhas}",
+  ].join("\n");
+}
+
+// Nenhum link grava sem o usuário ver o resumo e tocar em "Adicionar".
+Future<bool> confirmarTransacoesDeLink(
+    BuildContext? context, List<TransacaoDeLink> itens) async {
+  if (itens.isEmpty) return false;
+  final ctx = context ?? navigatorKey.currentContext;
+  if (ctx == null) return false;
+  final confirmou = await openPopup<bool>(
+    ctx,
+    title: itens.length == 1
+        ? "Adicionar esta transação?"
+        : "Adicionar ${itens.length} transações?",
+    description:
+        "Um link pediu para lançar no RenanCash. Só continue se foi você.\n\n${_resumoDeTransacoes(ctx, itens)}",
+    icon: Icons.link_rounded,
+    onSubmitLabel: "Adicionar",
+    onSubmit: () => popRoute(ctx, true),
+    onCancelLabel: "Cancelar",
+    onCancel: () => popRoute(ctx, false),
+  );
+  return confirmou == true;
+}
+
+// Só chamar depois de confirmarTransacoesDeLink.
+Future<Transaction?> gravarTransacaoDeLink(TransacaoDeLink t) async {
   final int? rowId = await database.createOrUpdateTransaction(
     Transaction(
       transactionPk: "-1",
-      name: title,
-      amount: amount,
-      note: note,
-      categoryFk: mainAndSubCategory.main?.categoryPk ?? "",
-      subCategoryFk: mainAndSubCategory.sub?.categoryPk,
-      walletFk: walletPk,
-      dateCreated: dateCreated ?? DateTime.now(),
-      income: amount > 0,
+      name: t.title,
+      amount: t.amount,
+      note: t.note,
+      categoryFk: t.main.categoryPk,
+      subCategoryFk: t.sub?.categoryPk,
+      walletFk: t.walletPk,
+      dateCreated: t.dateCreated ?? DateTime.now(),
+      income: t.amount > 0,
       paid: true,
       skipPaid: false,
       methodAdded: MethodAdded.appLink,
     ),
     insert: true,
   );
-  if (title != "" && mainAndSubCategory.main != null) {
-    await addAssociatedTitles(title, mainAndSubCategory.main!);
+  if (t.title != "") {
+    await addAssociatedTitles(t.title, t.main);
   }
 
   if (rowId != null) {
@@ -226,6 +321,36 @@ Future<Transaction?> processAddTransactionFromParams(
     return transactionJustAdded;
   }
   return null;
+}
+
+// Os testes trocam o gravador para provar que nada é gravado antes da confirmação.
+@visibleForTesting
+Future<Transaction?> Function(TransacaoDeLink) gravadorDeLink =
+    gravarTransacaoDeLink;
+
+// Link de transação única: prepara, pede confirmação e só então grava.
+Future<Transaction?> processAddTransactionFromParams(
+    BuildContext context, Map<String, String?> params) async {
+  final t = await prepararTransacaoDeLink(context, params);
+  if (t == null) return null;
+  if (!await confirmarTransacoesDeLink(context, [t])) return null;
+  return gravadorDeLink(t);
+}
+
+// Lote (JSON): resolve todos, uma única confirmação com contagem e total, depois grava.
+Future<List<Transaction?>> processAddTransactionsFromJson(
+    BuildContext context, List<Map<String, String?>> itens) async {
+  final List<TransacaoDeLink> prontas = [];
+  for (final params in itens) {
+    final t = await prepararTransacaoDeLink(context, params);
+    if (t != null) prontas.add(t);
+  }
+  if (!await confirmarTransacoesDeLink(context, prontas)) return [];
+  final List<Transaction?> gravadas = [];
+  for (final t in prontas) {
+    gravadas.add(await gravadorDeLink(t));
+  }
+  return gravadas;
 }
 
 Future processAddTransactionRouteFromParams(
@@ -253,19 +378,30 @@ Future processAddTransactionRouteFromParams(
   });
 }
 
+String? _pareamentoEmAndamento;
+
 Future executeAppLink(BuildContext? context, Uri uri,
     {Function(dynamic)? onDebug}) async {
+  // O mesmo link chega duas vezes no cold start (getInitialLink + uriLinkStream); o throttler vale para todos.
+  if (!appLinksThrottler.canProceed()) return;
   if (uri.scheme == 'meubanco') {
     final p = mbLerLinkPareamento(uri);
-    if (p != null) {
-      await mbConfirmarEParear(context ?? navigatorKey.currentContext, p);
-    } else {
+    if (p == null) {
       openSnackbar(SnackbarMessage(title: "Link de pareamento inválido"));
+      return;
+    }
+    // O token fica só em memória, nunca em log. Enquanto o popup deste link está aberto, repetição é ignorada.
+    final chave = '${p.base}|${p.token}';
+    if (_pareamentoEmAndamento == chave) return;
+    _pareamentoEmAndamento = chave;
+    try {
+      await mbConfirmarEParear(context ?? navigatorKey.currentContext, p);
+    } finally {
+      _pareamentoEmAndamento = null;
     }
     return;
   }
   if (appStateSettings["hasOnboarded"] != true) return;
-  if (!appLinksThrottler.canProceed()) return;
 
   String endPoint = getApiEndpoint(uri);
   Map<String, String> params = parseAppLink(uri);
@@ -277,13 +413,16 @@ Future executeAppLink(BuildContext? context, Uri uri,
         if (params["JSON"] != null) {
           try {
             Map<String, dynamic> jsonData = json.decode(params["JSON"] ?? "");
+            final List<Map<String, String?>> itens = [];
             for (dynamic transactionObject in jsonData["transactions"]) {
               Map<String, String> currentObject = {};
               transactionObject.forEach((key, value) {
                 currentObject[key] = value.toString();
               });
-              dynamic res =
-                  await processAddTransactionFromParams(context, currentObject);
+              itens.add(currentObject);
+            }
+            for (final res
+                in await processAddTransactionsFromJson(context, itens)) {
               if (onDebug != null) onDebug(res);
             }
           } catch (e) {
@@ -525,8 +664,9 @@ String getApiEndpoint(Uri uri) {
 Map<String, String> parseAppLink(Uri uri) {
   Map<String, String> params = {};
 
+  // queryParameters já decodifica uma vez; decodificar de novo quebra "%" e muda o texto.
   uri.queryParameters.forEach((key, value) {
-    params[key] = Uri.decodeComponent(value);
+    params[key] = value;
   });
 
   return params;
