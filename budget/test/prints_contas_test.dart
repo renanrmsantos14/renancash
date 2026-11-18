@@ -125,6 +125,7 @@ Widget _envolverApp(String modo, Widget tela, {AllWallets? carteiras}) {
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: temaFlutter(temaAtivo(b)),
+      onGenerateRoute: (_) => null,
       onGenerateInitialRoutes: (_) => [
         MaterialPageRoute<void>(builder: (_) => const SizedBox()),
         MaterialPageRoute<void>(builder: (_) => tela),
