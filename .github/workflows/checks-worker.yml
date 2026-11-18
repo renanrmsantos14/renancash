@@ -36,5 +36,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      # Os scripts do deploy (scripts/*.mjs) não são importados pelos testes: confere ao menos a sintaxe.
+      - name: Sintaxe dos scripts
+        run: for f in apps/worker/src/*.js apps/worker/scripts/*.mjs apps/worker/mock/*.mjs; do node --check "$f"; done
       - run: pnpm test
       - run: pnpm -r typecheck
