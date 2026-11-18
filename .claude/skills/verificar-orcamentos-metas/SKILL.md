@@ -49,6 +49,10 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 - Empréstimos: o total "A receber" soma o saldo de cada pessoa limitado a zero (`semExcessoPorEmprestimo`, `saldoEmprestimoSemExcesso`): quem pagou a mais não abate os outros. Caso real: 670 + 499,93 + 30 + 250 = 1.449,93, com o "Vô" quitado em 104% contando 0.
 - Cartão de empréstimo: quitado mostra "Quitado · nada a receber" com R$ 0,00 (coluna do saldo); vazio (sem valor e sem transações) mostra "Valor emprestado" e "Definir valor"; o detalhe diz "Emprestado R$ X · 67% recebido" / "· 33% pago".
 - Editar meta: nome longo quebra em até 2 linhas; meta sem ícone mostra o ícone padrão (`iconeMetaPadrao`: cofrinho na meta, genérico no empréstimo; o mesmo no cartão e no detalhe); datas rotuladas "Início" / "Fim", sempre com o ano (`SelectDateRange`); "Aplicações da meta" com nomes repetidos ganha "· 1 de 4" (`mbPosicoesRepetidas`; o Worker não manda vencimento nem taxa).
+- Alvos de toque da área >= 44 px: `TextButton` com `minimumSize: Size(44, 44)` (Definir valor, Registrar depósito, Escolher); setas < > do histórico com `padding` 13 (18 + 26 = 44). `IconButtonScaled` mede (ícone + 2×padding) × scale: ok se >= 44.
+- Datas do detalhe da meta (`ResumoMeta`): "12 de novembro de 2026" (`DateFormat` com `Localizations.localeOf`), ano nas duas pontas se alguma não for do ano atual; nome da aplicação da meta pode ter 2 linhas. Editar metas: sem valor alvo mostra "R$ X guardado · sem valor alvo", nunca "acima de R$ 0".
+- Grades desktop (`enableDoubleColumn`): lista de orçamentos `mainAxisExtent: 190` (cartão tem ~185 px), histórico 104; placeholder do cartão 185 px. Prints desktop 1440x900 em `prints_orcamentos_test.dart` pegam overflow.
+- Os prints rodam sem EasyLocalization: chaves e textos traduzidos (ex.: "Goals", "savings-goal", "today, November 18", "save R$ 33,78/day for 148 days") saem em inglês só nos prints; conferir pt-BR no app.
 
 ## Evidência obrigatória
 - Tail do analyze e dos testes, PNGs em `.verificacao/prints/` conferidos claro e escuro.
