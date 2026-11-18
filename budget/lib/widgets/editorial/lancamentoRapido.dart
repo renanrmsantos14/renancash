@@ -2,6 +2,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart' show popRoute;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/casosComuns.dart';
+import 'package:budget/struct/mbSync/conexoes.dart' show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
@@ -12,6 +13,7 @@ import 'package:budget/widgets/selectAmount.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeDaCategoria;
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 // Lançamento rápido da Início (a regra está em struct/mbSync/casosComuns.dart): os gastos que mais se repetem viram
 // atalhos; um toque abre o teclado de valor já preenchido e "Lançar" grava a transação.
@@ -47,9 +49,13 @@ Future<List<MbAtalhoRapido>> mbCarregarAtalhosRapidos() async {
 String _textoValor(double v) => v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(2);
 
 /// Teclado de valor já preenchido com o valor mais comum; "Lançar" grava um gasto de hoje na carteira padrão, com o
-/// título, a categoria e a sub do atalho. true: lançou.
+/// título, a categoria e a sub do atalho, na conta escolhida (a padrão já vem marcada). true: lançou.
 Future<bool> mbLancarRapido(BuildContext context, MbAtalhoRapido a) async {
   var valor = a.valor;
+  var carteiraPk = '${appStateSettings['selectedWalletPk'] ?? '0'}';
+  final contas = Provider.of<AllWallets>(context, listen: false).list;
+  // Corrente e poupança do mesmo banco têm o mesmo nome: o tipo diferencia.
+  final nomes = mbRotulosPorPk({for (final w in contas) w.walletPk: w.name}, await mbTiposDasCarteiras());
   final lancar = await openBottomSheet(
     context,
     fullSnap: true,
@@ -58,14 +64,30 @@ Future<bool> mbLancarRapido(BuildContext context, MbAtalhoRapido a) async {
       subtitle: '${a.categoria} · hoje',
       hasPadding: false,
       underTitleSpace: false,
-      child: SelectAmount(
-        onlyShowCurrencyIcon: true,
-        padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
-        amountPassed: _textoValor(a.valor),
-        setSelectedAmount: (v, _) => valor = v.abs(),
-        next: () => popRoute(context, true),
-        nextLabel: 'Lançar',
-      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (contas.length > 1)
+          StatefulBuilder(
+            builder: (context, setState) => Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(18, 0, 18, 8),
+              child: Wrap(spacing: 8, runSpacing: 4, children: [
+                for (final w in contas)
+                  ChoiceChip(
+                    label: Text(nomes[w.walletPk]!),
+                    selected: w.walletPk == carteiraPk,
+                    onSelected: (_) => setState(() => carteiraPk = w.walletPk),
+                  ),
+              ]),
+            ),
+          ),
+        SelectAmount(
+          onlyShowCurrencyIcon: true,
+          padding: const EdgeInsetsDirectional.symmetric(horizontal: 18),
+          amountPassed: _textoValor(a.valor),
+          setSelectedAmount: (v, _) => valor = v.abs(),
+          next: () => popRoute(context, true),
+          nextLabel: 'Lançar',
+        ),
+      ]),
     ),
   );
   if (lancar != true || valor <= 0) return false;
@@ -79,7 +101,7 @@ Future<bool> mbLancarRapido(BuildContext context, MbAtalhoRapido a) async {
         note: '',
         categoryFk: a.categoriaPk,
         subCategoryFk: a.subPk,
-        walletFk: '${appStateSettings['selectedWalletPk'] ?? '0'}',
+        walletFk: carteiraPk,
         dateCreated: DateTime.now(),
         income: false,
         paid: true,

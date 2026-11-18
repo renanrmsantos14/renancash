@@ -180,9 +180,12 @@ class _TransacoesDesktopState extends State<TransacoesDesktop> {
                   Expanded(
                     flex: 2,
                     child: Text(
-                        'Gastos ${convertToMoney(carteiras, gastos)} · '
-                        'Receitas ${convertToMoney(carteiras, receitas)}',
+                        // Espaço sem quebra: "R$" nunca fica separado do valor.
+                        'Gastos ${convertToMoney(carteiras, gastos).replaceAll(' ', '\u00A0')} · '
+                        'Receitas ${convertToMoney(carteiras, receitas).replaceAll(' ', '\u00A0')}',
                         textAlign: TextAlign.end,
+                        // Quebra em duas linhas em vez de cortar o total de receitas.
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: EdTexto.rotulo(context)),
                   ),
@@ -219,7 +222,7 @@ class _TransacoesDesktopState extends State<TransacoesDesktop> {
   }
 }
 
-const _colunas = [2, 6, 4, 4, 3]; // Data, Descrição, Categoria, Conta, Valor
+const _colunas = [2, 5, 4, 4, 4]; // Data, Descrição, Categoria, Conta, Valor
 
 class _Cabecalho extends StatelessWidget {
   @override

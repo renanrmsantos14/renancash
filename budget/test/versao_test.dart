@@ -57,7 +57,7 @@ void main() {
       home: VersaoCanto(
         child: Scaffold(
           body: Align(
-            alignment: Alignment.bottomRight,
+            alignment: Alignment.bottomLeft,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => toques++,
