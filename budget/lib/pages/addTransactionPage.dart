@@ -91,6 +91,32 @@ dynamic transactionTypeDisplayToEnum = {
   TransactionSpecialType.credit: "Lent",
 };
 
+/// O que fazer com Receita/Despesa quando o usuário escolhe uma categoria.
+enum AcaoTipoCategoria { manter, adotar, avisar }
+
+/// Categoria de outro tipo nunca troca o tipo em silêncio: `adotar` só com
+/// `adotarTipoDaCategoria` (tipo ainda não escolhido), senão `avisar`.
+/// Empréstimo (credit/debt), meta de empréstimo e a categoria de ajuste ("0")
+/// têm tipo próprio e ficam como estão.
+AcaoTipoCategoria acaoTipoAoEscolherCategoria({
+  required bool selectedIncome,
+  required TransactionCategory category,
+  required bool adotarTipoDaCategoria,
+  required bool isAddedToLoanObjective,
+  required TransactionSpecialType? selectedType,
+}) {
+  if (isAddedToLoanObjective ||
+      category.categoryPk == "0" ||
+      selectedType == TransactionSpecialType.credit ||
+      selectedType == TransactionSpecialType.debt ||
+      category.income == selectedIncome) {
+    return AcaoTipoCategoria.manter;
+  }
+  return adotarTipoDaCategoria
+      ? AcaoTipoCategoria.adotar
+      : AcaoTipoCategoria.avisar;
+}
+
 class AddTransactionPage extends StatefulWidget {
   AddTransactionPage({
     Key? key,
@@ -194,14 +220,32 @@ class _AddTransactionPageState extends State<AddTransactionPage>
     });
   }
 
+  // Escolher categoria nunca muda Receita/Despesa em silêncio: o tipo marcado
+  // pelo usuário vale, e se a categoria é do outro tipo aparece um aviso.
+  // `setIncome` só vale no fluxo rápido em que o tipo ainda não foi escolhido.
   void setSelectedCategory(TransactionCategory category,
-      {bool setIncome = true}) {
-    if (isAddedToLoanObjective == false &&
-        setIncome &&
-        category.categoryPk != "0" &&
-        selectedType != TransactionSpecialType.credit &&
-        selectedType != TransactionSpecialType.debt) {
+      {bool setIncome = false}) {
+    final acao = acaoTipoAoEscolherCategoria(
+      selectedIncome: selectedIncome,
+      category: category,
+      adotarTipoDaCategoria: setIncome,
+      isAddedToLoanObjective: isAddedToLoanObjective,
+      selectedType: selectedType,
+    );
+    if (acao == AcaoTipoCategoria.adotar) {
       setSelectedIncome(category.income);
+    } else if (acao == AcaoTipoCategoria.avisar) {
+      openSnackbar(SnackbarMessage(
+        title: selectedIncome
+            ? "“${category.name}” é categoria de despesa"
+            : "“${category.name}” é categoria de receita",
+        description: selectedIncome
+            ? "A transação continua como Receita."
+            : "A transação continua como Despesa.",
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.info_outline
+            : Icons.info_outline_rounded,
+      ));
     }
     setState(() {
       if (selectedCategory != category) selectedSubCategory = null;
