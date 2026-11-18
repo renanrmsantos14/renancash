@@ -10,7 +10,6 @@ import 'package:budget/database/initializeDefaultDatabase.dart' show defaultWall
 import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/addObjectivePage.dart';
-import 'package:budget/pages/addTransactionPage.dart' show RoutesToPopAfterDelete;
 import 'package:budget/pages/analiseOrcamentos.dart';
 import 'package:budget/pages/budgetPage.dart';
 import 'package:budget/pages/budgetsListPage.dart';
@@ -33,6 +32,7 @@ import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/widgets/budgetContainer.dart';
 import 'package:budget/widgets/mbAplicacoesDaMeta.dart';
+import 'package:budget/widgets/openPopup.dart' show RoutesToPopAfterDelete;
 import 'package:budget/widgets/sugestaoLimites.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
