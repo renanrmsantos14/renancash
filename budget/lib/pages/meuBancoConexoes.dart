@@ -110,7 +110,10 @@ class _ContasConectadasState extends State<ContasConectadas> {
             height: 112,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-                color: e.surf, borderRadius: BorderRadius.circular(16)),
+              color: e.surf,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: e.line),
+            ),
           ),
       ];
     } else if (conexoes == null) {
@@ -120,7 +123,13 @@ class _ContasConectadasState extends State<ContasConectadas> {
         Align(
           alignment: AlignmentDirectional.centerStart,
           child: TextButton(
-              onPressed: _carregar, child: const Text('Tentar de novo')),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, 44),
+              tapTargetSize: MaterialTapTargetSize.padded,
+            ),
+            onPressed: _carregar,
+            child: const Text('Tentar de novo'),
+          ),
         ),
       ];
     } else {
@@ -289,15 +298,26 @@ class _CartaoConexao extends StatelessWidget {
                 else ...[
                   TextButton(
                     onPressed: aoRemover,
-                    style: TextButton.styleFrom(foregroundColor: e.warntx),
+                    style: TextButton.styleFrom(
+                      foregroundColor: e.warntx,
+                      minimumSize: const Size(64, 44),
+                      tapTargetSize: MaterialTapTargetSize.padded,
+                    ),
                     child: const Text('Remover'),
                   ),
                   TextButton(
                     onPressed: aoReconectar,
                     style: alerta
                         ? TextButton.styleFrom(
-                            backgroundColor: e.tx, foregroundColor: e.bg)
-                        : null,
+                            backgroundColor: e.tx,
+                            foregroundColor: e.bg,
+                            minimumSize: const Size(64, 44),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                          )
+                        : TextButton.styleFrom(
+                            minimumSize: const Size(64, 44),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                          ),
                     child: Text(alerta ? 'Reconectar' : 'Atualizar login'),
                   ),
                 ],
