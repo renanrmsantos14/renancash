@@ -174,12 +174,14 @@ Projetado mbProjLancamento(Transaction t, String carteiraNome,
 Projetado mbProjAssinatura(Transaction t) => Projetado(
     'assinaturas',
     idDoPk(t.transactionPk),
-    projetarAssinatura(AssinLocal(
-        pk: t.transactionPk,
-        nome: t.name,
-        valor: t.amount,
-        dia: t.dateCreated.day,
-        categoriaPk: t.categoryFk)),
+    mbComLinha(
+        projetarAssinatura(AssinLocal(
+            pk: t.transactionPk,
+            nome: t.name,
+            valor: t.amount,
+            dia: t.dateCreated.day,
+            categoriaPk: t.categoryFk)),
+        t.toJson(serializer: mbSerializador)),
     mbEditadoEm(t.dateTimeModified));
 
 Projetado? mbProjRegra(
