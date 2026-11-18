@@ -163,6 +163,11 @@ AllWallets _allWallets({bool incluirArquivadaNaLista = true}) => AllWallets(
 
 bool _bancoAberto = false;
 
+// DIAGNOSTICO (remover): o stdout do teste so aparece no fim, entao o progresso vai para arquivo.
+void _diag(String m) => File('/tmp/prints_diag.log').writeAsStringSync(
+    '${DateTime.now().toIso8601String()} $m\n',
+    mode: FileMode.append);
+
 bool _bancoQuebrado = false;
 
 /// Um banco que travou uma vez trava as próximas: falha logo, com o passo no log.
@@ -184,6 +189,7 @@ Future<void> _montarBanco({bool comDados = true}) async {
   database = FinanceDatabase(NativeDatabase.memory());
   _bancoAberto = true;
   print('>>> db: tabelas');
+  _diag('db tabelas');
   await mbCriarTabelas();
   print('>>> db: estado');
   await mbGravarEstado({
@@ -228,6 +234,7 @@ Future<void> _montarBanco({bool comDados = true}) async {
         type: const Value(ObjectiveType.goal),
       ));
   print('>>> db: transacoes');
+  _diag('db transacoes');
   if (!comDados) return;
   final lista = [
     _tx('t1', 'Pão de Açúcar', -182.30, hoje,
@@ -281,6 +288,7 @@ Future<void> _fecharBanco(WidgetTester t) async {
 
 Future<void> _assentar(WidgetTester t) async {
   for (var i = 0; i < 8; i++) {
+    _diag('assentar $i');
     await t.runAsync(() => Future.delayed(const Duration(milliseconds: 80)));
     await t.pump(const Duration(milliseconds: 100));
   }
@@ -315,21 +323,27 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
     Future<void> Function(WidgetTester)? aposMontar}) async {
   // ignore: avoid_print
   print('>>> PRINT $nome $modo');
+  _diag('PRINT $nome $modo');
   appStateSettings = _ajustes(modo);
   t.view.physicalSize = Size(largura * 2, altura * 2);
   t.view.devicePixelRatio = 2;
   addTearDown(t.view.reset);
+  _diag('pumpWidget');
   await t.pumpWidget(_envolverApp(modo, corpo,
       scaffold: scaffold, versaoCanto: versaoCanto));
+  _diag('assentar');
   await _assentar(t);
+  _diag('assentado');
   if (aposMontar != null) {
     await aposMontar(t);
     await _assentar(t);
   }
+  _diag('golden');
   await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile(
           '../../.verificacao/prints/transacoes_${nome}_$modo.png'));
+  _diag('golden ok');
   await _fecharBanco(t);
 }
 
