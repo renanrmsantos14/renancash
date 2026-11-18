@@ -10,6 +10,7 @@ import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/pareamento.dart';
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoSync.dart';
+import 'package:budget/struct/settings.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -199,7 +200,8 @@ void main() {
     await sync();
     expect((await _txs()).single.categoryFk, 'c1');
     final espelho = (await mbLerEspelho())['ajustes/t1']!;
-    expect(espelho.projecao, {'categoria_id': 'cashew:c1', 'category': 'Mercado'});
+    // A transação editada (categoria) passa a carregar o título que tem hoje.
+    expect(espelho.projecao, {'categoria_id': 'cashew:c1', 'category': 'Mercado', 'nome': 'Padaria'});
     // Sem pendência local: nada sobe e a data do ajuste remoto não é trocada por uma nova (ping-pong entre aparelhos).
     for (var i = 0; i < 2; i++) {
       cliente.enviados.clear();
@@ -236,7 +238,7 @@ void main() {
     expect(cliente.enviados.where((r) => r.tabela == 'categorias'), isEmpty);
   });
 
-  test('orçamento arquivado não gera tombstone', () async {
+  test('orçamento arquivado vai com arquivado 1 e sem tombstone', () async {
     await database.into(database.budgets).insert(BudgetsCompanion.insert(
         budgetPk: const Value('b1'),
         name: 'Casa',
@@ -254,8 +256,9 @@ void main() {
             dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
     cliente.enviados.clear();
     await sync();
-    expect(_semCatsMb(cliente.enviados).where((r) => r.tabela == 'orcamentos'),
-        isEmpty);
+    // Arquivado agora sincroniza (arquivado: 1), sem tombstone.
+    final r = _semCatsMb(cliente.enviados).singleWhere((r) => r.tabela == 'orcamentos');
+    expect([r.deletedAt, r.dados!['arquivado']], [null, 1]);
     expect((await mbLerEspelho())['orcamentos/cashew:b1']!.registro.deletedAt,
         isNull);
   });
@@ -777,5 +780,555 @@ void main() {
     await sync();
     t = (await _txs()).single;
     expect([t.categoryFk, t.subCategoryFk, t.name], ['c1', null, 'Uber para o cliente']);
+  });
+
+  Future<void> carteira(String pk, String nome) =>
+      database.createOrUpdateWallet(TransactionWallet(
+          walletPk: pk,
+          name: nome,
+          dateCreated: DateTime.now(),
+          dateTimeModified: null,
+          order: 5,
+          currency: 'brl',
+          decimals: 2,
+          homePageWidgetDisplay: null));
+
+  test('carteira manual vai no push; padrão 0 e mb:* ficam de fora', () async {
+    await carteira('w1', 'Nubank');
+    await carteira('mb:conta:x', 'Banco');
+    await sync();
+    final l = cliente.enviados.where((r) => r.tabela == 'carteiras').toList();
+    expect(l.map((r) => r.id), ['cashew:w1']);
+    expect(l.single.dados!['nome'], 'Nubank');
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'carteiras'), isEmpty);
+  });
+
+  test('carteira remota é criada e não volta ao servidor', () async {
+    cliente.servidor.add(Registro('carteiras', 'cashew:w2',
+        {'nome': 'Inter', 'cor': 'FF0000', 'ordem': 9}, _futuro(), null));
+    await sync();
+    final w = (await database.getWalletInstanceOrNull('w2'))!;
+    expect(w.name, 'Inter');
+    expect(w.colour, 'FF0000');
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'carteiras'), isEmpty);
+  });
+
+  test('lançamento que chegou antes da carteira é religado quando ela chega', () async {
+    await _categoria('c1', 'Mercado');
+    cliente.servidor.add(Registro(
+        'lancamentos',
+        'cashew:t1',
+        {'data': '2026-11-01', 'descricao': 'Saldo inicial', 'valor': 100, 'categoria_id': 'cashew:c1', 'carteira': 'Inter'},
+        '2026-11-01T10:00:00.000Z',
+        null));
+    await sync();
+    expect((await _txs()).singleWhere((t) => t.transactionPk == 't1').walletFk, '0');
+    cliente.servidor.add(Registro('carteiras', 'cashew:w2', {'nome': 'Inter'},
+        '2026-11-01T11:00:00.000Z', null));
+    await sync();
+    expect((await _txs()).singleWhere((t) => t.transactionPk == 't1').walletFk, 'w2');
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'lancamentos'), isEmpty);
+  });
+
+  test('tombstone remoto não apaga carteira com transações', () async {
+    await carteira('w3', 'Caixa');
+    await sync();
+    await database.into(database.transactions).insert(TransactionsCompanion.insert(
+        transactionPk: const Value('t9'),
+        name: 'x',
+        amount: -1,
+        note: '',
+        categoryFk: 'c1',
+        walletFk: const Value('w3'),
+        dateCreated: Value(DateTime(2026, 11, 2)),
+        income: const Value(false),
+        paid: const Value(true)));
+    cliente.servidor.add(Registro('carteiras', 'cashew:w3', null, _futuro(), _futuro()));
+    await sync();
+    expect(await database.getWalletInstanceOrNull('w3'), isNotNull);
+  });
+
+  Future<void> agendada(String pk, TransactionSpecialType tipo,
+          {bool paga = false, bool criouProxima = false}) =>
+      database.into(database.transactions).insert(TransactionsCompanion.insert(
+          transactionPk: Value(pk),
+          name: 'Aluguel',
+          amount: -1500,
+          note: '',
+          categoryFk: 'c1',
+          dateCreated: Value(DateTime(2026, 12, 5, 12)),
+          originalDateDue: Value(DateTime(2026, 12, 5, 12)),
+          income: const Value(false),
+          paid: Value(paga),
+          type: Value(tipo),
+          reoccurrence: const Value(BudgetReoccurence.monthly),
+          periodLength: const Value(1),
+          endDate: Value(DateTime(2027, 6, 5, 12)),
+          createdAnotherFutureTransaction: Value(criouProxima),
+          dateTimeModified: Value(DateTime.now())));
+
+  test('recorrente local vai no push com tipo, repetição e fim; ida e volta sem reenvio', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('r1', TransactionSpecialType.repetitive);
+    await agendada('u1', TransactionSpecialType.upcoming);
+    await sync();
+    final l = {
+      for (final r in cliente.enviados.where((r) => r.tabela == 'lancamentos')) r.id: r.dados!
+    };
+    expect(l['cashew:r1']!['tipo'], 'recorrente');
+    expect(l['cashew:u1']!['tipo'], 'agendada');
+    expect(l['cashew:r1']!['repeticao'], 'mensal');
+    expect(l['cashew:r1']!['periodo'], 1);
+    expect(l['cashew:r1']!['fim'], '2027-06-05');
+    expect(l['cashew:r1']!['vencimento'], '2026-12-05');
+    expect(l['cashew:r1']!['pago'], 0);
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'lancamentos'), isEmpty);
+  });
+
+  test('recorrente remota é criada com o estado completo e não volta ao servidor', () async {
+    await _categoria('c1', 'Casa');
+    cliente.servidor.add(Registro(
+        'lancamentos',
+        'cashew:r2',
+        {
+          'data': '2026-12-05',
+          'descricao': 'Academia',
+          'valor': -120,
+          'categoria_id': 'cashew:c1',
+          'tipo': 'recorrente',
+          'pago': 0,
+          'pulado': 0,
+          'proxima_criada': 0,
+          'repeticao': 'semanal',
+          'periodo': 2,
+          'fim': '2027-01-05',
+          'vencimento': '2026-12-05',
+        },
+        _futuro(),
+        null));
+    await sync();
+    final t = (await _txs()).singleWhere((t) => t.transactionPk == 'r2');
+    expect(t.type, TransactionSpecialType.repetitive);
+    expect([t.paid, t.skipPaid, t.createdAnotherFutureTransaction], [false, false, false]);
+    expect([t.reoccurrence, t.periodLength], [BudgetReoccurence.weekly, 2]);
+    expect(t.endDate, DateTime(2027, 1, 5, 12));
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'lancamentos'), isEmpty);
+  });
+
+  test('pagamento feito em outro aparelho chega com a próxima ocorrência, sem duplicar', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('r3', TransactionSpecialType.repetitive);
+    await sync();
+    cliente.enviados.clear();
+    Map<String, dynamic> d(String data, bool paga, bool criou) => {
+          'data': data,
+          'descricao': 'Aluguel',
+          'valor': -1500,
+          'categoria_id': 'cashew:c1',
+          'tipo': 'recorrente',
+          'pago': paga ? 1 : 0,
+          'pulado': 0,
+          'proxima_criada': criou ? 1 : 0,
+          'repeticao': 'mensal',
+          'periodo': 1,
+          'vencimento': data,
+        };
+    final quando = _futuro();
+    cliente.servidor.addAll([
+      Registro('lancamentos', 'cashew:r3', d('2026-12-05', true, true), quando, null),
+      Registro('lancamentos', 'cashew:r3::predict::1', d('2027-01-05', false, false), quando, null),
+    ]);
+    await sync();
+    final todas = await _txs();
+    expect(todas.where((t) => t.transactionPk == 'r3::predict::1'), hasLength(1));
+    final r3 = todas.singleWhere((t) => t.transactionPk == 'r3');
+    expect([r3.paid, r3.createdAnotherFutureTransaction], [true, true]);
+    cliente.enviados.clear();
+    await sync();
+    expect(cliente.enviados.where((r) => r.tabela == 'lancamentos'), isEmpty);
+  });
+
+  Map<String, dynamic> dadosRec(bool paga, {bool despago = false}) => {
+        'data': '2026-12-05',
+        'descricao': 'Aluguel',
+        'valor': -1500,
+        'categoria_id': 'cashew:c1',
+        'tipo': 'recorrente',
+        'pago': paga ? 1 : 0,
+        'pulado': 0,
+        'proxima_criada': 0,
+        'repeticao': 'mensal',
+        'periodo': 1,
+        'vencimento': '2026-12-05',
+        if (despago) 'despago': 1,
+      };
+  Iterable<Registro> lancs() => cliente.enviados.where((r) => r.tabela == 'lancamentos');
+
+  test('paga no aparelho A e edição não paga mais nova do B: continua paga e a versão paga volta ao servidor', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('r6', TransactionSpecialType.repetitive, paga: true);
+    await sync();
+    expect(lancs().single.dados!['pago'], 1);
+    // B editou sem saber do pagamento: versão não paga mais nova, sem marcador de despagar.
+    cliente.servidor.add(Registro('lancamentos', 'cashew:r6', dadosRec(false), _futuro(), null));
+    cliente.enviados.clear();
+    await sync();
+    expect((await _txs()).singleWhere((t) => t.transactionPk == 'r6').paid, true);
+    cliente.enviados.clear();
+    await sync();
+    expect(lancs().single.dados!['pago'], 1);
+    expect(lancs().single.dados!.containsKey('despago'), false);
+    // O servidor passa a guardar a versão paga (a mais nova); o outro aparelho a aplica e nada mais sobe.
+    cliente.servidor
+      ..clear()
+      ..add(Registro('lancamentos', 'cashew:r6', lancs().single.dados, _futuro(), null));
+    await sync(); // a rodada ainda reenviava o espelho antigo (pull anterior); depois disso estabiliza
+    cliente.enviados.clear();
+    await sync();
+    expect(lancs(), isEmpty);
+  });
+
+  test('despagar de propósito propaga: vai com despago e o outro aparelho aceita', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('r7', TransactionSpecialType.repetitive, paga: true);
+    await sync();
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('r7')))
+        .write(TransactionsCompanion(
+            paid: const Value(false),
+            dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
+    cliente.enviados.clear();
+    await sync();
+    expect(lancs().single.dados!['pago'], 0);
+    expect(lancs().single.dados!['despago'], 1);
+    // Aparelho B (paga localmente) recebe o despagar explícito e obedece, sem reenviar a versão paga.
+    final b = await _txs();
+    expect(b.singleWhere((t) => t.transactionPk == 'r7').paid, false);
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('r7')))
+        .write(const TransactionsCompanion(paid: Value(true)));
+    cliente.servidor.add(Registro('lancamentos', 'cashew:r7', dadosRec(false, despago: true), _futuro(), null));
+    cliente.enviados.clear();
+    await sync();
+    expect((await _txs()).singleWhere((t) => t.transactionPk == 'r7').paid, false);
+    for (var i = 0; i < 2; i++) {
+      cliente.enviados.clear();
+      await sync();
+      expect(lancs().where((r) => r.dados!['pago'] == 1), isEmpty);
+    }
+  });
+
+  test('despagar no A com o B offline por várias rodadas: B fica não paga e não reenvia', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('r8', TransactionSpecialType.repetitive, paga: true);
+    await sync();
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('r8')))
+        .write(TransactionsCompanion(
+            paid: const Value(false),
+            dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
+    // Várias rodadas do A: o marcador continua no registro.
+    Map<String, dynamic>? noServidor;
+    for (var i = 0; i < 3; i++) {
+      cliente.enviados.clear();
+      await sync();
+      if (lancs().isNotEmpty) noServidor = lancs().last.dados;
+    }
+    expect(noServidor!['pago'], 0);
+    expect(noServidor['despago'], 1);
+    // Aparelho B: paga localmente, nunca viu o despagar; ao abrir recebe o registro e obedece.
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('r8')))
+        .write(const TransactionsCompanion(paid: Value(true)));
+    cliente.servidor.add(Registro('lancamentos', 'cashew:r8', noServidor, _futuro(), null));
+    await sync();
+    expect((await _txs()).singleWhere((t) => t.transactionPk == 'r8').paid, false);
+    for (var i = 0; i < 2; i++) {
+      cliente.enviados.clear();
+      await sync();
+      expect(lancs().where((r) => r.dados!['pago'] == 1), isEmpty);
+    }
+    // Pagar de novo: sai pago 1 sem despago.
+    await (database.update(database.transactions)
+          ..where((t) => t.transactionPk.equals('r8')))
+        .write(TransactionsCompanion(
+            paid: const Value(true),
+            dateTimeModified: Value(DateTime.now().add(const Duration(minutes: 5)))));
+    cliente.enviados.clear();
+    await sync();
+    expect(lancs().last.dados!['pago'], 1);
+    expect(lancs().last.dados!.containsKey('despago'), false);
+  });
+
+  test('agendada que virou lançamento comum em outro aparelho perde o tipo', () async {
+    await _categoria('c1', 'Casa');
+    await agendada('u2', TransactionSpecialType.upcoming);
+    await sync();
+    cliente.servidor.add(Registro(
+        'lancamentos',
+        'cashew:u2',
+        {'data': '2026-12-05', 'descricao': 'Aluguel', 'valor': -1500, 'categoria_id': 'cashew:c1'},
+        _futuro(),
+        null));
+    await sync();
+    final t = (await _txs()).singleWhere((t) => t.transactionPk == 'u2');
+    expect([t.type, t.paid], [null, true]);
+  });
+
+  Future<void> orcamento(String pk, String nome,
+          {bool arquivado = false, bool absoluto = false}) =>
+      database.into(database.budgets).insert(BudgetsCompanion.insert(
+          budgetPk: Value(pk),
+          name: nome,
+          amount: 500,
+          startDate: DateTime(2026, 11, 1),
+          endDate: DateTime(2026, 11, 30),
+          periodLength: 1,
+          order: 0,
+          archived: Value(arquivado),
+          isAbsoluteSpendingLimit: Value(absoluto),
+          dateTimeModified: Value(DateTime.now())));
+
+  Future<void> limite(String pk, String orc, String cat, double valor) =>
+      database.into(database.categoryBudgetLimits).insert(
+          CategoryBudgetLimitsCompanion.insert(
+              categoryLimitPk: Value(pk),
+              categoryFk: cat,
+              budgetFk: orc,
+              amount: valor,
+              dateTimeModified: Value(DateTime.now())));
+
+  Iterable<Registro> _de(String tabela) =>
+      _semCatsMb(cliente.enviados).where((r) => r.tabela == tabela);
+
+  Future<Budget> _orc(String pk) => (database.select(database.budgets)
+        ..where((b) => b.budgetPk.equals(pk)))
+      .getSingle();
+
+  test('limite por categoria vai no push com ids prefixados e não é reenviado', () async {
+    await _categoria('c1', 'Mercado');
+    await orcamento('b1', 'Casa');
+    await limite('l1', 'b1', 'c1', 30);
+    await limite('l2', 'sumiu', 'c1', 10); // orçamento inexistente: fica fora
+    await sync();
+    final l = _de('limites').single;
+    expect(l.id, 'cashew:l1');
+    expect(l.dados, {'orcamento_id': 'cashew:b1', 'categoria_id': 'cashew:c1', 'valor': 30});
+    cliente.enviados.clear();
+    await sync();
+    expect(_de('limites'), isEmpty);
+    expect(cliente.enviados.where((r) => r.deletedAt != null && r.tabela == 'limites'), isEmpty);
+  });
+
+  test('limite remoto chega junto com o orçamento, é aplicado e não volta', () async {
+    await _categoria('c1', 'Mercado');
+    final q = _futuro();
+    cliente.servidor.addAll([
+      Registro('limites', 'cashew:l3',
+          {'orcamento_id': 'cashew:b2', 'categoria_id': 'cashew:c1', 'valor': 25}, q, null),
+      Registro('orcamentos', 'cashew:b2',
+          {'nome': 'Viagem', 'valor': 900, 'categoria_ids': [], 'periodo': 'ciclo'}, q, null),
+    ]);
+    await sync();
+    final l = (await database.select(database.categoryBudgetLimits).get()).single;
+    expect([l.categoryLimitPk, l.budgetFk, l.categoryFk, l.amount], ['l3', 'b2', 'c1', 25.0]);
+    cliente.enviados.clear();
+    await sync();
+    expect(_de('limites'), isEmpty);
+  });
+
+  test('exclusão do limite vai como tombstone e a remota apaga o local', () async {
+    await _categoria('c1', 'Mercado');
+    await orcamento('b1', 'Casa');
+    await limite('l1', 'b1', 'c1', 30);
+    await limite('l4', 'b1', 'c1', 5);
+    await sync();
+    cliente.enviados.clear();
+    await (database.delete(database.categoryBudgetLimits)
+          ..where((x) => x.categoryLimitPk.equals('l1')))
+        .go();
+    cliente.servidor.add(Registro('limites', 'cashew:l4', null, _futuro(), _futuro()));
+    await sync();
+    expect(_de('limites').map((r) => [r.id, r.deletedAt != null]), [['cashew:l1', true]]);
+    expect(await database.select(database.categoryBudgetLimits).get(), isEmpty);
+  });
+
+  test('orçamento arquivado e limite absoluto sincronizam em vez de ficarem de fora', () async {
+    await orcamento('b3', 'Antigo', arquivado: true, absoluto: true);
+    await orcamento('b4', 'Atual');
+    await sync();
+    final o = {for (final r in _de('orcamentos')) r.id: r.dados!};
+    expect(o['cashew:b3']!['arquivado'], 1);
+    expect(o['cashew:b3']!['limite_absoluto'], 1);
+    expect(o['cashew:b4']!.containsKey('arquivado'), false);
+    cliente.enviados.clear();
+    await sync();
+    expect(_de('orcamentos'), isEmpty);
+    expect(_semCatsMb(cliente.enviados).where((r) => r.deletedAt != null), isEmpty);
+  });
+
+  test('desarquivar localmente envia arquivado 0 porque o servidor tinha 1', () async {
+    await orcamento('b3', 'Antigo', arquivado: true);
+    await sync();
+    cliente.enviados.clear();
+    await (database.update(database.budgets)..where((b) => b.budgetPk.equals('b3')))
+        .write(BudgetsCompanion(
+            archived: const Value(false),
+            dateTimeModified: Value(DateTime.now().add(const Duration(seconds: 5)))));
+    await sync();
+    expect(_de('orcamentos').single.dados!['arquivado'], 0);
+  });
+
+  test('orçamento remoto arquivado é aplicado e desarquivado pelo registro seguinte', () async {
+    cliente.servidor.add(Registro('orcamentos', 'cashew:b5',
+        {'nome': 'Velho', 'valor': 100, 'categoria_ids': [], 'periodo': 'ciclo', 'arquivado': 1, 'limite_absoluto': 1},
+        '2026-11-01T10:00:00.000Z', null));
+    await sync();
+    var b = await _orc('b5');
+    expect([b.archived, b.isAbsoluteSpendingLimit], [true, true]);
+    cliente.enviados.clear();
+    await sync();
+    expect(_de('orcamentos'), isEmpty);
+    cliente.servidor
+      ..clear()
+      ..add(Registro('orcamentos', 'cashew:b5',
+          {'nome': 'Velho', 'valor': 100, 'categoria_ids': [], 'periodo': 'ciclo', 'arquivado': 0, 'limite_absoluto': 1},
+          '2026-11-02T10:00:00.000Z', null));
+    await sync();
+    b = await _orc('b5');
+    expect(b.archived, false);
+    cliente.enviados.clear();
+    await sync();
+    expect(_de('orcamentos'), isEmpty);
+  });
+
+  test('registro de orçamento sem os campos novos não muda o estado local', () async {
+    await orcamento('b6', 'Casa', arquivado: true);
+    cliente.servidor.add(Registro('orcamentos', 'cashew:b6',
+        {'nome': 'Casa 2', 'valor': 700, 'categoria_ids': [], 'periodo': 'ciclo'}, _futuro(), null));
+    await sync();
+    final b = await _orc('b6');
+    expect([b.name, b.archived], ['Casa 2', true]);
+  });
+
+  group('título e nota de transação mb:', () {
+    Future<void> editar({String? nome, String? nota}) async {
+      await (database.update(database.transactions)
+            ..where((t) => t.transactionPk.equals('mb:t1')))
+          .write(TransactionsCompanion(
+              name: nome == null ? const Value.absent() : Value(nome),
+              note: nota == null ? const Value.absent() : Value(nota),
+              dateTimeModified:
+                  Value(DateTime.now().add(const Duration(seconds: 5)))));
+    }
+
+    test('título e nota editados sobem em ajustes uma vez só', () async {
+      cliente.extra = banco();
+      await sync();
+      // Sem edição, o texto do banco não viaja.
+      expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+      await editar(nome: 'Padaria da esquina', nota: 'pão do café');
+      cliente.enviados.clear();
+      await sync();
+      final aj = cliente.enviados.singleWhere((r) => r.tabela == 'ajustes');
+      expect(aj.dados!['nome'], 'Padaria da esquina');
+      expect(aj.dados!['nota'], 'pão do café');
+      cliente.enviados.clear();
+      await sync();
+      expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+    });
+
+    test('título editado em outro aparelho é aplicado, sobrevive ao pull e não volta', () async {
+      cliente.extra = banco();
+      await sync();
+      cliente.servidor.add(Registro('ajustes', 't1',
+          {'nome': 'Padaria 2', 'nota': 'nota remota'}, _futuro(), null));
+      cliente.enviados.clear();
+      await sync();
+      var t = (await _txs()).single;
+      expect([t.name, t.note], ['Padaria 2', 'nota remota']);
+      for (var i = 0; i < 2; i++) {
+        cliente.enviados.clear();
+        await sync();
+        expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+      }
+      t = (await _txs()).single;
+      expect([t.name, t.note], ['Padaria 2', 'nota remota']);
+    });
+
+    test('instalação nova: transação do banco já nasce com o título do ajuste', () async {
+      cliente.servidor.add(Registro('ajustes', 't1',
+          {'nome': 'Padaria 3', 'nota': 'minha nota'}, _futuro(), null));
+      cliente.extra = banco();
+      await sync();
+      final t = (await _txs()).singleWhere((t) => t.transactionPk == 'mb:t1');
+      expect([t.name, t.note], ['Padaria 3', 'minha nota']);
+    });
+  });
+
+  group('configurações', () {
+    List<Registro> configs() =>
+        cliente.enviados.where((r) => r.tabela == 'configuracoes').toList();
+
+    setUp(() async {
+      sharedPreferences = await SharedPreferences.getInstance();
+      appStateSettings = {
+        'cyclePeriodLength': 1,
+        'showNetWorth': false,
+        'homePageOrder': ['a', 'b'],
+        'font': 'Geist',
+      };
+    });
+
+    test('só o que difere do padrão sobe; fora da lista nunca sobe; segunda rodada não reenvia', () async {
+      appStateSettings['cyclePeriodLength'] = 3;
+      appStateSettings['font'] = 'Outra';
+      await sync();
+      final ids = configs().map((r) => r.id).toSet();
+      expect(ids, containsAll(['cyclePeriodLength', 'homePageOrder']));
+      expect(ids, isNot(contains('font')));
+      expect(ids, isNot(contains('showNetWorth')));
+      expect(configs().singleWhere((r) => r.id == 'cyclePeriodLength').dados!['valor'], '3');
+      cliente.enviados.clear();
+      await sync();
+      expect(configs(), isEmpty);
+    });
+
+    test('mudar localmente sobe de novo e voltar ao padrão propaga o padrão', () async {
+      appStateSettings['cyclePeriodLength'] = 3;
+      await sync();
+      appStateSettings['cyclePeriodLength'] = 1;
+      cliente.enviados.clear();
+      await sync();
+      expect(configs().single.dados!['valor'], '1');
+      cliente.enviados.clear();
+      await sync();
+      expect(configs(), isEmpty);
+    });
+
+    test('configuração remota é aplicada, não volta e chave fora da lista é ignorada', () async {
+      cliente.servidor.addAll([
+        Registro('configuracoes', 'showNetWorth', {'valor': 'true'}, _futuro(), null),
+        Registro('configuracoes', 'homePageOrder', {'valor': '["x","y","z"]'}, _futuro(), null),
+        Registro('configuracoes', 'font', {'valor': '"Remota"'}, _futuro(), null),
+      ]);
+      await sync();
+      expect(appStateSettings['showNetWorth'], true);
+      expect(appStateSettings['homePageOrder'], ['x', 'y', 'z']);
+      expect(appStateSettings['font'], 'Geist');
+      cliente.enviados.clear();
+      await sync();
+      expect(configs(), isEmpty);
+    });
   });
 }

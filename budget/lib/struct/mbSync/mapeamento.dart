@@ -38,12 +38,16 @@ class OrcLocal {
   final String pk, nome;
   final double valor;
   final List<String>? categoriaPks;
+  // 1/0 vai no registro; null = omitido (só viaja o que é verdadeiro ou o que o servidor já tem, para não reenviar tudo).
+  final int? arquivado, limiteAbsoluto;
   final DateTime? modificadoEm;
   const OrcLocal({
     required this.pk,
     required this.nome,
     required this.valor,
     this.categoriaPks,
+    this.arquivado,
+    this.limiteAbsoluto,
     this.modificadoEm,
   });
 }
@@ -75,6 +79,12 @@ class LancLocal {
   // Escolha de orçamentos (pks); null = padrão (Geral). `limparOrcamentos`: o servidor tem uma escolha antiga a apagar.
   final Set<String>? orcamentoPks;
   final bool limparOrcamentos;
+  // Agendada ('agendada') ou recorrente ('recorrente'); null = lançamento comum. Os demais só valem com `tipo`.
+  // `repeticao`: diaria, semanal, mensal, anual ou personalizada; `vencimento` é o dia em que venceu (antes de pago).
+  final String? tipo, repeticao;
+  final bool pago, pulado, proximaCriada;
+  final int? periodo;
+  final DateTime? fim, vencimento;
   final DateTime? modificadoEm;
   const LancLocal({
     required this.pk,
@@ -88,6 +98,14 @@ class LancLocal {
     this.dividaPk,
     this.orcamentoPks,
     this.limparOrcamentos = false,
+    this.tipo,
+    this.repeticao,
+    this.pago = false,
+    this.pulado = false,
+    this.proximaCriada = false,
+    this.periodo,
+    this.fim,
+    this.vencimento,
     this.modificadoEm,
   });
 }
@@ -136,6 +154,8 @@ Map<String, dynamic> projetarOrcamento(OrcLocal o) => {
         ..sort(),
       // Todo orçamento segue o ciclo do salário; sem isso o Worker usaria o mês civil ("mensal").
       'periodo': 'ciclo',
+      if (o.arquivado != null) 'arquivado': o.arquivado,
+      if (o.limiteAbsoluto != null) 'limite_absoluto': o.limiteAbsoluto,
     };
 
 /// Campo `orcamento_ids` (ids com prefixo, ordenados); `null` apaga a escolha antiga do servidor; ausente = nada a dizer.
@@ -173,6 +193,16 @@ Map<String, dynamic> projetarLancamento(LancLocal l) {
     'meta_id': l.metaPk == null ? null : idDoPk(l.metaPk!),
     'divida_id': l.dividaPk == null ? null : idDoPk(l.dividaPk!),
     ..._orcamentoIds(l.orcamentoPks, l.limparOrcamentos),
+    if (l.tipo != null) ...{
+      'tipo': l.tipo,
+      'pago': l.pago ? 1 : 0,
+      'pulado': l.pulado ? 1 : 0,
+      'proxima_criada': l.proximaCriada ? 1 : 0,
+      'repeticao': l.repeticao,
+      'periodo': l.periodo,
+      'fim': l.fim == null ? null : dataLocal(l.fim!),
+      'vencimento': l.vencimento == null ? null : dataLocal(l.vencimento!),
+    },
   };
 }
 
@@ -244,7 +274,17 @@ LancLocal lancamentoDeDados(String id, Map<String, dynamic> d,
       metaPk: _pkOuNulo(d['meta_id']),
       dividaPk: _pkOuNulo(d['divida_id']),
       orcamentoPks: orcamentoPksDeDados(d),
+      tipo: d['tipo'] as String?,
+      repeticao: d['repeticao'] as String?,
+      pago: d['pago'] == 1,
+      pulado: d['pulado'] == 1,
+      proximaCriada: d['proxima_criada'] == 1,
+      periodo: (d['periodo'] as num?)?.toInt(),
+      fim: _dataOuNulo(d['fim']),
+      vencimento: _dataOuNulo(d['vencimento']),
     );
+
+DateTime? _dataOuNulo(Object? v) => v is String ? dataDeTexto(v) : null;
 
 /// `orcamento_ids` do registro como pks; `null` (campo ausente) = padrão.
 Set<String>? orcamentoPksDeDados(Map<String, dynamic> d) => d['orcamento_ids'] is List
@@ -289,6 +329,7 @@ Projetado? projetarAjuste({
   bool ajusteDeCategoriaVigente = false,
   Set<String>? orcamentoPks,
   bool limparOrcamentos = false,
+  Map<String, dynamic> textos = const {},
 }) {
   final id = txPk.startsWith('mb:') ? txPk.substring(3) : txPk;
   Map<String, dynamic>? dados;
@@ -303,6 +344,7 @@ Projetado? projetarAjuste({
     }
   }
   final orcamentos = existeLocal ? _orcamentoIds(orcamentoPks, limparOrcamentos) : const {};
-  if (dados == null && orcamentos.isEmpty) return null;
-  return Projetado('ajustes', id, {...?dados, ...orcamentos}, editadoEm);
+  final editados = existeLocal ? textos : const <String, dynamic>{};
+  if (dados == null && orcamentos.isEmpty && editados.isEmpty) return null;
+  return Projetado('ajustes', id, {...?dados, ...orcamentos, ...editados}, editadoEm);
 }
