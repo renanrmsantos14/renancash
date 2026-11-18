@@ -20,7 +20,6 @@ import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/languageMap.dart';
 import 'package:budget/struct/navBarIconsData.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
-import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/exportDB.dart';
 import 'package:budget/widgets/importCSV.dart';
 import 'package:budget/widgets/exportCSV.dart';
@@ -94,25 +93,6 @@ class MoreActionsPageState extends State<MoreActionsPage> {
         title: "more-actions".tr(),
         backButton: false,
         horizontalPaddingConstrained: true,
-        actions: [
-          CustomPopupMenuButton(
-            showButtons: true,
-            keepOutFirst: true,
-            items: [
-              if (appStateSettings["showFAQAndHelpLink"] == true)
-                DropdownItemMenu(
-                  id: "open-faq",
-                  label: "faq".tr(),
-                  icon: appStateSettings["outlinedIcons"]
-                      ? Icons.live_help_outlined
-                      : Icons.live_help_rounded,
-                  action: () {
-                    openUrl("https://cashewapp.web.app/faq.html");
-                  },
-                ),
-            ],
-          ),
-        ],
         listWidgets: [MorePages()],
       );
     });

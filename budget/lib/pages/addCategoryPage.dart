@@ -439,55 +439,60 @@ class _AddCategoryPageState extends State<AddCategoryPage>
         ],
         staticOverlay: Align(
           alignment: AlignmentDirectional.bottomCenter,
-          child: selectedTitle == "" || selectedTitle == null
-              ? SaveBottomButton(
-                  label: "set-name".tr(),
-                  onTap: () async {
-                    FocusScope.of(context).unfocus();
-                    Future.delayed(Duration(milliseconds: 100), () {
-                      _titleFocusNode.requestFocus();
-                    });
-                  },
-                  disabled: false,
-                )
-              : canSelectIfSubCategoryOrMainCategory() &&
-                      mainCategoryPkForSubcategoryWhenCreating == null &&
-                      isMainCategoryWhenCreating == false
-                  ? SaveBottomButton(
-                      label: "select-main-category".tr(),
-                      onTap: () async {
-                        openBottomSheet(
-                          context,
-                          PopupFramework(
-                            title: "select-category".tr(),
-                            subtitle:
-                                "select-the-main-category-for-this-subcategory"
-                                    .tr(),
-                            child: SelectCategory(
-                              setSelectedCategory:
-                                  (TransactionCategory category) {
-                                mainCategoryPkForSubcategoryWhenCreating =
-                                    category.categoryPk;
-                              },
-                              next: () async {
-                                await addCategory();
-                              },
-                              addButton: false,
+          child: Padding(
+            padding: EdgeInsetsDirectional.symmetric(
+              horizontal: getHorizontalPaddingConstrained(context),
+            ),
+            child: selectedTitle == "" || selectedTitle == null
+                ? SaveBottomButton(
+                    label: "set-name".tr(),
+                    onTap: () async {
+                      FocusScope.of(context).unfocus();
+                      Future.delayed(Duration(milliseconds: 100), () {
+                        _titleFocusNode.requestFocus();
+                      });
+                    },
+                    disabled: false,
+                  )
+                : canSelectIfSubCategoryOrMainCategory() &&
+                        mainCategoryPkForSubcategoryWhenCreating == null &&
+                        isMainCategoryWhenCreating == false
+                    ? SaveBottomButton(
+                        label: "select-main-category".tr(),
+                        onTap: () async {
+                          openBottomSheet(
+                            context,
+                            PopupFramework(
+                              title: "select-category".tr(),
+                              subtitle:
+                                  "select-the-main-category-for-this-subcategory"
+                                      .tr(),
+                              child: SelectCategory(
+                                setSelectedCategory:
+                                    (TransactionCategory category) {
+                                  mainCategoryPkForSubcategoryWhenCreating =
+                                      category.categoryPk;
+                                },
+                                next: () async {
+                                  await addCategory();
+                                },
+                                addButton: false,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      disabled: !(canAddCategory ?? false),
-                    )
-                  : SaveBottomButton(
-                      label: widget.category == null
-                          ? "add-category".tr()
-                          : "save-changes".tr(),
-                      onTap: () async {
-                        await addCategory();
-                      },
-                      disabled: !(canAddCategory ?? false),
-                    ),
+                          );
+                        },
+                        disabled: !(canAddCategory ?? false),
+                      )
+                    : SaveBottomButton(
+                        label: widget.category == null
+                            ? "add-category".tr()
+                            : "save-changes".tr(),
+                        onTap: () async {
+                          await addCategory();
+                        },
+                        disabled: !(canAddCategory ?? false),
+                      ),
+          ),
         ),
         slivers: [
           SliverToBoxAdapter(
@@ -553,18 +558,17 @@ class _AddCategoryPageState extends State<AddCategoryPage>
                                   autoFocus: kIsWeb && getIsFullScreen(context),
                                   focusNode: _titleFocusNode,
                                   labelText: "name-placeholder".tr(),
-                                  bubbly: false,
                                   controller: _titleController,
                                   onChanged: (text) {
                                     setSelectedTitle(text,
                                         userAttemptedToChangeTitlePassed: true);
                                   },
                                   padding: EdgeInsetsDirectional.zero,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 if (widget.category?.categoryPk != "0")
-                                  SizedBox(height: 17),
+                                  SizedBox(height: 10),
                                 if (widget.category?.categoryPk == "0")
                                   AnimatedOpacity(
                                     opacity: selectedTitle !=
@@ -1110,63 +1114,69 @@ class AssociatedTitleContainer extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsetsDirectional.only(bottom: 8.0),
-      child: Tappable(
-        onTap: () {
-          openBottomSheet(
-            context,
-            popupWithKeyboard: true,
-            PopupFramework(
-              title: "set-title".tr(),
-              child: SelectText(
-                buttonLabel: "set-title".tr(),
-                setSelectedText: (text) {
-                  titleName = text;
-                  setTitle(text);
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadiusDirectional.circular(12),
+          border: Border.all(color: cores(context).line),
+        ),
+        child: Tappable(
+          onTap: () {
+            openBottomSheet(
+              context,
+              popupWithKeyboard: true,
+              PopupFramework(
+                title: "set-title".tr(),
+                child: SelectText(
+                  buttonLabel: "set-title".tr(),
+                  setSelectedText: (text) {
+                    titleName = text;
+                    setTitle(text);
+                  },
+                  labelText: "set-title".tr(),
+                  selectedText: titleName,
+                  placeholder: "title-placeholder".tr(),
+                ),
+              ),
+            );
+          },
+          borderRadius: 12,
+          color: backgroundColor,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.symmetric(
+                      horizontal: 18, vertical: 14),
+                  child: TextFont(
+                    text: title.title,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              Tappable(
+                onTap: () async {
+                  deleteAssociatedTitlePopup(
+                    context,
+                    title: title,
+                    routesToPopAfterDelete: RoutesToPopAfterDelete.None,
+                  );
                 },
-                labelText: "set-title".tr(),
-                selectedText: titleName,
-                placeholder: "title-placeholder".tr(),
-              ),
-            ),
-          );
-        },
-        borderRadius: 15,
-        color: backgroundColor,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsetsDirectional.symmetric(
-                    horizontal: 25, vertical: 15),
-                child: TextFont(
-                  text: title.title,
-                  fontSize: 16.5,
+                borderRadius: 12,
+                color: backgroundColor,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.all(14),
+                  child: Icon(
+                    appStateSettings["outlinedIcons"]
+                        ? Icons.close_outlined
+                        : Icons.close_rounded,
+                    size: 20,
+                    color: cores(context).mu,
+                  ),
                 ),
               ),
-            ),
-            Tappable(
-              onTap: () async {
-                deleteAssociatedTitlePopup(
-                  context,
-                  title: title,
-                  routesToPopAfterDelete: RoutesToPopAfterDelete.None,
-                );
-              },
-              borderRadius: 15,
-              color: backgroundColor,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.all(14),
-                child: Icon(
-                  appStateSettings["outlinedIcons"]
-                      ? Icons.close_outlined
-                      : Icons.close_rounded,
-                  size: 25,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1268,8 +1278,9 @@ class SelectIsSubcategory extends StatelessWidget {
                     iconData: appStateSettings["outlinedIcons"]
                         ? Icons.info_outlined
                         : Icons.info_outline_rounded,
-                    iconSize: 16,
-                    scale: 1.6,
+                    iconSize: 20,
+                    scale: 1.0,
+                    padding: const EdgeInsetsDirectional.all(12.0),
                     onTap: () {
                       openBottomSheet(
                         context,

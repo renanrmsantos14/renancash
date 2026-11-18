@@ -8,6 +8,7 @@ import 'package:budget/pages/addCategoryPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/categoryIcon.dart';
 import 'package:budget/widgets/dropdownSelect.dart';
 import 'package:budget/widgets/fab.dart';
@@ -182,10 +183,36 @@ class _EditCategoriesPageState extends State<EditCategoriesPage> {
                         .toList();
 
                     if (snapshot.hasData && categoriesToShow.length <= 0) {
+                      if (searchValue != "") {
+                        return SliverToBoxAdapter(
+                          child: NoResults(
+                            message: "no-categories-found".tr(),
+                            noSearchResultsVariation: true,
+                          ),
+                        );
+                      }
                       return SliverToBoxAdapter(
-                        child: NoResults(
-                          message: "no-categories-found".tr(),
-                          noSearchResultsVariation: searchValue != "",
+                        child: Column(
+                          children: [
+                            NoResults(
+                              message: "no-categories-found".tr(),
+                            ),
+                            const SizedBox(height: 16),
+                            Padding(
+                              padding: const EdgeInsetsDirectional.symmetric(
+                                  horizontal: 18),
+                              child: Button(
+                                label: "add-category".tr(),
+                                onTap: () => pushRoute(
+                                  context,
+                                  AddCategoryPage(
+                                    routesToPopAfterDelete:
+                                        RoutesToPopAfterDelete.None,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }

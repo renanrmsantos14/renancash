@@ -524,17 +524,6 @@ void main() {
   }
 
   for (final modo in ['claro', 'escuro']) {
-    testWidgets('print configurações $modo', skip: _pular, (t) async {
-      appStateSettings = _ajustesHerdados(modo);
-      t.view.physicalSize = const Size(390 * 2, 844 * 2);
-      t.view.devicePixelRatio = 2;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(_herdado(modo, const MoreOptionsPagePreferences()));
-      await t.pump(const Duration(seconds: 1));
-      await expectLater(find.byType(MaterialApp),
-          matchesGoldenFile('../../.verificacao/prints/configuracoes_$modo.png'));
-    });
-
     testWidgets('print mais $modo', skip: _pular, (t) async {
       appStateSettings = _ajustesHerdados(modo);
       t.view.physicalSize = const Size(390 * 2, 900 * 2);

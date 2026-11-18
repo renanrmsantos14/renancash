@@ -64,8 +64,8 @@ class DebugPage extends StatelessWidget {
       subtitleSize: 10,
       listWidgets: [
         SettingsContainerSwitch(
-          title: "Use Cumulative Spending",
-          description: "For spending line graphs",
+          title: "Usar gastos acumulados",
+          description: "Nos gráficos de linha de despesas",
           onSwitched: (value) {
             updateSettings("showCumulativeSpending", value,
                 pagesNeedingRefresh: [0, 3], updateGlobalState: false);
@@ -80,8 +80,8 @@ class DebugPage extends StatelessWidget {
               : Icons.show_chart_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Hide Zero Transactions",
-          description: "On spending line graphs",
+          title: "Ocultar lançamentos zerados",
+          description: "Nos gráficos de linha de despesas",
           onSwitched: (value) {
             updateSettings("removeZeroTransactionEntries", value,
                 pagesNeedingRefresh: [0], updateGlobalState: false);
@@ -93,8 +93,8 @@ class DebugPage extends StatelessWidget {
               : Icons.money_off_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Start Spending At 0",
-          description: "For spending line graphs",
+          title: "Começar gastos em 0",
+          description: "Nos gráficos de linha de despesas",
           onSwitched: (value) {
             updateSettings("ignorePastAmountSpent", value,
                 pagesNeedingRefresh: [0, 3], updateGlobalState: false);
@@ -109,7 +109,7 @@ class DebugPage extends StatelessWidget {
               : Icons.add_chart_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Show Past Spending Trajectory",
+          title: "Mostrar trajetória de gastos passados",
           onSwitched: (value) {
             updateSettings("showPastSpendingTrajectory", value,
                 pagesNeedingRefresh: [0], updateGlobalState: false);
@@ -120,9 +120,9 @@ class DebugPage extends StatelessWidget {
               : Icons.blur_circular_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Circular Progress Rotation Category Offset",
+          title: "Compensar rotação do gráfico circular",
           description:
-              "Try and align with what is displayed in the pie graph. Odd rotations with subcategories.",
+              "Alinha o anel circular com o gráfico de pizza por categoria.",
           onSwitched: (value) {
             updateSettings("circularProgressRotation", value,
                 updateGlobalState: true);
@@ -137,8 +137,8 @@ class DebugPage extends StatelessWidget {
               : Icons.rotate_90_degrees_cw_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Large Transaction Entry".tr(),
-          description: "Show more information in a transaction entry".tr(),
+          title: "Lançamentos expandidos",
+          description: "Mostrar mais informações em cada linha de lançamento",
           onSwitched: (value) {
             updateSettings("nonCompactTransactions", value,
                 updateGlobalState: true, pagesNeedingRefresh: [0, 1, 2, 3]);
@@ -149,10 +149,9 @@ class DebugPage extends StatelessWidget {
               : Icons.web_asset_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Restrict amount transactions loaded".tr(),
+          title: "Limitar quantidade de lançamentos carregados",
           description:
-              "Load a small number of transactions when loading a page initially, a view all button will appear at the bottom to load all. Only applies to some pages."
-                  .tr(),
+              "Carrega poucos lançamentos inicialmente e exibe um botão para ver todos no final da página.",
           onSwitched: (value) {
             updateSettings("restrictAmountOfInitiallyLoadedTransactions", value,
                 updateGlobalState: true);
@@ -165,10 +164,9 @@ class DebugPage extends StatelessWidget {
               : Icons.sort_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Fade Transaction Title Overflow".tr(),
+          title: "Suavizar corte de títulos longos",
           description:
-              "Fade overflow text instead of adding '...' for transactions"
-                  .tr(),
+              "Aplica degradê no texto longo em vez de reticências nos lançamentos",
           onSwitched: (value) {
             updateSettings("fadeTransactionNameOverflows", value,
                 updateGlobalState: true);
@@ -180,7 +178,7 @@ class DebugPage extends StatelessWidget {
               : Icons.more_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Show FAQ website buttons".tr(),
+          title: "Mostrar botões de ajuda e perguntas frequentes",
           onSwitched: (value) {
             updateSettings("showFAQAndHelpLink", value,
                 updateGlobalState: false, pagesNeedingRefresh: [3]);
@@ -191,7 +189,7 @@ class DebugPage extends StatelessWidget {
               : Icons.live_help_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Show extra info text".tr(),
+          title: "Mostrar textos explicativos extras",
           onSwitched: (value) {
             updateSettings("showExtraInfoText", value,
                 updateGlobalState: false, pagesNeedingRefresh: [3]);
@@ -219,8 +217,8 @@ class DebugPage extends StatelessWidget {
                 pagesNeedingRefresh: [], updateGlobalState: false);
           },
           initialValue: appStateSettings["savingHapticFeedback"] == true,
-          title: "Saving Haptic Feedback".tr(),
-          description: "When saving changes or adding, provide haptic feedback",
+          title: "Vibração ao salvar",
+          description: "Vibrar ao salvar alterações ou adicionar itens",
           icon: appStateSettings["outlinedIcons"]
               ? Icons.vibration_outlined
               : Icons.vibration_rounded,
@@ -232,8 +230,8 @@ class DebugPage extends StatelessWidget {
           },
           initialValue:
               appStateSettings["closeNavigationHapticFeedback"] == true,
-          title: "Close Navigation Haptic Feedback".tr(),
-          description: "When closing navigation, provide haptic feedback",
+          title: "Vibração ao fechar tela",
+          description: "Vibrar ao voltar ou fechar uma tela",
           icon: appStateSettings["outlinedIcons"]
               ? Icons.vibration_outlined
               : Icons.vibration_rounded,
@@ -244,8 +242,8 @@ class DebugPage extends StatelessWidget {
                 pagesNeedingRefresh: [], updateGlobalState: false);
           },
           initialValue: appStateSettings["tabNavigationHapticFeedback"] == true,
-          title: "Navigation Haptic Feedback".tr(),
-          description: "When changing tabs, provide haptic feedback",
+          title: "Vibração ao trocar de aba",
+          description: "Vibrar ao navegar entre abas",
           icon: appStateSettings["outlinedIcons"]
               ? Icons.vibration_outlined
               : Icons.vibration_rounded,
@@ -255,9 +253,9 @@ class DebugPage extends StatelessWidget {
             updateSettings("colorTintCategoryIcon", value,
                 updateGlobalState: true);
           },
-          title: "Category Icon Tint",
+          title: "Tingir ícones de categoria",
           description:
-              "Color category icons to follow color, material you must be enabled",
+              "Colorir ícones de categoria conforme a cor do tema (requer Material You)",
           initialValue: appStateSettings["colorTintCategoryIcon"] == true,
           icon: appStateSettings["outlinedIcons"]
               ? Icons.category_outlined
@@ -268,9 +266,9 @@ class DebugPage extends StatelessWidget {
             updateSettings("accountColorfulAmountsWithArrows", value,
                 updateGlobalState: true);
           },
-          title: "Colorful Arrow Account Totals",
+          title: "Totais de conta coloridos com seta",
           description:
-              "Use an arrow and color to indicate the polarity of account totals on home",
+              "Usar seta e cor para indicar o sinal do saldo das contas no Início",
           initialValue:
               appStateSettings["accountColorfulAmountsWithArrows"] == true,
           icon: appStateSettings["outlinedIcons"]
@@ -278,9 +276,9 @@ class DebugPage extends StatelessWidget {
               : Icons.swap_vert_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Colorful Net Totals".tr(),
+          title: "Totais líquidos coloridos",
           description:
-              "Negative totals indicated with red, positive with green",
+              "Totais negativos em vermelho e positivos em verde",
           onSwitched: (value) {
             updateSettings("netTotalsColorful", value, updateGlobalState: true);
           },
@@ -296,17 +294,17 @@ class DebugPage extends StatelessWidget {
                 pagesNeedingRefresh: [], updateGlobalState: false);
           },
           initialValue: appStateSettings["enableGoogleLoginFlyIn"] == true,
-          title: "Google Login Flyin".tr(),
+          title: "Aviso de login com Google",
           description:
-              "Show login with Google dropdown if not logged in and full screen",
+              "Mostrar aviso de login com Google em tela cheia se desconectado",
           icon: Icons.g_mobiledata,
         ),
         SettingsContainerSwitch(
           onSwitched: (value) async {
             updateSettings("forceAutoLogin", value, updateGlobalState: false);
           },
-          title: "Force Auto Login",
-          description: "If sync is disabled or web app, force login popup.",
+          title: "Forçar login automático",
+          description: "Forçar janela de login na web ou quando a sincronização estiver desativada.",
           initialValue: appStateSettings["forceAutoLogin"] == true,
           icon: appStateSettings["outlinedIcons"]
               ? Icons.input_outlined
@@ -330,8 +328,8 @@ class DebugPage extends StatelessWidget {
               : Icons.sync_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Emulate iOS",
-          description: "Enables scroll behaviour and icons from iOS",
+          title: "Emular iOS",
+          description: "Ativa comportamento de rolagem e ícones do iOS",
           onSwitched: (value) {
             if (value == true) {
               // Disable iOS font for now... Avenir looks better
@@ -352,18 +350,18 @@ class DebugPage extends StatelessWidget {
             updateSettings("incognitoKeyboard", value,
                 updateGlobalState: false);
           },
-          title: "Incognito Text Input",
+          title: "Teclado em modo privado",
           description:
-              "Use the incognito keyboard for text input (if supported)",
+              "Usar teclado privado nos campos de texto (se suportado)",
           initialValue: appStateSettings["incognitoKeyboard"] == true,
           icon: appStateSettings["outlinedIcons"]
               ? Icons.keyboard_outlined
               : Icons.keyboard_rounded,
         ),
         SettingsContainerSwitch(
-          title: "Method Added",
+          title: "Origem do lançamento",
           description:
-              "Show the method added in the transactions page and filters",
+              "Mostrar a origem do lançamento na lista e nos filtros",
           onSwitched: (value) {
             updateSettings("showMethodAdded", value, updateGlobalState: false);
           },
@@ -371,8 +369,8 @@ class DebugPage extends StatelessWidget {
           icon: Icons.bookmark_add,
         ),
         SettingsContainerSwitch(
-          title: "Show Transaction ID",
-          description: "Show the transaction ID in the transactions page",
+          title: "Mostrar ID do lançamento",
+          description: "Mostrar o identificador interno de cada lançamento",
           onSwitched: (value) {
             updateSettings("showTransactionPk", value,
                 updateGlobalState: false);
@@ -381,9 +379,9 @@ class DebugPage extends StatelessWidget {
           icon: Icons.password,
         ),
         SettingsContainerSwitch(
-          title: "Long Term Loan Difference Feature",
+          title: "Diferença em empréstimos de longo prazo",
           description:
-              "Instead of a common goal. When adding a new long term goal, a new option appears.",
+              "Exibe opção adicional ao criar um empréstimo de longo prazo.",
           onSwitched: (value) {
             updateSettings("longTermLoansDifferenceFeature", value,
                 updateGlobalState: true);
@@ -395,7 +393,7 @@ class DebugPage extends StatelessWidget {
         Padding(
           padding:
               const EdgeInsetsDirectional.only(top: 8.0, start: 13, end: 13),
-          child: TextFont(text: "Animation Scale"),
+          child: TextFont(text: "Escala de animação"),
         ),
         SliderSelector(
           min: 0,
@@ -414,7 +412,7 @@ class DebugPage extends StatelessWidget {
           child: Column(
             children: [
               Button(
-                label: "Redo migration (from db 37 above)",
+                label: "Refazer migração (a partir da versão 37 do banco)",
                 onTap: () async {
                   await database.customStatement('PRAGMA user_version = 37');
                   if (kIsWeb) {
@@ -426,14 +424,14 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                label: "Fix transaction polarity",
+                label: "Corrigir sinal dos lançamentos",
                 onTap: () async {
                   int result = await database.fixTransactionPolarity();
                   openSnackbar(
                     SnackbarMessage(
-                      title: "Done",
+                      title: "Concluído",
                       description:
-                          "Applied to " + result.toString() + " transactions",
+                          "Aplicado a " + result.toString() + " lançamentos",
                       icon: Icons.check,
                     ),
                   );
@@ -441,14 +439,14 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                label: "Capitalize first letter in all transactions",
+                label: "Capitalizar primeira letra de todos os lançamentos",
                 onTap: () async {
                   int result = await database.capitalizeFirst();
                   openSnackbar(
                     SnackbarMessage(
-                      title: "Done",
+                      title: "Concluído",
                       description:
-                          "Applied to " + result.toString() + " transactions",
+                          "Aplicado a " + result.toString() + " lançamentos",
                       icon: Icons.check,
                     ),
                   );
@@ -456,13 +454,13 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                label: "Vacuum/Clean DB",
+                label: "Compactar e limpar banco (VACUUM)",
                 onTap: () async {
                   try {
                     await database.customStatement('VACUUM');
                     openSnackbar(
                       SnackbarMessage(
-                        title: "Done",
+                        title: "Concluído",
                         icon: Icons.check,
                       ),
                     );
@@ -478,7 +476,7 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                  label: "Force full sync",
+                  label: "Forçar sincronização completa",
                   onTap: () async {
                     sharedPreferences.setString(
                         "dateOfLastSyncedWithClient", "{}");
@@ -488,13 +486,13 @@ class DebugPage extends StatelessWidget {
               Button(
                 expandedLayout: true,
                 label:
-                    "Clean database delete logs (WARNING: Make sure you sync with all other devices first!)",
+                    "Limpar registros de exclusão do banco (sincronize todos os aparelhos antes)",
                 onTap: () async {
                   int result = await database.deleteAllDeleteLogs();
                   openSnackbar(
                     SnackbarMessage(
-                      title: "Done",
-                      description: "Deleted " + result.toString() + " logs",
+                      title: "Concluído",
+                      description: result.toString() + " registros removidos",
                       icon: Icons.check,
                     ),
                   );
@@ -502,12 +500,12 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                  label: "View Delete Logs",
+                  label: "Ver registros de exclusão",
                   onTap: () async {
                     pushRoute(
                       context,
                       PageFramework(
-                        title: "Delete logs",
+                        title: "Registros de exclusão",
                         slivers: [
                           StreamBuilder<List<DeleteLog>>(
                             stream: database.watchAllDeleteLogs(),
@@ -534,7 +532,7 @@ class DebugPage extends StatelessWidget {
                                                     .toString() +
                                                 ": " +
                                                 deletelog.deleteLogPk +
-                                                " for " +
+                                                " — " +
                                                 deletelog.entryPk,
                                             maxLines: 10,
                                             fontSize: 12,
@@ -556,7 +554,7 @@ class DebugPage extends StatelessWidget {
                   }),
               SizedBox(height: 20),
               Button(
-                  label: "Send Notification",
+                  label: "Enviar notificação de teste",
                   onTap: () async {
                     initializeNotificationsPlatform();
                     scheduleDailyNotification(context, TimeOfDay.now(),
@@ -564,7 +562,7 @@ class DebugPage extends StatelessWidget {
                   }),
               SizedBox(height: 20),
               Button(
-                  label: "Force auto backup next launch",
+                  label: "Forçar backup automático ao abrir",
                   onTap: () async {
                     updateSettings(
                       "lastBackup",
@@ -575,7 +573,7 @@ class DebugPage extends StatelessWidget {
               SizedBox(height: 20),
               DangerousDebugFlag(
                 child: Button(
-                  label: "Create preview data",
+                  label: "Criar dados de demonstração",
                   onTap: () async {
                     generatePreviewData();
                   },
@@ -584,7 +582,7 @@ class DebugPage extends StatelessWidget {
               SizedBox(height: 10),
               DangerousDebugFlag(
                 child: Button(
-                  label: "Create random transactions",
+                  label: "Criar lançamentos aleatórios",
                   onTap: () async {
                     List<TransactionCategory> categories =
                         await database.getAllCategories();
@@ -593,7 +591,7 @@ class DebugPage extends StatelessWidget {
                         insert: true,
                         Transaction(
                           transactionPk: "-1",
-                          name: "Test" + randomDouble[i].toString(),
+                          name: "Teste" + randomDouble[i].toString(),
                           amount: randomInt[i].toDouble(),
                           note: "",
                           categoryFk: categories[i].categoryPk,
@@ -611,7 +609,7 @@ class DebugPage extends StatelessWidget {
               ),
               SizedBox(height: 20),
               Button(
-                  label: "Snackbar Test",
+                  label: "Testar aviso (Snackbar)",
                   onTap: () {
                     openSnackbar(
                       SnackbarMessage(
@@ -623,7 +621,7 @@ class DebugPage extends StatelessWidget {
                     );
                     openSnackbar(
                       SnackbarMessage(
-                        title: "Test",
+                        title: "Teste",
                         description:
                             '${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second}.${DateTime.now().millisecond}',
                         icon: Icons.abc,
@@ -642,7 +640,7 @@ class DebugPage extends StatelessWidget {
                       SnackbarMessage(
                         title:
                             '${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second}.${DateTime.now().millisecond}',
-                        description: "Some description",
+                        description: "Descrição de exemplo",
                         timeout: Duration(milliseconds: 7000),
                       ),
                     );
@@ -666,23 +664,23 @@ class DebugPage extends StatelessWidget {
                       : ""),
               SizedBox(height: 20),
               Button(
-                label: "Haptic Light",
+                label: "Vibração leve",
                 onTap: () => HapticFeedback.lightImpact(),
               ),
               Button(
-                label: "Haptic Medium",
+                label: "Vibração média",
                 onTap: () => HapticFeedback.mediumImpact(),
               ),
               Button(
-                label: "Haptic Heavy",
+                label: "Vibração forte",
                 onTap: () => HapticFeedback.heavyImpact(),
               ),
               Button(
-                label: "Haptic Selection",
+                label: "Vibração de seleção",
                 onTap: () => HapticFeedback.selectionClick(),
               ),
               Button(
-                label: "Haptic Vibrate",
+                label: "Vibrar",
                 onTap: () => HapticFeedback.vibrate(),
               ),
             ],
@@ -775,7 +773,7 @@ class _AppLinkTestingState extends State<AppLinkTesting> {
     return Column(
       children: [
         TextInput(
-          labelText: "Test App Link",
+          labelText: "Testar link do app",
           keyboardType: TextInputType.multiline,
           maxLines: null,
           minLines: 3,
@@ -785,7 +783,7 @@ class _AppLinkTestingState extends State<AppLinkTesting> {
         ),
         SizedBox(height: 10),
         Button(
-            label: "Execute App Link",
+            label: "Executar link do app",
             onTap: () async {
               Uri uri;
               try {
@@ -800,14 +798,14 @@ class _AppLinkTestingState extends State<AppLinkTesting> {
                 );
                 openPopup(
                   context,
-                  title: "Result",
+                  title: "Resultado",
                   descriptionWidget: CodeBlock(
                     text: resultOutput.toString(),
                   ),
                 );
               } catch (e) {
                 openSnackbar(SnackbarMessage(
-                    title: "Error Parsing", description: e.toString()));
+                    title: "Erro ao analisar link", description: e.toString()));
               }
             }),
         SizedBox(height: 10),

@@ -104,7 +104,9 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
     //   Future.delayed(Duration(milliseconds: 250), () {
     //     _focusNode.requestFocus();
     //   });
-    _focusNode.requestFocus();
+    if (widget.associatedTitle == null) {
+      _focusNode.requestFocus();
+    }
   }
 
   updateInitial() async {
@@ -165,7 +167,7 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
           Row(
             children: [
               Tappable(
-                borderRadius: 15,
+                borderRadius: 12,
                 onTap: () {
                   selectCategory();
                 },
@@ -176,7 +178,10 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
                   children: [
                     CategoryIcon(
                       category: selectedCategory,
-                      size: getIsFullScreen(context) ? 40 : 30,
+                      size: 28,
+                      sizePadding: 20,
+                      borderRadius: 15,
+                      margin: EdgeInsetsDirectional.zero,
                       onTap: () {
                         selectCategory();
                       },
@@ -193,15 +198,11 @@ class _AddAssociatedTitlePageState extends State<AddAssociatedTitlePage> {
               Expanded(
                 child: TextInput(
                   labelText: "title-placeholder".tr(),
-                  bubbly: false,
                   initialValue: selectedTitle,
                   onChanged: (text) {
                     setSelectedTitle(text);
                   },
-                  padding: EdgeInsetsDirectional.only(start: 7, end: 7),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  topContentPadding: 0,
+                  padding: const EdgeInsetsDirectional.only(start: 10),
                   focusNode: _focusNode,
                   autoFocus: kIsWeb && getIsFullScreen(context),
                 ),

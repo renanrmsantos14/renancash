@@ -5,6 +5,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
@@ -610,21 +611,25 @@ class _ImportCSVState extends State<ImportCSV> {
               ? Icons.file_open_outlined
               : Icons.file_open_rounded,
           afterWidget: Builder(builder: (boxContext) {
-            return LowKeyButton(
-              onTap: () async {
-                saveSampleCSV(boxContext: boxContext);
-              },
-              extraWidget: Padding(
-                padding: const EdgeInsetsDirectional.only(start: 4),
-                child: Icon(
-                  appStateSettings["outlinedIcons"]
-                      ? Icons.download_outlined
-                      : Icons.download_rounded,
-                  size: 18,
-                  color: getColor(context, "black").withOpacity(0.5),
+            return ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: LowKeyButton(
+                color: cores(context).chip,
+                onTap: () async {
+                  saveSampleCSV(boxContext: boxContext);
+                },
+                extraWidget: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 4),
+                  child: Icon(
+                    appStateSettings["outlinedIcons"]
+                        ? Icons.download_outlined
+                        : Icons.download_rounded,
+                    size: 18,
+                    color: getColor(context, "black").withOpacity(0.5),
+                  ),
                 ),
+                text: "template".tr(),
               ),
-              text: "template".tr(),
             );
           }),
         ),
@@ -636,21 +641,25 @@ class _ImportCSVState extends State<ImportCSV> {
           icon: appStateSettings["outlinedIcons"]
               ? Icons.table_chart_outlined
               : Icons.table_chart_rounded,
-          afterWidget: LowKeyButton(
-            onTap: () async {
-              getGoogleSheetTemplate(context);
-            },
-            extraWidget: Padding(
-              padding: const EdgeInsetsDirectional.only(start: 4),
-              child: Icon(
-                appStateSettings["outlinedIcons"]
-                    ? Icons.open_in_new_outlined
-                    : Icons.open_in_new_rounded,
-                size: 18,
-                color: getColor(context, "black").withOpacity(0.5),
+          afterWidget: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: LowKeyButton(
+              color: cores(context).chip,
+              onTap: () async {
+                getGoogleSheetTemplate(context);
+              },
+              extraWidget: Padding(
+                padding: const EdgeInsetsDirectional.only(start: 4),
+                child: Icon(
+                  appStateSettings["outlinedIcons"]
+                      ? Icons.open_in_new_outlined
+                      : Icons.open_in_new_rounded,
+                  size: 18,
+                  color: getColor(context, "black").withOpacity(0.5),
+                ),
               ),
+              text: "template".tr(),
             ),
-            text: "template".tr(),
           ),
         ),
       ],

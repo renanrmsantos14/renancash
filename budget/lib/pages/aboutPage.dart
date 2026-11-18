@@ -138,7 +138,7 @@ class CreditosPage extends StatelessWidget {
       Padding(
         padding:
             const EdgeInsetsDirectional.symmetric(horizontal: 18, vertical: 6),
-        child: Text("made-in-canada".tr() + " 🍁",
+        child: Text("made-in-canada".tr(),
             style: EdTexto.rotulo(context)),
       ),
     ];
@@ -183,14 +183,14 @@ class CreditosPage extends StatelessWidget {
 
     List<Widget> translators = [
       TranslationInfoBox(
-        title: "Italian",
+        title: "Italiano",
         list: [
           "Thomas B.",
           "Mattia A.",
         ],
       ),
       TranslationInfoBox(
-        title: "Polish",
+        title: "Polonês",
         list: [
           "Michał S.",
           "Michał P.",
@@ -198,19 +198,19 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Serbian",
+        title: "Sérvio",
         list: [
           "Jovan P.",
         ],
       ),
       TranslationInfoBox(
-        title: "Swahili",
+        title: "Suaíli",
         list: [
           "Anthony K.",
         ],
       ),
       TranslationInfoBox(
-        title: "German",
+        title: "Alemão",
         list: [
           "Fabian S.",
           "Christian R.",
@@ -219,7 +219,7 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Arabic",
+        title: "Árabe",
         list: [
           "Dorra Y.",
           "Ammar N.",
@@ -228,7 +228,7 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Portuguese",
+        title: "Português",
         list: [
           "Alexander G.",
           "Jean J.",
@@ -239,19 +239,19 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Bulgarian",
+        title: "Búlgaro",
         list: [
           "Денислав C.",
         ],
       ),
       TranslationInfoBox(
-        title: "Chinese (Simplified)",
+        title: "Chinês (simplificado)",
         list: [
           "Clyde",
         ],
       ),
       TranslationInfoBox(
-        title: "Chinese (Traditional)",
+        title: "Chinês (tradicional)",
         list: [
           "qazlll456",
         ],
@@ -265,13 +265,13 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Vietnamese",
+        title: "Vietnamita",
         list: [
           "Ng. Anh",
         ],
       ),
       TranslationInfoBox(
-        title: "French",
+        title: "Francês",
         list: [
           "Antoine C.",
           "Fabien H.",
@@ -279,13 +279,13 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Indonesian",
+        title: "Indonésio",
         list: [
           "Gusairi P.",
         ],
       ),
       TranslationInfoBox(
-        title: "Ukrainian",
+        title: "Ucraniano",
         list: [
           "Chris M.",
           "Yurii S.",
@@ -293,7 +293,7 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Russian",
+        title: "Russo",
         list: [
           "Ilya A.",
           "Konstantin B.",
@@ -302,14 +302,14 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Romanian",
+        title: "Romeno",
         list: [
           "Valentin G.",
           "Tarciziu",
         ],
       ),
       TranslationInfoBox(
-        title: "Spanish",
+        title: "Espanhol",
         list: [
           "Pablo S.",
           "Gonzalo R.",
@@ -317,50 +317,50 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Swedish",
+        title: "Sueco",
         list: [
           "Anna M.",
         ],
       ),
       TranslationInfoBox(
-        title: "Danish",
+        title: "Dinamarquês",
         list: [
           "Mittheo",
         ],
       ),
       TranslationInfoBox(
-        title: "Turkish",
+        title: "Turco",
         list: [
           "Serdar A.",
         ],
       ),
       TranslationInfoBox(
-        title: "Slovak",
+        title: "Eslovaco",
         list: [
           "Igor V.",
         ],
       ),
       TranslationInfoBox(
-        title: "Macedonian",
+        title: "Macedônio",
         list: [
           "Andrej A.",
         ],
       ),
       TranslationInfoBox(
-        title: "Czech",
+        title: "Tcheco",
         list: [
           "Kamil T.",
           "Hana B.",
         ],
       ),
       TranslationInfoBox(
-        title: "Hebrew",
+        title: "Hebraico",
         list: [
           "Happy Bear",
         ],
       ),
       TranslationInfoBox(
-        title: "Afrikaans",
+        title: "Africâner",
         list: [
           "Andrè B.",
         ],
@@ -372,57 +372,57 @@ class CreditosPage extends StatelessWidget {
         ],
       ),
       TranslationInfoBox(
-        title: "Tamil",
+        title: "Tâmil",
         list: [
           "Mohamed A.",
         ],
       ),
       TranslationInfoBox(
-        title: "Japanese",
+        title: "Japonês",
         list: [
           "Tetta N.",
         ],
       ),
       TranslationInfoBox(
-        title: "Hungarian",
+        title: "Húngaro",
         list: [
           "Döbröntei S.",
           "Myra S.",
         ],
       ),
       TranslationInfoBox(
-        title: "Thai",
+        title: "Tailandês",
         list: [
           "Jateniphat U.",
         ],
       ),
       TranslationInfoBox(
-        title: "Gujarati",
+        title: "Guzerate",
         list: [
           "Darshan L.",
           "Harsh S.",
         ],
       ),
       TranslationInfoBox(
-        title: "Finnish",
+        title: "Finlandês",
         list: [
           "Mirko J.",
         ],
       ),
       TranslationInfoBox(
-        title: "Dutch",
+        title: "Holandês",
         list: [
           "Niels S.",
         ],
       ),
       TranslationInfoBox(
-        title: "Malay",
+        title: "Malaio",
         list: [
           "アリフ",
         ],
       ),
       TranslationInfoBox(
-        title: "Sinhala",
+        title: "Cingalês",
         list: [
           "Bhagya S.",
         ],
@@ -664,9 +664,11 @@ class AboutInfoBox extends StatelessWidget {
           onLongPress: link == null ? null : () => copyToClipboard(link!),
           color: color ?? e.surf,
           borderRadius: 12,
-          child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(
-                horizontal: 14, vertical: 12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.symmetric(
+                  horizontal: 14, vertical: 12),
             child: Row(
               children: [
                 Expanded(
@@ -700,6 +702,7 @@ class AboutInfoBox extends StatelessWidget {
                   Icon(Icons.open_in_new_rounded, size: 16, color: e.mu),
               ],
             ),
+          ),
           ),
         ),
       ),

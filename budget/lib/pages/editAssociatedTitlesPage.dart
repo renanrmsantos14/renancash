@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addAssociatedTitlePage.dart';
 import 'package:budget/pages/editBudgetPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
@@ -191,12 +192,16 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                             "Nenhum título ainda. Um título liga o nome de uma transação a uma categoria.",
                       ),
                       SizedBox(height: 16),
-                      Button(
-                        label: "add-title".tr(),
-                        onTap: () => openBottomSheet(
-                          context,
-                          popupWithKeyboard: true,
-                          AddAssociatedTitlePage(),
+                      Padding(
+                        padding: const EdgeInsetsDirectional.symmetric(
+                            horizontal: 18),
+                        child: Button(
+                          label: "add-title".tr(),
+                          onTap: () => openBottomSheet(
+                            context,
+                            popupWithKeyboard: true,
+                            AddAssociatedTitlePage(),
+                          ),
                         ),
                       ),
                     ],
@@ -257,11 +262,23 @@ class _EditAssociatedTitlesPageState extends State<EditAssociatedTitlesPage> {
                           ),
                           SizedBox(width: 15),
                           Expanded(
-                            child: TextFont(
-                              text: associatedTitle.title,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              maxLines: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextFont(
+                                  text: associatedTitle.title,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  maxLines: 2,
+                                ),
+                                TextFont(
+                                  text: titles[index].category.name,
+                                  fontSize: 13,
+                                  textColor: cores(context).mu,
+                                  maxLines: 1,
+                                ),
+                              ],
                             ),
                           ),
                         ],

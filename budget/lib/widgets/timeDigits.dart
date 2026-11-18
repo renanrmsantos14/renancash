@@ -1,5 +1,6 @@
 import 'package:budget/colors.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -13,7 +14,13 @@ bool? isSetting24HourFormat() {
 }
 
 bool isSystem24HourFormat(BuildContext context) {
-  DateFormat format = DateFormat.jm(context.locale.toString());
+  final String? localeName =
+      EasyLocalization.of(context)?.locale.toString() ??
+          appStateSettings["locale"]?.toString();
+  DateFormat format =
+      localeName != null && localeName != "system"
+          ? DateFormat.jm(localeName)
+          : DateFormat.jm();
   String formattedTime =
       format.format(DateTime.now()).toUpperCase().replaceAll(".", "");
   return MediaQuery.alwaysUse24HourFormatOf(context) ||
@@ -50,21 +57,16 @@ class TimeDigits extends StatelessWidget {
       timeOfDay.hour,
       timeOfDay.minute,
     );
-    Color backgroundColor = this.backgroundColor ??
-        (appStateSettings["materialYou"]
-            ? dynamicPastel(
-                context, Theme.of(context).colorScheme.secondaryContainer,
-                amountLight: 0, amountDark: 0.6)
-            : getColor(context, "lightDarkAccent"));
+    Color backgroundColor = this.backgroundColor ?? cores(context).chip;
     return Row(
       textDirection: ui.TextDirection.ltr,
       children: [
         Container(
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadiusDirectional.circular(5),
+            borderRadius: BorderRadiusDirectional.circular(8),
           ),
-          padding: EdgeInsetsDirectional.symmetric(horizontal: 7, vertical: 5),
+          padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 6),
           child: TextFont(
             text: hours,
             fontSize: 18,
@@ -72,7 +74,7 @@ class TimeDigits extends StatelessWidget {
           ),
         ),
         Container(
-          padding: EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 5),
+          padding: EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 6),
           child: TextFont(
             text: ":",
             fontSize: 18,
@@ -82,9 +84,9 @@ class TimeDigits extends StatelessWidget {
         Container(
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadiusDirectional.circular(5),
+            borderRadius: BorderRadiusDirectional.circular(8),
           ),
-          padding: EdgeInsetsDirectional.symmetric(horizontal: 7, vertical: 5),
+          padding: EdgeInsetsDirectional.symmetric(horizontal: 8, vertical: 6),
           child: TextFont(
             text: minutes,
             fontSize: 18,
@@ -99,7 +101,7 @@ class TimeDigits extends StatelessWidget {
             : Container(
                 decoration: BoxDecoration(
                   color: backgroundColor,
-                  borderRadius: BorderRadiusDirectional.circular(5),
+                  borderRadius: BorderRadiusDirectional.circular(8),
                 ),
                 padding:
                     EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 5),
