@@ -295,7 +295,9 @@ Future<Projetado?> _lancamento(Registro r, Map<String, dynamic> d,
 }
 
 // Ajuste de uma transação `mb:` feito em outro aparelho: só a escolha de orçamentos é aplicada aqui
-// (categoria e gasto continuam vindo do mapeamento do servidor).
+// (categoria e gasto continuam vindo do mapeamento do servidor). A projeção devolvida é a mesma que
+// projetarAjuste produz depois do mapeamento (categoria_id + category, orcamento_ids); com `null` o espelho
+// ficaria diferente do local e o ajuste voltaria ao servidor como edição, com data nova, a cada aparelho.
 Future<Projetado?> _ajuste(
     Registro r, Map<String, dynamic> d, Value<DateTime?> modificado) async {
   final escolha = orcamentoPksDeDados(d);
@@ -304,10 +306,17 @@ Future<Projetado?> _ajuste(
   await (database.update(database.transactions)
         ..where((t) => t.transactionPk.equals(txPk)))
       .write(TransactionsCompanion(dateTimeModified: modificado));
-  return escolha == null
-      ? null
-      : Projetado('ajustes', r.id,
-          {'orcamento_ids': (escolha.map(idDoPk).toList()..sort())}, null);
+  final dados = <String, dynamic>{};
+  final categoriaId = d['categoria_id'];
+  if (categoriaId is String && categoriaId.isNotEmpty) {
+    final c = await database.getCategoryInstanceOrNull(pkDoId(categoriaId));
+    dados['categoria_id'] = categoriaId;
+    dados['category'] = c?.name ?? '';
+  }
+  if (escolha != null) {
+    dados['orcamento_ids'] = (escolha.map(idDoPk).toList()..sort());
+  }
+  return dados.isEmpty ? null : Projetado('ajustes', r.id, dados, null);
 }
 
 Future<Projetado?> _assinatura(Registro r, Map<String, dynamic> d, DateTime hoje,

@@ -189,6 +189,27 @@ void main() {
     expect((await _txs()).single.categoryFk, 'c1');
   });
 
+  test('ajuste de categoria vindo de outro aparelho é aplicado e não volta como edição local', () async {
+    await _categoria('c1', 'Mercado');
+    cliente.extra = banco();
+    await sync();
+    cliente.servidor.add(Registro('ajustes', 't1',
+        {'categoria_id': 'cashew:c1', 'category': 'Mercado'}, _futuro(), null));
+    cliente.enviados.clear();
+    await sync();
+    expect((await _txs()).single.categoryFk, 'c1');
+    final espelho = (await mbLerEspelho())['ajustes/t1']!;
+    expect(espelho.projecao, {'categoria_id': 'cashew:c1', 'category': 'Mercado'});
+    // Sem pendência local: nada sobe e a data do ajuste remoto não é trocada por uma nova (ping-pong entre aparelhos).
+    for (var i = 0; i < 2; i++) {
+      cliente.enviados.clear();
+      await sync();
+      expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty);
+    }
+    expect((await mbLerEspelho())['ajustes/t1']!.registro.updatedAt, espelho.registro.updatedAt);
+    expect((await mbLerFila()).pendentes, 0);
+  });
+
   test('categoria apagada remotamente com transações fica e não ressuscita',
       () async {
     await _categoria('c1', 'Mercado');
