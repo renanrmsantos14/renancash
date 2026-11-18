@@ -35,7 +35,6 @@ void main() {
       contas: contas,
       faturas: const {},
       sincronizadoEm: null,
-      ultimas: const [],
       nome: '',
       agora: DateTime(2026, 11, 17),
     );

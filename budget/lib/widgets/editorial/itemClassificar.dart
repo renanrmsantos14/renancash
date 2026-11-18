@@ -32,6 +32,8 @@ class ItemClassificar extends StatefulWidget {
 }
 
 class _ItemClassificarState extends State<ItemClassificar> {
+  /// A parte de uma conta / o estorno já tem um gasto em destaque: a caixa "Sem sugestão" só competiria com ele.
+  bool _comDestaque = false;
   final _explicacao = TextEditingController();
   MbSugestao? _escolha; // o que o usuário mexeu (chip, sub, vínculo, título, explicação); null = a sugestão
   bool _enviando = false, _entendendo = false;
@@ -232,6 +234,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
         final parteDeConta = _l.valor > 0 &&
             !mbEhJurosPoupanca(_l) &&
             meuBancoSugestoes.value[_l.pk]?.fonte != MbFonteSugestao.mesPassado;
+        // Com o gasto/compra em destaque, a caixa "Sem sugestão" só competiria com ele (as categorias seguem abaixo).
+        final ocultarSemSugestao = parteDeConta && _comDestaque && op.categoria(sugestao?.categoriaPk) == null;
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -252,22 +256,30 @@ class _ItemClassificarState extends State<ItemClassificar> {
             ],
             const SizedBox(height: 16),
             if (parteDeConta) ...[
-              ParteDeConta(lancamento: _l, enviando: _enviando, aoLigar: _ligar),
+              ParteDeConta(
+                  lancamento: _l,
+                  enviando: _enviando,
+                  aoLigar: _ligar,
+                  aoDestacar: (v) {
+                    if (v != _comDestaque) setState(() => _comDestaque = v);
+                  }),
               const SizedBox(height: 12),
             ],
-            _Sugestao(
-              lancamento: _l,
-              sugestao: sugestao,
-              opcoes: op,
-              enviando: _enviando,
-              aoConfirmar: _confirmar,
-              aoMudar: _mudar,
-              aoVincular: _escolherVinculo,
-              aoEditarTitulo: _editarTitulo,
-              iguais: iguais.length,
-              aoAplicarIguais: (s) => _aplicarIguais(s, iguais),
-            ),
-            const SizedBox(height: 16),
+            if (!ocultarSemSugestao) ...[
+              _Sugestao(
+                lancamento: _l,
+                sugestao: sugestao,
+                opcoes: op,
+                enviando: _enviando,
+                aoConfirmar: _confirmar,
+                aoMudar: _mudar,
+                aoVincular: _escolherVinculo,
+                aoEditarTitulo: _editarTitulo,
+                iguais: iguais.length,
+                aoAplicarIguais: (s) => _aplicarIguais(s, iguais),
+              ),
+              const SizedBox(height: 16),
+            ],
             Text(sugestao == null ? 'Qual é a categoria?' : 'Ou escolha outra', style: EdTexto.h2(context)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
@@ -421,10 +433,14 @@ class _Sugestao extends StatelessWidget {
 /// contas ou mais, basta valor parecido) e, sempre, "É a parte de uma conta que eu paguei" com a lista para escolher.
 /// Num estorno: a compra de mesmo valor com "Abater da compra" (o mesmo vínculo do reembolso). Nada é ligado sem o toque.
 class ParteDeConta extends StatefulWidget {
-  const ParteDeConta({super.key, required this.lancamento, required this.aoLigar, this.enviando = false});
+  const ParteDeConta(
+      {super.key, required this.lancamento, required this.aoLigar, this.enviando = false, this.aoDestacar});
   final MbLancamentoIa lancamento;
   final void Function(MbGastoCandidato) aoLigar;
   final bool enviando;
+
+  /// Avisa (depois do carregamento dos candidatos) se há um gasto em destaque com o botão de ligar.
+  final ValueChanged<bool>? aoDestacar;
 
   @override
   State<ParteDeConta> createState() => _ParteDeContaState();
@@ -469,6 +485,11 @@ class _ParteDeContaState extends State<ParteDeConta> {
           (false, false) => 'É a parte de uma conta que eu paguei',
         };
         final abrir = widget.enviando || snap.connectionState != ConnectionState.done ? null : () => _escolher(s);
+        if (widget.aoDestacar != null && snap.connectionState == ConnectionState.done) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.aoDestacar!(destaque != null);
+          });
+        }
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),

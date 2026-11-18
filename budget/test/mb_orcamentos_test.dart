@@ -281,7 +281,6 @@ void main() {
           contas: const [],
           faturas: const {},
           sincronizadoEm: null,
-          ultimas: const [],
           nome: '',
           agora: DateTime(2026, 11, 16),
           geral: geral);
