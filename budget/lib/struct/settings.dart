@@ -1,3 +1,5 @@
+import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador;
+import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigsSincronizadas;
 import 'package:budget/struct/mbSync/inicioOrdem.dart' show mbMigrarOrdemInicio;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
@@ -186,6 +188,8 @@ Future<bool> updateSettings(
   appStateSettings[setting] = value;
   await sharedPreferences.setString(
       'userSettings', json.encode(appStateSettings));
+  // Configuração que sincroniza: agenda o envio (o agendador ignora o que a própria rodada de sync grava).
+  if (isChanged && mbConfigsSincronizadas.contains(setting)) mbAgendador.aoEditar();
 
   if (updateGlobalState == true) {
     // Only refresh global state if the value is different

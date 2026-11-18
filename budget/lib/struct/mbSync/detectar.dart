@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:budget/struct/mbSync/registro.dart';
 
 class Projetado {
@@ -30,12 +32,28 @@ Map<String, dynamic> completarNovo(String tabela, Map<String, dynamic> d) {
   return r;
 }
 
+const int mbLimiteEnvio = 8000;
+
+// Projeção sobre o que o servidor já guarda (`base`, que preserva campos que o aparelho não projeta).
+// `linha` ausente na projeção (grande demais) não pode herdar a antiga da base.
+Map<String, dynamic> dadosParaEnvio(Projetado p, Map<String, dynamic>? base) {
+  final dados = completarNovo(p.tabela, {...?base, ...p.dados})
+    ..removeWhere((_, v) => v == null);
+  if (!p.dados.containsKey('linha')) dados.remove('linha');
+  // O Worker rejeita `dados` acima de 8192 bytes; a base do servidor pode ter somado campos à projeção.
+  if (utf8.encode(jsonEncode(dados)).length > mbLimiteEnvio) dados.remove('linha');
+  return dados;
+}
+
 List<MudancaLocal> detectarMudancasLocais({
   required Map<String, Espelho> espelho,
   required Map<String, Projetado> atuais,
   required String agora,
   Set<String> semExclusaoLocal = const {'ajustes'},
   Set<String> existentes = const {},
+  // Recebe o espelho de quem só difere por ganhar a `linha` (primeira rodada após atualizar o app): regravar sem
+  // enviar, senão tudo subiria com updated_at=agora e atropelaria quem já editou no servidor.
+  List<Espelho>? soLinha,
 }) {
   final out = <MudancaLocal>[];
   for (final p in atuais.values) {
@@ -45,14 +63,21 @@ List<MudancaLocal> detectarMudancasLocais({
         e.projecao != null &&
         jsonCanonico(e.projecao) == jsonCanonico(p.dados)) continue;
     if (e != null &&
+        e.registro.deletedAt == null &&
+        e.projecao != null &&
+        !e.projecao!.containsKey('linha') &&
+        p.dados.containsKey('linha') &&
+        jsonCanonico(e.projecao) ==
+            jsonCanonico({...p.dados}..remove('linha'))) {
+      soLinha?.add(Espelho(e.registro, p.dados, e.pendente, e.motivo));
+      continue;
+    }
+    if (e != null &&
         e.registro.deletedAt != null &&
         !(p.editadoEm != null &&
             p.editadoEm!.compareTo(e.registro.deletedAt!) > 0)) continue;
-    final base = e?.registro.deletedAt == null
-        ? (e?.registro.dados ?? const <String, dynamic>{})
-        : const <String, dynamic>{};
-    final dados = completarNovo(p.tabela, {...base, ...p.dados})
-      ..removeWhere((_, v) => v == null);
+    final dados = dadosParaEnvio(
+        p, e?.registro.deletedAt == null ? e?.registro.dados : null);
     var quando = p.editadoEm ?? mbNuncaEditado;
     if (e != null && quando.compareTo(e.registro.updatedAt) <= 0) quando = agora;
     out.add(MudancaLocal(Registro(p.tabela, p.id, dados, quando, null),

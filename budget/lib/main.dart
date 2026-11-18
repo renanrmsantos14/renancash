@@ -1,6 +1,7 @@
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/versaoCanto.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/struct/mbSync/agendador.dart';
 import 'package:budget/struct/mbSync/segundoPlano.dart';
 import 'package:budget/pages/accountsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -170,8 +171,10 @@ class App extends StatelessWidget {
         Widget mainWidget = OnAppResume(
           updateGlobalAppLifecycleState: true,
           onAppResume: () async {
+            mbAgendador.voltouAoApp(); // puxa o que mudou em outro aparelho
             await setHighRefreshRate();
           },
+          onAppPaused: mbAgendador.foiParaSegundoPlano,
           child: InitializeBiometrics(
             child: InitializeAppLinks(
               child: WatchForDayChange(
