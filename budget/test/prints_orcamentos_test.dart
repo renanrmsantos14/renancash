@@ -95,7 +95,7 @@ Widget _app(String modo, Widget corpo, {bool usarScaffold = true}) {
   return MultiProvider(
     providers: [
       Provider<AllWallets>.value(value: _carteirasProvider),
-      Provider<SelectedWalletPk>.value(
+      ChangeNotifierProvider<SelectedWalletPk>.value(
           value: SelectedWalletPk(selectedWalletPk: '0')),
     ],
     child: MaterialApp(
