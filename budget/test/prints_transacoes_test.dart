@@ -168,6 +168,8 @@ void _diag(String m) => File('/tmp/prints_diag.log').writeAsStringSync(
     '${DateTime.now().toIso8601String()} $m\n',
     mode: FileMode.append);
 
+const _variante = String.fromEnvironment('VARIANTE');
+
 bool _bancoQuebrado = false;
 
 /// Um banco que travou uma vez trava as próximas: falha logo, com o passo no log.
@@ -354,6 +356,11 @@ Future<void> _print(WidgetTester t, String modo, String nome, Widget corpo,
   _diag('pump final');
   await t.runAsync(() => Future.delayed(const Duration(milliseconds: 200)));
   _diag('runAsync final');
+  if (_variante == 'A' && _bancoAberto) {
+    await t.runAsync(() => database.close());
+    _bancoAberto = false;
+    _diag('banco fechado no fim');
+  }
   await _fecharBanco(t);
 }
 
@@ -508,7 +515,8 @@ void main() {
       );
     });
 
-    testWidgets('print AddTransactionPage nova $modo', skip: _pular, (t) async {
+    testWidgets('print AddTransactionPage nova $modo',
+        skip: _pular, semanticsEnabled: _variante != 'B', (t) async {
       await t.runAsync(() => _prepararBanco(comDados: true));
       await _print(
         t,
