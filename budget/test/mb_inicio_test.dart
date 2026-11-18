@@ -245,7 +245,7 @@ void main() {
 
     test('agrupa conta, aplicação e fatura no mesmo banco; ordena pelo maior total', () {
       final b = agrupar();
-      expect(b.map((x) => x.id), ['xp', 'inter', 'nubank', 'zeta', 'outros']);
+      expect(b.map((x) => x.id), ['xp', 'inter', 'nubank', 'banco zeta', 'outros']);
       final inter = b.firstWhere((x) => x.id == 'inter');
       expect(inter.nome, 'Banco Inter');
       expect(inter.logo, 'inter');
@@ -268,7 +268,7 @@ void main() {
       expect(outros.nome, 'Outros');
       expect(outros.logo, isNull);
       expect(outros.itens.single.rotulo, 'Tesouro Selic');
-      final zeta = b.firstWhere((x) => x.id == 'zeta');
+      final zeta = b.firstWhere((x) => x.id == 'banco zeta');
       expect(zeta.logo, isNull);
       expect(zeta.nome, 'Banco Zeta');
       // Fatura de R$ 0 não vira linha.
