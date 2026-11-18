@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions(account_id, date);
 
+-- Transações que o banco apagou (webhook transactions/deleted): o pull manda os ids para os apps apagarem também.
+CREATE TABLE IF NOT EXISTS transacoes_removidas (
+  id          TEXT PRIMARY KEY,
+  removida_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tx_removidas ON transacoes_removidas(removida_em);
+
 CREATE TABLE IF NOT EXISTS snapshots (
   key        TEXT PRIMARY KEY,            -- ex.: faturas:<account_id>, avisos
   data       TEXT NOT NULL,               -- JSON

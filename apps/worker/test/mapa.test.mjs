@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, detalhesInvestimento, aplicadoPelasMovimentacoes, contraparteDe } from "../src/mapa.js";
+import { bancoDoItem, desambiguar, nomeConta, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, detalhesInvestimento, aplicadoPelasMovimentacoes, contraparteDe, mapearEmprestimos } from "../src/mapa.js";
 import { valorGasto, valorParcela } from "../public/regras.js";
 
 const HOJE = "2026-11-08", TS = "2026-11-08T12:00:00.000Z";
@@ -192,4 +192,15 @@ test("faturas: paga, paga em parte, sem pagamento informado; encargos e mínimo"
 test("conta: cheque especial, aplicado automático e mínimo da fatura", () => {
   const c = mapearConta({ id: "1", type: "BANK", balance: -50, bankData: { overdraftContractedLimit: 1000, overdraftUsedLimit: 50, automaticallyInvestedBalance: 300 } }, "Inter", "i", "ts");
   assert.deepEqual([c.overdraft_limit, c.overdraft_used, c.auto_invested, c.minimum_payment], [1000, 50, 300, null]);
+});
+
+test("empréstimos: saldo devedor, parcelas e taxa; quitado fica fora", () => {
+  const l = mapearEmprestimos([
+    { id: "e1", productName: "Crédito pessoal", contractAmount: 10000, CET: 32.5, dueDate: "2028-01-10T00:00:00Z",
+      installments: { totalNumberOfInstallments: 24, paidInstallments: 10, dueInstallments: 13, pastDueInstallments: 1 },
+      payments: { contractOutstandingBalance: 6200.5 }, interestRates: [{ preFixedRate: null }, { preFixedRate: 2.1, taxPeriodicity: "MONTHLY" }] },
+    { id: "q", productName: "Quitado", installments: { dueInstallments: 0 }, payments: { contractOutstandingBalance: 0 } },
+  ], "Inter");
+  assert.equal(l.length, 1);
+  assert.deepEqual(l[0], { id: "e1", nome: "Crédito pessoal", banco: "Inter", contratado: 10000, saldo_devedor: 6200.5, parcelas_total: 24, pagas: 10, a_vencer: 13, atrasadas: 1, taxa_pre: 2.1, taxa_periodo: "mes", cet: 32.5, vencimento: "2028-01-10" });
 });

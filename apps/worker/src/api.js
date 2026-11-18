@@ -146,6 +146,9 @@ export class ApiCliente {
     return (await this.obter(`/investments/${encodeURIComponent(id)}/transactions`, { pageSize: 500 }))?.results || [];
   }
 
+  // Empréstimos e financiamentos da conexão (Open Finance). Uma página de 100.
+  async emprestimos(itemId) { return (await this.obter("/loans", { itemId, pageSize: 100 }))?.results || []; }
+
   async faturas(accountId) { return (await this.obter("/bills", { accountId, pageSize: 24 }))?.results || []; }
 
   // Todas as transações da conta. Usa GET /v2/transactions (cursor `after`, dateFrom/dateTo, 500 por página);

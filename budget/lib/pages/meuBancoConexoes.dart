@@ -287,6 +287,31 @@ class _CartaoConexao extends StatelessWidget {
                                 .copyWith(fontSize: 11.5)),
                     ]),
               ),
+            for (final emp in c.emprestimos)
+              Padding(
+                padding:
+                    const EdgeInsetsDirectional.only(start: 48, end: 4, top: 4),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                          child: Text('${emp.nome} · Empréstimo',
+                              overflow: TextOverflow.ellipsis,
+                              style: EdTexto.rotulo(context)),
+                        ),
+                        if (emp.saldoDevedor != null)
+                          Text('Deve ${brl(emp.saldoDevedor!)}',
+                              style: EdTexto.corpo(context)
+                                  .copyWith(fontSize: 13)),
+                      ]),
+                      if (emp.detalhe.isNotEmpty)
+                        Text(emp.detalhe,
+                            style: EdTexto.rotulo(context).copyWith(
+                                fontSize: 11.5,
+                                color: (emp.atrasadas ?? 0) > 0 ? e.warntx : null)),
+                    ]),
+              ),
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

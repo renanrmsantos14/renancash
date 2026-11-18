@@ -691,6 +691,10 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     for (final id in (json["pendentes"] as List? ?? const []))
       mbPkTransacao(id.toString())
   };
+  // Apagadas no banco (webhook transactions/deleted): saem do app como as que não são gasto.
+  for (final id in (json["removidas"] as List? ?? const [])) {
+    naoGasto.add(mbPkTransacao(id.toString()));
+  }
   return MbResultado(
     (json["agora"] ?? "").toString(),
     contas,

@@ -1,6 +1,6 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { criarAmbiente, entrarComSenha, simularPluggy, restaurarFetch, ORIGEM } from "./ambiente.mjs";
+import { criarAmbiente, criarAparelho, entrarComSenha, simularPluggy, restaurarFetch, ORIGEM } from "./ambiente.mjs";
 import { acaoWebhook } from "../src/pluggy.js";
 
 afterEach(restaurarFetch);
@@ -62,4 +62,27 @@ test("POST /api/pluggy/webhooks sem PLUGGY_WEBHOOK_SECRET responde 500 e não ch
   const r = await pedir("/api/pluggy/webhooks", { method: "POST", headers: { cookie, origin: ORIGEM } });
   assert.equal(r.status, 500);
   assert.equal(chamadas.length, 0);
+});
+
+test("transactions/deleted apaga as transações e o pull manda os ids; created/updated não sincronizam de novo", async () => {
+  assert.equal(acaoWebhook({ event: "transactions/deleted", itemId: ID, transactionIds: ["t1"] }), "apagar");
+  assert.equal(acaoWebhook({ event: "transactions/deleted", itemId: ID, transactionIds: [] }), null);
+  assert.equal(acaoWebhook({ event: "transactions/created", itemId: ID }), null);
+  assert.equal(acaoWebhook({ event: "transactions/updated", itemId: ID }), null);
+
+  const amb = criarAmbiente(ENV);
+  const token = await criarAparelho(amb.env);
+  const ts = "2026-11-01T00:00:00.000Z";
+  for (const id of ["t1", "t2"]) {
+    await amb.env.DB.prepare("INSERT INTO transactions (id, account_id, date, amount, updated_at) VALUES (?1, 'cc', '2026-11-01', -5, ?2)").bind(id, ts).run();
+  }
+  const antes = await (await amb.pedir("/api/sync", { headers: { authorization: "Bearer " + token } })).json();
+  assert.deepEqual(antes.removidas, []);
+  const r = await evento(amb.pedir, { event: "transactions/deleted", itemId: ID, transactionIds: ["t1"] }, { "x-webhook-secret": ENV.PLUGGY_WEBHOOK_SECRET });
+  assert.equal(r.status, 200);
+  await amb.esperar();
+  const { results } = await amb.env.DB.prepare("SELECT id FROM transactions").all();
+  assert.deepEqual(results.map((x) => x.id), ["t2"]);
+  const depois = await (await amb.pedir("/api/sync?desde=" + encodeURIComponent(antes.agora), { headers: { authorization: "Bearer " + token } })).json();
+  assert.deepEqual(depois.removidas, ["t1"]);
 });

@@ -1,43 +1,31 @@
-# Pluggy: o que a API entrega e o que o RenanCash ainda não usa
+# Pluggy: o que a API entrega e o que o RenanCash usa
 
-Levantamento de 18/11/2026. Os nomes dos campos vêm das definições de tipos do SDK oficial (`pluggy-sdk` 0.94.3, `dist/types/*.d.ts`), que espelham a API. Nesta sessão não foi possível abrir docs.pluggy.ai (rede bloqueada). Por isso, o que depende de comportamento ou de cobertura por banco está marcado **[confirmar]**.
+Levantamento de 18/11/2026. Os nomes dos campos vêm das definições de tipos do SDK oficial (`pluggy-sdk` 0.94.3, `dist/types/*.d.ts`), que espelham a API. Nesta sessão não foi possível abrir docs.pluggy.ai (rede bloqueada). O que depende do comportamento de cada banco está marcado **[confirmar no primeiro sync real]**.
 
-## Já usado
+## O que é lido e onde aparece
 
-| Produto | Uso hoje |
-|---|---|
-| `GET /items/{id}`, webhooks `item/*` | Status da conexão e aviso de reconexão |
-| `GET /accounts` | Saldo, `creditData` (limite, vencimento, fechamento) e `bankData.closingBalance` da poupança |
-| `GET /v2/transactions` | Lançamentos, `creditCardMetadata` (parcela n/total) e `merchant` |
-| `GET /bills` | Faturas fechadas: `dueDate`, `totalAmount` e `minimumPaymentAmount` |
-| `GET /investments` | Saldo e, desde esta mudança, `amountOriginal`, `amountProfit`, `balance`, `taxes`/`taxes2`, `rate`/`rateType`/`fixedAnnualRate`, `lastMonthRate`, `lastTwelveMonthsRate`, `dueDate`, `purchaseDate`/`issueDate`, `issuer`, `subtype` e `taxExempt` |
+| Produto e campos | No Worker | No app |
+|---|---|---|
+| `GET /items/{id}`: `status`, `nextAutoSyncAt`, `consentExpiresAt` | Colunas `pluggy_items.proximo_sync` e `consentimento_expira`. Alerta quando faltam 7 dias ou menos para o consentimento vencer | Contas conectadas: "O banco atualiza de novo às HH:mm" e aviso nos últimos 15 dias do consentimento |
+| `GET /identity`: `document` | Fica só em memória durante a sincronização e não é guardado. Serve para calcular `entre_minhas` | — |
+| `GET /accounts`: `creditData.minimumPayment`; `bankData.overdraftContractedLimit`, `overdraftUsedLimit`, `automaticallyInvestedBalance` | Colunas `minimum_payment`, `overdraft_limit`, `overdraft_used`, `auto_invested` | Início: mínimo da fatura, cheque especial em uso (linha destacada) e saldo aplicado automaticamente (só informativo, fora do total) |
+| `GET /v2/transactions`: `paymentData` (`payer`, `receiver`, `paymentMethod`) | Colunas `contraparte` e `metodo`. `entre_minhas` = 1 quando o documento da outra ponta é o do titular | Detalhe: "Pix para Maria Souza". Quando `entre_minhas` = 1, o lançamento não conta como gasto nem vai para a fila |
+| `GET /v2/transactions`: `creditCardMetadata.billId`, `billForecastDate`, `otherCreditsType`, `feeType` | Colunas `bill_id`, `bill_month` e `tipo_credito`. Alerta para rotativo, fatura parcelada e anuidade | Detalhe: a fatura em que a compra cai ("Dezembro de 2026") |
+| `GET /bills`: `payments[]`, `financeCharges[]`, `minimumPaymentAmount` | Situação da fatura (`PAID`, `PARTIAL`, `CLOSED`), `pago`, `encargos`, `minimo` | O painel mostra "Paga" e "Paga em parte" |
+| `GET /investments`: `amountOriginal`, `amountProfit`, `balance`, `taxes`/`taxes2`, `rate`/`rateType`/`fixedAnnualRate`, rentabilidades, `dueDate`, `purchaseDate`, `issuer` | Campos extras em `investimentos`. O retrato mensal também guarda o aplicado | Investimentos: "Você investiu" e "Rendeu"; aplicado, taxa e vencimento de cada aplicação; rendimento de cada mês sem contar aportes e resgates |
+| `GET /investments/{id}/transactions` (`BUY`/`SELL`) | Só quando falta `amountOriginal`, em até 20 investimentos por conexão: aplicado = compras − resgates | O mesmo de cima |
+| `GET /loans` | Snapshot `emprestimos:<conexão>` e alerta de parcela atrasada | Contas conectadas: saldo devedor, parcelas pagas, taxa e atrasadas |
+| Webhook `transactions/deleted` | Apaga as transações e grava os ids em `transacoes_removidas`. O pull manda esses ids em `removidas` | A transação apagada no banco some do app |
 
-## Ainda não usado, por valor para o app
+Os webhooks `transactions/created` e `transactions/updated` são ignorados de propósito: chegam junto com `item/updated`, que já dispara a sincronização.
 
-1. **Movimentações dos investimentos: `GET /investments/{id}/transactions`.** Cada movimentação traz:
-   - `type`: `BUY`, `SELL`, `TAX` ou `TRANSFER`.
-   - `amount`, `netAmount`, `date`, `tradeDate`.
-   - `expenses.incomeTax`, o IR retido.
+## O que conferir no primeiro sync real
 
-   Serve de reserva quando o banco não manda `amountOriginal`: o investido é a soma dos `BUY` menos a dos `SELL`. Também permite mostrar "aportes e resgates do mês" com os valores exatos, sem estimar pela série mensal. O custo é uma chamada por aplicação a cada sincronização. **[confirmar]** Pelo que se lê na documentação, os conectores Open Finance mandam `amountProfit`, `annualRate`, `lastMonthRate` e `lastTwelveMonthsRate` como null. Se `amountOriginal` também vier null no Inter ou no Santander, este é o próximo passo.
-2. **Fatura de cada compra: `creditCardMetadata.billId`, `billForecastDate` (AAAA-MM) e `billPostDate`.** Ligam cada compra à fatura certa, inclusive as pendentes e as futuras. Assim a fatura deixa de ser estimada pela data de fechamento. `paymentType` (`SINGLE` ou `INSTALLMENT`) e `totalAmount` dão o valor total da compra parcelada.
-3. **Detalhe da fatura: `financeCharges[]` e `payments[]` em `/bills`.**
-   - `financeCharges[]` traz juros, multa e IOF.
-   - `payments[]` traz `valueType`, `paymentDate` e `amount`, e mostra se a fatura foi paga, total ou parcialmente. Hoje toda fatura aparece como "Fechada" porque o app não usa esse dado.
-   - `otherCreditsType=BILL_INSTALLMENT` e `REVOLVING_CREDIT` mostram fatura parcelada e uso do rotativo, o que pede alerta.
-   - `feeType=ANNUAL_FEE` identifica a anuidade.
-4. **Pix e transferências: `paymentData` (`payer`, `receiver`, `paymentMethod`, `reason`).** Trazem nome e documento de quem pagou ou recebeu. Ajudam a classificar "Pix para pessoa", reembolso e rachar conta, que hoje dependem de ler a descrição. `receiver.documentNumber` e `merchant.cnpj` também ajudam a detectar assinaturas e recorrências; a API não tem um campo próprio de recorrência.
-5. **Conta: `bankData.automaticallyInvestedBalance` e `reservedBalances[]`.** Mostram o saldo aplicado automaticamente e as "caixinhas", que hoje não aparecem no patrimônio. `overdraftContractedLimit` e `overdraftUsedLimit` mostram o uso do cheque especial. Em `creditData`, `minimumPayment` e `disaggregatedCreditLimits[]` trazem o pagamento mínimo da fatura aberta e os limites separados.
-6. **Sincronização mais leve.**
-   - Webhooks `transactions/created` (com `createdTransactionsLink`), `transactions/updated` e `transactions/deleted` (com `transactionIds[]`).
-   - Filtro `createdAtFrom` em `/v2/transactions`.
-   - Com eles, o Worker busca só o que mudou, em vez da janela inteira. `transactions/deleted` também resolve a pendente que some.
-7. **Saúde da conexão: `item.nextAutoSyncAt`, `statusDetail.<produto>.isUpdated/lastUpdatedAt` e `consentExpiresAt`.** Permitem mostrar "o banco atualiza de novo às HH:mm" e avisar antes de o consentimento do Open Finance vencer.
-8. **Empréstimos: `GET /loans`.** Traz parcelas pagas, a vencer e atrasadas, além das taxas. Só vale a pena se houver empréstimo bancário.
-9. **Identidade: `GET /identity`.** Nome e documento do titular. Ajuda a reconhecer transferência entre as próprias contas (o `payer` ou `receiver` é o próprio titular).
+- **Investimentos:** se o Inter e o Santander mandam `amountOriginal`. Os conectores Open Finance costumam mandar `amountProfit` e as rentabilidades como null. Se `amountOriginal` também vier null, o aplicado sai das movimentações. Depois de um resgate parcial, esse valor fica abaixo do real, porque o resgate inclui o rendimento.
+- **Faturas:** se `payments[]` vem preenchido. Se vier vazio, a fatura continua aparecendo como "Fechada".
+- **Identidade:** se o `/identity` está liberado na conexão e se o CPF da outra ponta chega completo. Mascarado, `entre_minhas` fica null e nada muda.
+- **Outros campos:** `billForecastDate`, `otherCreditsType` e `feeType` são, segundo o SDK, "só Open Finance".
 
-## Próximos passos sugeridos
+## Deploy
 
-1. Depois do primeiro sync com esta versão, conferir no app quais aplicações mostram "Você investiu". Se faltar alguma, implementar o item 1 do levantamento.
-2. Itens 2 e 3: ligar compra à fatura e saber se a fatura foi paga.
-3. Item 4: usar `paymentData` na fila Para validar.
+As colunas novas entram no D1 com `pnpm --filter @meu-banco/worker migrar -- --remote`. O passo é idempotente e o `deploy.yml` já o roda antes de publicar. Os apps antigos ignoram os campos novos.

@@ -118,6 +118,16 @@ export function alertasCredito({ transacoes, hoje }) {
     });
 }
 
+// ---------- Empréstimos ----------
+
+// Parcela de empréstimo atrasada: um aviso por empréstimo e quantidade de atrasadas (mais uma atrasada avisa de novo).
+export function alertasEmprestimos({ emprestimos }) {
+  return emprestimos.filter((e) => e.atrasadas > 0).map((e) => ({
+    chave: `emprestimo:${e.id}:${e.atrasadas}`,
+    titulo: e.atrasadas === 1 ? "Parcela de empréstimo atrasada" : `${e.atrasadas} parcelas de empréstimo atrasadas`,
+    corpo: `${e.nome}${e.banco ? " · " + e.banco : ""}. Parcela atrasada tem multa e juros de mora.` }));
+}
+
 // ---------- Consentimento do Open Finance ----------
 
 const DIAS_CONSENTIMENTO = 7;

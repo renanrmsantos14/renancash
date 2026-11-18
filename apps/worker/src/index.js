@@ -1,11 +1,11 @@
 import { contextoDeRegistros } from "@meu-banco/core";
 import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
-import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
+import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, mapearEmprestimos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
-import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
-import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
+import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasEmprestimos, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
+import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido, apagarTransacoes, idsRemovidos } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
@@ -365,6 +365,8 @@ async function avaliarAlertas(env) {
   const b = await baseCiclo(env);
   const [avisos, vistas, avisadas, conexoes] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", []),
     db.prepare("SELECT id, conector, consentimento_expira FROM pluggy_items WHERE removido IS NULL AND consentimento_expira IS NOT NULL").all().then((r) => r.results)]);
+  const emprestimos = (await db.prepare("SELECT data FROM snapshots WHERE key LIKE 'emprestimos:%'").all()).results
+    .flatMap((s) => { try { return JSON.parse(s.data) || []; } catch { return []; } });
   const ts = agora();
   const geral = consumoGeral(b);
   const { novas, ids } = comprasNovas({ ...b, vistas });
@@ -375,6 +377,7 @@ async function avaliarAlertas(env) {
     ...alertasFatura(b),
     ...alertasCredito(b),
     ...alertasConsentimento({ conexoes, hoje: b.hoje }),
+    ...alertasEmprestimos({ emprestimos }),
     ...alertasRevisao(b),
   ];
   await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);
@@ -510,7 +513,9 @@ async function webhookPluggy(request, env, url, ctx) {
   const acao = acaoWebhook(ev);
   if (acao) {
     const ts = agora();
-    const tarefa = acao === "remover"
+    const tarefa = acao === "apagar"
+      ? apagarTransacoes(env.DB, idsRemovidos(ev), ts)
+      : acao === "remover"
       ? esquecerItem(env.DB, ev.itemId, ts)
       : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
     ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
@@ -655,6 +660,12 @@ async function sincronizar(env, origem) {
         const daConexao = contas.map((c) => mapearConta(c, banco, id, ts));
         for (const c of contas) brutas.set(String(c.id), c);
         linhasContas.push(...daConexao);
+        // Empréstimos: 403/404 = produto não liberado na conexão (fica sem); outro erro mantém o snapshot anterior.
+        try {
+          await salvarSnapshot(db, "emprestimos:" + id, mapearEmprestimos(await api.emprestimos(id), banco ?? daConexao.find((c) => c.type === "BANK")?.name?.replace(/\s*[·#].*$/, "")));
+        } catch (e) {
+          if (![403, 404].includes(e.status)) console.warn("Empréstimos indisponíveis", id, e.message);
+        }
         // Sem o produto identidade (403/404) ou com erro, a transação só fica sem `entre_minhas`.
         titulares.set(id, await api.documentoTitular(id).catch(() => null));
         // Erro nos investimentos mantém o snapshot anterior; 403/404 (produto não liberado na conexão) não vira aviso.

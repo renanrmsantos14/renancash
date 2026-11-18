@@ -26,6 +26,7 @@ export async function limparRemovidas(db) {
   await db.batch([
     db.prepare(`UPDATE accounts SET balance = 0, available_limit = NULL WHERE item_id IN (${REMOVIDOS}) AND balance IS NOT 0`),
     db.prepare(`DELETE FROM snapshots WHERE key IN (SELECT 'investimentos:' || id FROM pluggy_items WHERE removido IS NOT NULL)
+      OR key IN (SELECT 'emprestimos:' || id FROM pluggy_items WHERE removido IS NOT NULL)
       OR key IN (SELECT 'faturas:' || id FROM accounts WHERE item_id IN (${REMOVIDOS}))`),
   ]);
   const bruto = await db.prepare("SELECT data FROM snapshots WHERE key = 'avisos'").first("data");
@@ -48,10 +49,14 @@ export async function esquecerItem(db, id, agoraIso) {
 // precisaReconectar segue a mesma regra dos avisos (PROBLEMA): o app só mostra.
 export async function listarConexoes(db, env, agoraIso) {
   await idsConexoes(db, env, agoraIso); // instalação nova: copia as conexões do secret
-  const [itens, contas] = await db.batch([
+  const [itens, contas, emprestimos] = await db.batch([
     db.prepare("SELECT id, conector, status, criado, atualizado, proximo_sync, consentimento_expira FROM pluggy_items WHERE removido IS NULL ORDER BY criado, id"),
     db.prepare(`SELECT id, item_id, type, subtype, name, bank, balance FROM accounts WHERE item_id IS NOT NULL AND item_id NOT IN (${REMOVIDOS}) ORDER BY type, name`),
+    db.prepare("SELECT key, data FROM snapshots WHERE key LIKE 'emprestimos:%'"),
   ]);
+  const emprestimosPorItem = new Map(emprestimos.results.map((s) => {
+    try { return [s.key.slice("emprestimos:".length), JSON.parse(s.data) || []]; } catch { return [s.key, []]; }
+  }));
   const porItem = new Map();
   for (const { item_id, ...c } of contas.results) porItem.set(item_id, [...(porItem.get(item_id) ?? []), c]);
   return itens.results.map((i) => {
@@ -66,6 +71,7 @@ export async function listarConexoes(db, env, agoraIso) {
       proximoSync: i.proximo_sync ?? null,
       consentimentoExpira: i.consentimento_expira ?? null,
       contas: daConexao,
+      ...(emprestimosPorItem.get(i.id)?.length ? { emprestimos: emprestimosPorItem.get(i.id) } : {}),
     };
   });
 }
@@ -77,11 +83,29 @@ export function atualizarStatus(db, item, agoraIso) {
 
 const SINCRONIZAR = new Set(["item/updated", "item/error", "item/waiting_user_input", "item/login_succeeded"]);
 
+// transactions/created e transactions/updated chegam junto com item/updated, que já sincroniza: não repetem a leitura.
+// transactions/deleted traz os ids (transactionIds) que o banco apagou.
 export function acaoWebhook(ev) {
   if (!ev || typeof ev.itemId !== "string" || !REGEX_ITEM.test(ev.itemId)) return null;
+  if (ev.event === "transactions/deleted") return idsRemovidos(ev).length ? "apagar" : null;
   if (ev.event === "item/created") return "registrar";
   if (ev.event === "item/deleted") return "remover";
   return SINCRONIZAR.has(ev.event) ? "sincronizar" : null;
+}
+
+const MAX_REMOVIDOS = 500;
+export const idsRemovidos = (ev) => (Array.isArray(ev?.transactionIds) ? ev.transactionIds : [])
+  .filter((id) => typeof id === "string" && id.length > 0 && id.length <= 100).slice(0, MAX_REMOVIDOS);
+
+// Apaga as transações e anota os ids para o pull dos apps (uma transação só).
+export async function apagarTransacoes(db, ids, agoraIso) {
+  if (!ids.length) return 0;
+  const lista = JSON.stringify(ids);
+  await db.batch([
+    db.prepare("DELETE FROM transactions WHERE id IN (SELECT value FROM json_each(?1))").bind(lista),
+    db.prepare("INSERT INTO transacoes_removidas (id, removida_em) SELECT value, ?2 FROM json_each(?1) WHERE true ON CONFLICT(id) DO UPDATE SET removida_em = excluded.removida_em").bind(lista, agoraIso),
+  ]);
+  return ids.length;
 }
 
 // Compara os SHA-256 (mesmo tamanho), não as strings. Sem secret configurado, nada passa.

@@ -280,4 +280,9 @@ void main() {
     expect(mbTipoDeRevisao(descricao: 'PIX ENVIADO JOSE', valor: -300, entreMinhas: true), isNull);
     expect(mbTipoDeRevisao(descricao: 'PIX ENVIADO JOSE', valor: -300)?.tipo, 'pix_enviado');
   });
+
+  test('transação apagada no banco (removidas) sai do app', () {
+    final j = {..._json({}), 'transacoes': const [], 'removidas': ['velha']};
+    expect(_pull(j, []).naoGastoPks, contains(mbPkTransacao('velha')));
+  });
 }

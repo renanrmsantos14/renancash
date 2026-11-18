@@ -21,3 +21,9 @@ test("consentimento do Open Finance: avisa nos últimos 7 dias", async () => {
   ] });
   assert.deepEqual(a.map((x) => [x.chave, x.titulo]), [["consentimento:i1:2026-11-20", "Autorização do Inter vence em 2 dias"]]);
 });
+
+test("parcela de empréstimo atrasada vira aviso", async () => {
+  const { alertasEmprestimos } = await import("../src/alertas.js");
+  const a = alertasEmprestimos({ emprestimos: [{ id: "e1", nome: "Crédito pessoal", banco: "Inter", atrasadas: 2 }, { id: "e2", nome: "Ok", atrasadas: 0 }] });
+  assert.deepEqual(a.map((x) => [x.chave, x.titulo]), [["emprestimo:e1:2", "2 parcelas de empréstimo atrasadas"]]);
+});

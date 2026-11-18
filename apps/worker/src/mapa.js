@@ -105,6 +105,29 @@ export function mapearTransacao(t, conta, hoje, ts, docTitular = null) {
   };
 }
 
+// Empréstimos da conexão (GET /loans) no formato que o app mostra. Quitado (sem saldo devedor nem parcela a vencer) fica fora.
+export function mapearEmprestimos(lista, banco) {
+  return (lista || []).map((l) => {
+    const p = l.installments || {};
+    const taxa = (l.interestRates || []).find((r) => num(r.preFixedRate) != null);
+    return {
+      id: String(l.id),
+      nome: l.productName || l.type || "Empréstimo",
+      banco: banco || null,
+      contratado: num(l.contractAmount),
+      saldo_devedor: num(l.payments?.contractOutstandingBalance),
+      parcelas_total: num(p.totalNumberOfInstallments),
+      pagas: num(p.paidInstallments),
+      a_vencer: num(p.dueInstallments),
+      atrasadas: num(p.pastDueInstallments),
+      taxa_pre: taxa ? num(taxa.preFixedRate) : null,
+      taxa_periodo: taxa?.taxPeriodicity === "MONTHLY" ? "mes" : taxa?.taxPeriodicity === "YEARLY" ? "ano" : null,
+      cet: num(l.CET),
+      vencimento: dia(l.dueDate),
+    };
+  }).filter((e) => (e.saldo_devedor ?? 0) > 0 || (e.a_vencer ?? 0) > 0 || (e.atrasadas ?? 0) > 0);
+}
+
 // Aviso de reconexão (item com login pendente); o Meu Pluggy não tem link direto, então aponta para o portal.
 export function avisoItem(item, banco) {
   if (!PROBLEMA.test(item.status || "")) return null;

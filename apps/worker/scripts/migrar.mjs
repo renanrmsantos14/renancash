@@ -26,6 +26,12 @@ export const COLUNAS = {
   },
 };
 
+// Tabelas novas: CREATE IF NOT EXISTS sempre roda (idempotente).
+export const TABELAS = [
+  "CREATE TABLE IF NOT EXISTS transacoes_removidas (id TEXT PRIMARY KEY, removida_em TEXT NOT NULL);",
+  "CREATE INDEX IF NOT EXISTS idx_tx_removidas ON transacoes_removidas(removida_em);",
+];
+
 // Comandos ALTER TABLE para o que falta, dado { tabela: [colunas existentes] }. Tabela ausente fica de fora.
 export function alteracoes(existentes) {
   const sql = [];
@@ -64,6 +70,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error("Tabela accounts não existe: rode `pnpm db:local` ou `pnpm db:remote` antes (o schema.sql já traz as colunas).");
     process.exit(1);
   }
+  d1(modo, "--command", TABELAS.join(" "));
   const sql = alteracoes(existentes);
   if (!sql.length) console.log("Nenhuma coluna a criar.");
   else {
