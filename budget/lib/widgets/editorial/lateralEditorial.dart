@@ -114,7 +114,7 @@ class _LateralEditorialState extends State<LateralEditorial> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-              child: Text('Meu Banco',
+              child: Text('RenanCash',
                   style: EdTexto.h1(context).copyWith(fontSize: 24)),
             ),
             // Substitui o botão flutuante do celular.
