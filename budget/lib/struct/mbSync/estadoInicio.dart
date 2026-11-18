@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/currencyFunctions.dart' show amountRatioToPrimaryCurrencyGivenPk;
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
@@ -495,8 +496,12 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
 }
 
 /// Carteiras locais: `manuais` = as que não são do Meu Banco nem arquivadas e têm lançamentos
-/// (saldo = soma deles, que pode ser 0); `investimentos` = saldo da carteira Investimentos.
+/// (saldo = soma deles, que pode ser 0, já convertida para a moeda principal, para que o total
+/// e as linhas em R$ não misturem moedas); `investimentos` = saldo da carteira Investimentos.
 Future<({List<CarteiraInicio> manuais, double investimentos})> _lerCarteiras() async {
+  final todas = await database.getAllWallets();
+  final allWallets =
+      AllWallets(list: todas, indexedByPk: {for (final w in todas) w.walletPk: w});
   final linhas = await database.customSelect(
       'SELECT w.wallet_pk AS pk, w.name AS nome, COALESCE(SUM(t.amount), 0) AS saldo, '
       'COUNT(t.transaction_pk) AS n '
@@ -512,7 +517,11 @@ Future<({List<CarteiraInicio> manuais, double investimentos})> _lerCarteiras() a
     } else if (!pk.startsWith(mbPrefixo) &&
         l.read<int>('n') > 0 &&
         !arquivadas.contains(pk)) {
-      manuais.add((nome: l.read<String>('nome'), saldo: l.read<double>('saldo')));
+      manuais.add((
+        nome: l.read<String>('nome'),
+        saldo: l.read<double>('saldo') *
+            amountRatioToPrimaryCurrencyGivenPk(allWallets, pk)
+      ));
     }
   }
   return (manuais: manuais, investimentos: investimentos);
