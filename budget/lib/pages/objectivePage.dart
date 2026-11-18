@@ -406,8 +406,14 @@ class ResumoMeta extends StatelessWidget {
     final e = cores(context);
     String dinheiro(double v) =>
         convertToMoney(Provider.of<AllWallets>(context), v);
-    String data(DateTime d) =>
-        getWordedDateShortMore(d, includeYear: d.year != DateTime.now().year);
+    final locale = Localizations.localeOf(context).toString();
+    final anoAtual = DateTime.now().year;
+    // "12 de novembro de 2026": com o ano em ambas as pontas se alguma não for do ano atual.
+    final comAno = objective.dateCreated.year != anoAtual ||
+        (objective.endDate?.year ?? anoAtual) != anoAtual;
+    String data(DateTime d) => comAno
+        ? DateFormat.yMMMMd(locale).format(d)
+        : DateFormat.MMMMd(locale).format(d);
     final diferenca = getIsDifferenceOnlyLoan(objective);
     final semAlvo = objective.type == ObjectiveType.goal && alvo <= 0;
     final String rotulo;
@@ -451,6 +457,7 @@ class ResumoMeta extends StatelessWidget {
                     data(objective.dateCreated) +
                         (fim == null ? '' : ' – ${data(fim)}'),
                     maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: EdTexto.rotulo(context)),
               ),
           ]),

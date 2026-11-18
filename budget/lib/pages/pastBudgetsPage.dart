@@ -814,7 +814,7 @@ class _PastBudgetContainerListState extends State<PastBudgetContainerList> {
                 sliver: SliverGrid(
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 600,
-                    mainAxisExtent: 96,
+                    mainAxisExtent: 104,
                     crossAxisSpacing:
                         getPlatform() == PlatformOS.isIOS ? 0 : 10,
                   ),

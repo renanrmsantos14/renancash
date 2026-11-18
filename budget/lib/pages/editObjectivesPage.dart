@@ -231,7 +231,8 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                               dateTimeModified: null,
                               order: 0,
                               income: false,
-                              iconName: objective.iconName,
+                              iconName: objective.iconName ??
+                                  iconeMetaPadrao(objective.type),
                               colour: objective.colour,
                               emojiIconName: objective.emojiIconName,
                             ),
@@ -301,7 +302,15 @@ class _EditObjectivesPageState extends State<EditObjectivesPage> {
                                             : "";
                                     return TextFont(
                                       textAlign: TextAlign.start,
-                                      text: getIsDifferenceOnlyLoan(objective)
+                                      text: objective.type ==
+                                                  ObjectiveType.goal &&
+                                              objectiveAmount <= 0
+                                          ? convertToMoney(
+                                                  Provider.of<AllWallets>(
+                                                      context),
+                                                  totalAmount) +
+                                              " guardado · sem valor alvo"
+                                          : getIsDifferenceOnlyLoan(objective)
                                           ? (amountSpentLabel +
                                               " " +
                                               differenceOnlyLoanLabel

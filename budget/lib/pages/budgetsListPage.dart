@@ -115,7 +115,7 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 600,
-                        mainAxisExtent: 150,
+                        mainAxisExtent: 190,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
                       ),
@@ -186,6 +186,7 @@ class AtalhoSugerirLimites extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('Sugerir limites por categoria',
                       style: EdTexto.corpo(context)

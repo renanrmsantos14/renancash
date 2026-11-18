@@ -531,6 +531,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                                   : Icons.chevron_left_rounded,
                                           iconSize: 18,
                                           scale: 1,
+                                          padding: const EdgeInsetsDirectional.all(13),
                                           onTap: () =>
                                               changeSelectedDateRange(-1),
                                         ),
@@ -562,6 +563,7 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
                                                 : Icons.chevron_right_rounded,
                                             iconSize: 18,
                                             scale: 1,
+                                            padding: const EdgeInsetsDirectional.all(13),
                                             onTap: () =>
                                                 changeSelectedDateRange(1),
                                           ),
