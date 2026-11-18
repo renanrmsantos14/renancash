@@ -31,6 +31,13 @@ export function desambiguar(linhas) {
   return linhas;
 }
 
+// Poupança do Inter: o balance da Pluggy fica travado (R$ 0,33); o saldo real vem em bankData.closingBalance.
+function saldoConta(c) {
+  const saldo = num(c.balance);
+  const fechamento = c.bankData?.closingBalance;
+  return c.subtype === "SAVINGS_ACCOUNT" && typeof fechamento === "number" && Number.isFinite(fechamento) && fechamento > (saldo ?? -Infinity) ? fechamento : saldo;
+}
+
 export function mapearConta(c, banco, itemId, ts) {
   return {
     id: String(c.id),
@@ -38,7 +45,7 @@ export function mapearConta(c, banco, itemId, ts) {
     subtype: c.subtype ?? null,
     name: nomeConta(c, banco),
     number: c.number ?? null,
-    balance: num(c.balance),
+    balance: saldoConta(c),
     credit_limit: num(c.creditData?.creditLimit),
     available_limit: num(c.creditData?.availableCreditLimit),
     due_date: dia(c.creditData?.balanceDueDate),
@@ -102,7 +109,9 @@ export function mapearFaturas(contaPluggy, bills) {
 // `banco`: o da conexão ou, no Meu Pluggy, o nome da conta corrente da mesma conexão sem o final do número.
 export function mapearInvestimentos(lista, banco, contasDaConexao) {
   const nomeBanco = banco || contasDaConexao.find((c) => c.type === "BANK")?.name?.replace(/\s*[·#].*$/, "") || null;
+  // Saldo bruto (amount), o mesmo que o app do banco mostra; o balance é o líquido.
   return lista
-    .filter((i) => i.status !== "TOTAL_WITHDRAWAL" && num(i.balance) != null)
-    .map((i) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo: num(i.balance), banco: nomeBanco }));
+    .map((i) => ({ i, saldo: typeof i.amount === "number" && Number.isFinite(i.amount) ? i.amount : num(i.balance) }))
+    .filter(({ i, saldo }) => i.status !== "TOTAL_WITHDRAWAL" && saldo != null)
+    .map(({ i, saldo }) => ({ id: String(i.id), nome: i.name || i.type || "Investimento", tipo: i.type ?? null, saldo, banco: nomeBanco }));
 }

@@ -89,3 +89,24 @@ test("investimentos: resgate total fica fora; banco vem da conta corrente no Meu
   assert.equal(mapearInvestimentos(lista, "Santander", contas)[0].banco, "Santander");
   assert.equal(mapearInvestimentos(lista, null, [])[0].banco, null);
 });
+
+test("poupança usa bankData.closingBalance quando maior que balance; corrente e cartão não mudam", () => {
+  const m = (c) => mapearConta({ id: "1", type: "BANK", ...c }, "Inter", "i", TS).balance;
+  assert.equal(m({ subtype: "SAVINGS_ACCOUNT", balance: 0.33, bankData: { closingBalance: 600.33 } }), 600.33);
+  assert.equal(m({ subtype: "SAVINGS_ACCOUNT", balance: 100, bankData: { closingBalance: 50 } }), 100, "menor não vale");
+  assert.equal(m({ subtype: "SAVINGS_ACCOUNT", balance: 100, bankData: { closingBalance: "900" } }), 100, "não numérico não vale");
+  assert.equal(m({ subtype: "SAVINGS_ACCOUNT", balance: 100 }), 100);
+  assert.equal(m({ subtype: "CHECKING_ACCOUNT", balance: 0.33, bankData: { closingBalance: 600.33 } }), 0.33);
+  assert.equal(m({ type: "CREDIT", subtype: "CREDIT_CARD", balance: 10, bankData: { closingBalance: 99 } }), 10);
+});
+
+test("investimentos usam amount (bruto) quando numérico, senão balance; mantém o filtro", () => {
+  const r = mapearInvestimentos([
+    { id: "a", name: "Tesouro", balance: 7.1, amount: 7.45 },
+    { id: "b", name: "CDB", balance: 430.28, amount: 431.3119 },
+    { id: "c", name: "Fundo", balance: 20 },
+    { id: "d", name: "Resgatado", balance: 5, amount: 5, status: "TOTAL_WITHDRAWAL" },
+    { id: "e", name: "Sem saldo" },
+  ], "Inter", []);
+  assert.deepEqual(r.map((x) => [x.id, x.saldo]), [["a", 7.45], ["b", 431.3119], ["c", 20]]);
+});
