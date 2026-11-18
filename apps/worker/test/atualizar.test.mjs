@@ -18,15 +18,15 @@ async function preparar(ultimo, rotas = pluggyOk) {
   return { ...amb, pelo_app, pluggy: simularPluggy(rotas) };
 }
 
-test("antes de 30 min: 429 com liberado_em e nenhuma chamada ao Pluggy", async () => {
-  const { pedir, pluggy } = await preparar({ origem: "app", min: 10 });
+test("antes de 10 min: 429 com liberado_em e nenhuma chamada ao Pluggy", async () => {
+  const { pedir, pluggy } = await preparar({ origem: "app", min: 5 });
   const cookie = await entrarComSenha(pedir);
   const r = await pedir("/api/atualizar", { method: "POST", headers: { cookie, origin: ORIGEM } });
   assert.equal(r.status, 429);
   const j = await r.json();
   assert.equal(j.ok, false);
   assert.match(j.mensagem, /Tente de novo às \d{2}:\d{2}/);
-  assert.ok(Date.parse(j.liberado_em) > Date.now() + 19 * 60_000);
+  assert.ok(Date.parse(j.liberado_em) > Date.now() + 4 * 60_000);
   assert.equal(pluggy.chamadas.length, 0);
 });
 
@@ -36,8 +36,8 @@ test("cron e webhook não contam para o limite", async () => {
   assert.ok(pluggy.chamadas.some((c) => c.metodo === "PATCH" && c.caminho === `/items/${ID}`));
 });
 
-test("depois de 30 min: PATCH antes da leitura e origem app no sync_log", async () => {
-  const { env, pelo_app, pluggy } = await preparar({ origem: "botao", min: 31 });
+test("depois de 10 min: PATCH antes da leitura e origem app no sync_log", async () => {
+  const { env, pelo_app, pluggy } = await preparar({ origem: "botao", min: 11 });
   const j = await (await pelo_app()).json();
   assert.equal(j.pedidos, 1);
   assert.deepEqual(j.falhas, []);

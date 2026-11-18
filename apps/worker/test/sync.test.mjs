@@ -106,9 +106,9 @@ test("uso grava ultimo_uso; token revogado perde acesso", async () => {
   assert.equal((await puxar()).status, 401);
 });
 
-test("esperaAtualizar: 30 min desde o último Atualizar", () => {
+test("esperaAtualizar: 10 min desde o último Atualizar", () => {
   const t = Date.parse("2026-11-09T12:00:00.000Z");
   assert.equal(esperaAtualizar(null, t), 0);
-  assert.equal(esperaAtualizar("2026-11-09T11:50:00.000Z", t), 20 * 60_000);
-  assert.equal(esperaAtualizar("2026-11-09T11:20:00.000Z", t), 0);
+  assert.equal(esperaAtualizar("2026-11-09T11:55:00.000Z", t), 5 * 60_000);
+  assert.equal(esperaAtualizar("2026-11-09T11:50:00.000Z", t), 0);
 });

@@ -91,7 +91,7 @@ Cada aparelho tem um token (**Ajustar → Apps conectados**; veja "App Android")
 
 ## Atualizar (botão e apps)
 
-O botão **Atualizar** do painel e `POST /api/sync/atualizar` (apps) pedem ao banco dados novos (`PATCH /items/{id}` no Pluggy) e leem o que já existe; quando o banco termina, o webhook faz a leitura final. **Limite: uma vez a cada 30 minutos**, somando painel e apps. Antes disso a resposta é **429** com "Atualizado há pouco. Tente de novo às HH:MM." (horário de Brasília) e `liberado_em`. O cron e os webhooks não contam para o limite.
+O botão **Atualizar** do painel e `POST /api/sync/atualizar` (apps) pedem ao banco dados novos (`PATCH /items/{id}` no Pluggy) e leem o que já existe; quando o banco termina, o webhook faz a leitura final. **Limite: uma vez a cada 10 minutos**, somando painel e apps. Antes disso a resposta é **429** com "Atualizado há pouco. Tente de novo às HH:MM." (horário de Brasília) e `liberado_em`. O cron e os webhooks não contam para o limite.
 
 ## Backup diário do D1 (R2)
 

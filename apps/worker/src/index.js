@@ -531,7 +531,7 @@ async function adicionarItem(env, id, ts) {
 
 const horaSP = (ms) => new Intl.DateTimeFormat("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
 
-// Botão Atualizar (painel e apps): no máximo 1 a cada 30 min. Pede ao banco dados novos (PATCH no item) e lê o que o
+// Botão Atualizar (painel e apps): no máximo 1 a cada 10 min. Pede ao banco dados novos (PATCH no item) e lê o que o
 // Pluggy já tem; quando o banco terminar, o webhook item/updated faz a leitura final.
 async function atualizarAgora(env, origem, ctx) {
   const db = env.DB;
