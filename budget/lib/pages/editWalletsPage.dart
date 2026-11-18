@@ -315,6 +315,21 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
   }
 }
 
+/// Fecha as telas depois de excluir ou juntar uma conta. [RoutesToPopAfterDelete.Two]
+/// fecha o formulário e o detalhe que o abriu, voltando à lista de contas (ou à Início).
+void fecharTelasAposExcluirConta(
+    BuildContext context, RoutesToPopAfterDelete routesToPopAfterDelete) {
+  if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
+    popAllRoutes(context);
+  } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
+    popRoute(context);
+  } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.Two) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.maybePop();
+  }
+}
+
 Future<DeletePopupAction?> deleteWalletPopup(
   BuildContext context, {
   required TransactionWallet wallet,
@@ -358,11 +373,7 @@ Future<DeletePopupAction?> deleteWalletPopup(
       );
     }
     if (result == true) {
-      if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
-        popAllRoutes(context);
-      } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
-        popRoute(context);
-      }
+      fecharTelasAposExcluirConta(context, routesToPopAfterDelete);
       openLoadingPopupTryCatch(() async {
         await database.deleteWallet(wallet.walletPk, wallet.order);
         openSnackbar(
@@ -407,11 +418,7 @@ void mergeWalletPopup(
       },
     );
     if (result == true) {
-      if (routesToPopAfterDelete == RoutesToPopAfterDelete.All) {
-        popAllRoutes(context);
-      } else if (routesToPopAfterDelete == RoutesToPopAfterDelete.One) {
-        popRoute(context);
-      }
+      fecharTelasAposExcluirConta(context, routesToPopAfterDelete);
       openLoadingPopupTryCatch(() async {
         await database.moveWalletTransactions(
           Provider.of<AllWallets>(context, listen: false),

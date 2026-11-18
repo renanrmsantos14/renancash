@@ -14,6 +14,7 @@ import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
+import 'package:budget/widgets/openPopup.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -231,6 +232,24 @@ void main() {
     expect(
         t.widget<AddWalletPage>(find.byType(AddWalletPage)).wallet?.walletPk,
         '0');
+    await encerrar(t);
+  });
+
+  testWidgets('excluir pelo detalhe volta para a lista de contas', (t) async {
+    await abrirLista(t);
+    await t.tap(find.text('Carteira manual').first);
+    await _assentar(t);
+    await t.tap(find.byIcon(Icons.edit_outlined));
+    await _assentar(t);
+    final form = t.widget<AddWalletPage>(find.byType(AddWalletPage));
+    expect(form.routesToPopAfterDelete, RoutesToPopAfterDelete.Two);
+    // Mesmo fechamento usado por excluir e juntar conta.
+    fecharTelasAposExcluirConta(
+        t.element(find.byType(AddWalletPage)), form.routesToPopAfterDelete);
+    await _assentar(t);
+    expect(find.byType(AddWalletPage), findsNothing);
+    expect(find.byType(WalletDetailsPage), findsNothing);
+    expect(find.byType(EditWalletsPage), findsOneWidget);
     await encerrar(t);
   });
 

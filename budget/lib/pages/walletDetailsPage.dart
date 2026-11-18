@@ -1209,7 +1209,7 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
                             AddWalletPage(
                               wallet: widget.wallet,
                               routesToPopAfterDelete:
-                                  RoutesToPopAfterDelete.All,
+                                  RoutesToPopAfterDelete.Two,
                             ),
                           );
                         },
