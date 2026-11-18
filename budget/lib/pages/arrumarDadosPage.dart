@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/struct/arrumarDados.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/estadoInicio.dart' show brl;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/widgets/exportCSV.dart' show cleanFileNameString;
 import 'package:budget/widgets/exportDB.dart';
@@ -18,6 +19,7 @@ class ArrumarDadosPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PageFramework(
         dragDownToDismiss: true,
+        horizontalPaddingConstrained: true,
         title: "Arrumar dados",
         listWidgets: [
           Padding(
@@ -166,10 +168,17 @@ class _ArrumarDadosState extends State<ArrumarDados> {
         else if (plano == null)
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: TextButton(onPressed: _carregar, child: const Text("Tentar de novo")),
+            child: TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(64, 44),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+              onPressed: _carregar,
+              child: const Text("Tentar de novo"),
+            ),
           )
         else if (plano.vazio)
-          Text("Nada para arrumar.", style: corpo)
+          _Resultado(plano: plano)
         else ...[
           _Previa(plano: plano),
           const SizedBox(height: 8),
@@ -181,21 +190,37 @@ class _ArrumarDadosState extends State<ArrumarDados> {
         if (_arquivadas.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text("Carteiras arquivadas", style: EdTexto.h2(context)),
-          const SizedBox(height: 6),
-          for (final w in _arquivadas)
-            Row(children: [
-              Expanded(child: Text(w.name, style: corpo)),
-              TextButton(
-                  onPressed: () => _desarquivar(w),
-                  child: const Text("Mostrar de novo")),
-            ]),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: e.surf,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: e.line),
+            ),
+            child: Column(
+              children: [
+                for (final w in _arquivadas)
+                  Row(children: [
+                    Expanded(child: Text(w.name, style: corpo)),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(64, 44),
+                        tapTargetSize: MaterialTapTargetSize.padded,
+                      ),
+                      onPressed: () => _desarquivar(w),
+                      child: const Text("Mostrar de novo"),
+                    ),
+                  ]),
+              ],
+            ),
+          ),
         ],
       ],
     );
   }
 }
 
-final NumberFormat _reais = NumberFormat.currency(locale: "pt_BR", symbol: "R\$");
 final DateFormat _dia = DateFormat("dd/MM");
 
 // Até 5 exemplos por item; o resto vira "e mais N".
@@ -229,7 +254,7 @@ class _Previa extends StatelessWidget {
           linhas: _exemplos([
             for (final par in p.pares)
               "${par.manual.name.trim().isEmpty ? "(sem título)" : par.manual.name.trim()} · "
-                  "${_reais.format(par.manual.amount)} · ${_dia.format(par.manual.dateCreated)}"
+                  "${brl(par.manual.amount)} · ${_dia.format(par.manual.dateCreated)}"
                   " → ${par.banco.name} (${par.dias == 0 ? "mesmo dia" : "${par.dias} d"})"
           ]),
         ),
@@ -297,10 +322,14 @@ class _Resultado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = plano;
+    final e = cores(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: cores(context).surf, borderRadius: BorderRadius.circular(16)),
+        color: e.surf,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: e.line),
+      ),
       child: Text(
         p.vazio
             ? "Nada para arrumar."

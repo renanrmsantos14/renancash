@@ -233,7 +233,7 @@ void main() {
             avisar: (_) {},
           ),
         ),
-        altura: 1220,
+        altura: 1320,
       );
     });
 
@@ -388,6 +388,7 @@ void main() {
             desarquivar: (_) async {},
           ),
         ),
+        altura: 920,
       );
     });
 

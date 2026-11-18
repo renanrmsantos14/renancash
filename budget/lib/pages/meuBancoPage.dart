@@ -177,13 +177,20 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
           await _carregar();
         },
         icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-        label: const Text("Parear com QR"),
+        label: _rotuloBotao("Parear com QR"),
       );
 
   // Pareado: horário da última sincronização, fila e erro, com as duas ações principais.
   // Rótulo numa linha só: os dois botões ficam da mesma altura em tela estreita.
   Widget _rotuloBotao(String texto) => FittedBox(
       fit: BoxFit.scaleDown, child: Text(texto, maxLines: 1, softWrap: false));
+
+  String _versaoInstalada() {
+    final v = packageInfoGlobal?.version.trim() ?? '';
+    final b = packageInfoGlobal?.buildNumber.trim() ?? '';
+    if (v.isEmpty) return '—';
+    return b.isEmpty ? v : '$v+$b';
+  }
 
   Widget _status() {
     final e = cores(context);
@@ -285,6 +292,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
     final e = cores(context);
     return PageFramework(
       dragDownToDismiss: true,
+      horizontalPaddingConstrained: true,
       title: "Meu Banco",
       listWidgets: [
         // Web usa a sessão do painel (cookie): está sempre pareado e não tem pareamento a trocar.
@@ -307,7 +315,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _sincronizar,
-                    child: const Text("Trocar pareamento"),
+                    child: _rotuloBotao("Trocar pareamento"),
                   ),
                 ),
               ]),
@@ -315,7 +323,11 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
-                  style: TextButton.styleFrom(foregroundColor: e.warntx),
+                  style: TextButton.styleFrom(
+                    foregroundColor: e.warntx,
+                    minimumSize: const Size(64, 44),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                  ),
                   onPressed: _desconectar,
                   child: const Text("Desconectar este aparelho"),
                 ),
@@ -353,7 +365,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
             ),
           const SizedBox(height: 8),
           Text(
-              "Versão instalada: ${packageInfoGlobal?.version ?? ""}+${packageInfoGlobal?.buildNumber ?? ""}",
+              "Versão instalada: ${_versaoInstalada()}",
               style: EdTexto.mono(context)),
           const SizedBox(height: 32),
         ]),

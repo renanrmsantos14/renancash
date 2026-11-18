@@ -1,5 +1,4 @@
 import 'package:budget/struct/mbSync/pareamento.dart';
-import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/textInput.dart';
 import 'package:budget/struct/editorial.dart';
@@ -91,8 +90,10 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
 
   @override
   Widget build(BuildContext context) {
+    final e = cores(context);
     return PageFramework(
       dragDownToDismiss: true,
+      horizontalPaddingConstrained: true,
       title: "Parear com QR",
       listWidgets: [
         Padding(
@@ -100,15 +101,20 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
               horizontal: 20, vertical: 5),
           child: Text(
               "Abra o painel do Meu Banco, crie um token de aparelho e aponte a câmera para o QR.",
-              style: EdTexto.corpo(context).copyWith(color: cores(context).mu)),
+              style: EdTexto.corpo(context).copyWith(color: e.mu)),
         ),
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(
               horizontal: 20, vertical: 10),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              height: 320,
+          child: Container(
+            height: 320,
+            decoration: BoxDecoration(
+              color: e.surf,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: e.line),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
               child: widget.visorParaTeste ??
                   (widget.erroCameraParaTeste
                       ? _erroCamera(context)
@@ -133,10 +139,12 @@ class _MeuBancoParearPageState extends State<MeuBancoParearPage> {
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(
               horizontal: 20, vertical: 10),
-          child: Button(
-            label: "Parear com o link",
-            expandedLayout: true,
-            onTap: _colar,
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _colar,
+              child: const Text("Parear com o link"),
+            ),
           ),
         ),
       ],
