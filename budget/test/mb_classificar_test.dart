@@ -225,7 +225,7 @@ void main() {
       expect(find.text('Uber Trip'), findsNothing); // só o primeiro
       expect(find.text('−R\$ 48,90'), findsOneWidget);
       expect(find.text('A IA sugere'), findsOneWidget);
-      expect(find.text('Alimentação'), findsOneWidget);
+      expect(find.text('GASTO · Alimentação'), findsOneWidget);
       expect(find.text('Confirmar'), findsOneWidget);
       expect(find.text('Não é isso? Toque na certa'), findsOneWidget);
       expect(find.text('Transporte'), findsOneWidget); // chip provável

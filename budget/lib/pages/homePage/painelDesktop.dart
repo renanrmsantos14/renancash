@@ -413,11 +413,16 @@ class _Tabela extends StatelessWidget {
                         child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                           IconeTipo(mbTipoDaTransacao(x, t.category.name), tamanho: 22),
                           const SizedBox(width: 8),
-                          Text('${x.income ? '+' : '−'}${brl(x.amount.abs())}',
-                              textAlign: TextAlign.end,
-                              style: EdTexto.corpo(context).copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  color: mbTipoDaTransacao(x, t.category.name).cor(context))),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('${x.income ? '+' : '−'}${brl(x.amount.abs())}',
+                                  textAlign: TextAlign.end,
+                                  style: EdTexto.corpo(context).copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      color: mbTipoDaTransacao(x, t.category.name).cor(context))),
+                            ),
+                          ),
                         ]),
                       ),
                     ],

@@ -223,7 +223,7 @@ void main() {
             subPk: 'salario', titulo: 'salario', confianca: .9, fonte: MbFonteSugestao.mesPassado),
       });
       expect(find.text('Como no mês passado'), findsOneWidget);
-      expect(find.text('Trabalho › Salário'), findsOneWidget);
+      expect(find.text('RECEITA · Trabalho › Salário'), findsOneWidget);
       expect(find.text('Rachou uma conta?'), findsNothing);
     });
 
