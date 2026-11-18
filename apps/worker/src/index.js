@@ -390,7 +390,7 @@ async function alertaSemanal(env) {
 
 async function testePush(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  await gravarAlertas(env.DB, [{ chave: "teste:" + agora(), titulo: "Teste do Meu Banco", corpo: "As notificações estão funcionando." }]);
+  await gravarAlertas(env.DB, [{ chave: "teste:" + agora(), titulo: "Teste do RenanCash", corpo: "As notificações estão funcionando." }]);
   return json({ ok: true, enviados: await enviarPendentes(env, true) });
 }
 

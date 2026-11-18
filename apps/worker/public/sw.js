@@ -64,9 +64,9 @@ async function mostrarAlertas() {
     if (r.ok) lista = (await r.json()).notificacoes || [];
   } catch {}
   const icone = "/icons/icon-192.png";
-  if (!lista.length) return self.registration.showNotification("Meu Banco", { body: "Você tem alertas novos. Abra o app para ver.", icon: icone, tag: "meu-banco" });
+  if (!lista.length) return self.registration.showNotification("RenanCash", { body: "Você tem alertas novos. Abra o app para ver.", icon: icone, tag: "meu-banco" });
   // Vários alertas de uma vez (o que ficou retido no silêncio, por exemplo): uma notificação só, para não virar enxurrada.
-  if (lista.length > 1) return self.registration.showNotification(`${lista.length} alertas do Meu Banco`, { body: lista.map((n) => n.titulo).join("\n"), icon: icone, tag: "meu-banco-lote", data: { url: destino(lista) } });
+  if (lista.length > 1) return self.registration.showNotification(`${lista.length} alertas do RenanCash`, { body: lista.map((n) => n.titulo).join("\n"), icon: icone, tag: "meu-banco-lote", data: { url: destino(lista) } });
   const [n] = lista;
   await self.registration.showNotification(n.titulo, { body: n.corpo, icon: icone, tag: n.chave, data: { url: destino(lista) } });
 }
