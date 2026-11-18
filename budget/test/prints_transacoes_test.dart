@@ -666,6 +666,12 @@ void main() {
         altura: 900,
         scaffold: false,
         versaoCanto: true,
+        aposMontar: (tester) async {
+          // Uma só versão no canto (lateral e VersaoCanto não se sobrepõem) e valores com centavos.
+          expect(find.textContaining('· dev'), findsOneWidget);
+          expect(find.textContaining('6.500,00'), findsWidgets);
+          expect(find.textContaining('R\$ 6.500 '), findsNothing);
+        },
       );
     });
 

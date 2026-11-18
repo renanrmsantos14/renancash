@@ -2880,7 +2880,7 @@ class AmountSpentEntryRow extends StatelessWidget {
                                   style: EdTexto.rotulo(context),
                                 ),
                               ]),
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: EdTexto.corpo(context)
                                   .copyWith(fontWeight: FontWeight.w500),

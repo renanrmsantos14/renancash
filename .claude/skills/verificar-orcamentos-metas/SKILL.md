@@ -54,6 +54,9 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 - Grades desktop (`enableDoubleColumn`): lista de orçamentos `mainAxisExtent: 190` (cartão tem ~185 px), histórico 104; placeholder do cartão 185 px. Prints desktop 1440x900 em `prints_orcamentos_test.dart` pegam overflow.
 - Os prints rodam sem EasyLocalization: chaves e textos traduzidos (ex.: "Goals", "savings-goal", "today, November 18", "save R$ 33,78/day for 148 days") saem em inglês só nos prints; conferir pt-BR no app.
 
+## Acabamento
+- Nomes de categoria, orçamento e meta ao lado do valor ocupam o espaço flexível (`Expanded`) e quebram em até 2 linhas antes de truncar; o valor fica à direita com largura intrínseca (conferir `Alimentação` e `Almoço Betinhos` nos prints do orçamento).
+
 ## Evidência obrigatória
 - Tail do analyze e dos testes, PNGs em `.verificacao/prints/` conferidos claro e escuro.
 

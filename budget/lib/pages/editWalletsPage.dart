@@ -33,6 +33,7 @@ import 'exchangeRatesPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart'
     show mbLerSaldosReais, mbSigla;
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/contas.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:sliver_tools/sliver_tools.dart';
@@ -638,7 +639,7 @@ class PrimaryCurrencySetting extends StatelessWidget {
           ? Icons.card_membership_outlined
           : Icons.card_membership_rounded,
       afterWidget: Tappable(
-        color: Theme.of(context).colorScheme.secondaryContainer,
+        color: cores(context).chip,
         borderRadius: 10,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),

@@ -41,7 +41,10 @@ description: "Verifica as telas de Contas no padrão editorial: detalhe da conta
 - Código da moeda ("BRL") só aparece com mais de uma moeda nas carteiras (`allContainSameCurrency`): linhas de Contas e "Total líquido" de Todos os gastos > Agora.
 - Todos os gastos > Histórico: ciclo passado com o intervalo ("6 out – 5 nov", `intervaloDoCiclo`); o número em negrito vem rotulado "Saldo" (ou "Saldo acumulado") e é entradas − saídas, conferível com o par à direita (antes era o net com ajustes de saldo). Legenda do gráfico: "Saídas" / "Entradas" (ou "Saldo acumulado").
 
-## Evidência obrigatória
+## Acabamento
+- Chip da moeda principal (`PrimaryCurrencySetting`) usa `cores(context).chip`, como os demais chips. Totais por categoria no detalhe da conta quebram o nome em até 2 linhas antes de truncar.
+
+Evidência obrigatória
 - Tail do analyze e dos testes; PNGs em `.verificacao/prints/contas_*` e `.verificacao/contas-web/`.
 
 ## Limites

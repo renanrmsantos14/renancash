@@ -520,7 +520,7 @@ class CartaoMeta extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(objective.name,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: EdTexto.corpo(context)
                       .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
@@ -664,7 +664,7 @@ class LinhaEmprestimoDiferenca extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(objective.name,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: EdTexto.corpo(context)
                       .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
