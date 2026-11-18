@@ -6,6 +6,7 @@ import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from ".
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
 import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
+import { contasBrutas, idsSomenteLeitura } from "./diagnostico.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
@@ -69,6 +70,8 @@ export default {
         const api = await clientePluggy(env.DB, env, agora());
         const itens = await Promise.all((await api.listarIds()).map((id) => api.item(id).then((i) => ({ id, conector: i.connector?.name, status: i.status, executionStatus: i.executionStatus, lastUpdatedAt: i.lastUpdatedAt }), (e) => ({ id, erro: e.message }))));
         resp = json({ itens });
+      } else if (caminho === "/api/pluggy/contas-brutas" && request.method === "GET") {
+        resp = json(await contasBrutas(new ApiCliente(env, await idsSomenteLeitura(env.DB, env)))); // diagnóstico ao vivo, só leitura
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
       return seguranca(resp);
