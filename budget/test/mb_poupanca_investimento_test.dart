@@ -64,7 +64,7 @@ void main() {
         {'id': 'g', 'type': 'CREDIT', 'name': 'GOLD', 'item_id': 'i1'},
         {'id': 'x', 'type': 'CREDIT', 'name': 'GOLD', 'item_id': 'outra'},
         {'id': 'pai', 'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Banco Santander Pessoa Física ·57-2', 'item_id': 's1'},
-        {'id': 'poup', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança', 'item_id': 's1'},
+        {'id': 'poup', 'type': 'BANK', 'subtype': 'SAVINGS_ACCOUNT', 'name': 'Poupança', 'balance': 1.06, 'item_id': 's1'},
       ]);
       expect(r.firstWhere((c) => c['id'] == 'g')['bank'], 'Banco Inter');
       expect(r.firstWhere((c) => c['id'] == 'x')['bank'], isNull);
