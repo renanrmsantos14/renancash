@@ -223,14 +223,13 @@ class SeloRitmo extends StatelessWidget {
         ? 'No ritmo'
         : '${acima ? '▲' : '▼'} $valor '
             '${acima ? 'acima' : 'abaixo'} ${renda ? 'da meta' : 'do ritmo'}';
-    // Despesa acima do ritmo é ruim; poupança acima da meta é boa.
-    final (Color fundo, Color letra) = noRitmo
+    // Despesa acima do ritmo é ruim; poupança acima da meta é boa; poupança
+    // abaixo da meta fica neutra (no começo do ciclo é normal).
+    final (Color fundo, Color letra) = noRitmo || (renda && !acima)
         ? (e.line, e.mu)
-        : (acima != renda)
-            ? (e.warnbg, e.warntx)
-            : renda
-                ? (e.line, e.mu)
-                : (e.pos.withOpacity(.14), e.pos);
+        : acima == renda
+            ? (e.pos.withOpacity(.14), e.pos)
+            : (e.warnbg, e.warntx);
     return Semantics(
       label: texto.replaceAll('▲ ', '').replaceAll('▼ ', ''),
       excludeSemantics: true,
