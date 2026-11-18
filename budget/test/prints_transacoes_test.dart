@@ -522,7 +522,9 @@ void main() {
         t,
         modo,
         'add_nova',
-        AddTransactionPage(
+        _variante == 'E'
+            ? const Text('ok')
+            : AddTransactionPage(
           startInitialAddTransactionSequence: false,
           routesToPopAfterDelete: RoutesToPopAfterDelete.None,
         ),

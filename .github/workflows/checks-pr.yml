@@ -46,11 +46,11 @@ jobs:
       - name: Diagnóstico de variantes
         if: always()
         run: |
-          for v in Z A B; do
+          for v in Z A B E; do
             rm -f /tmp/prints_diag.log
-            PRINTS=1 timeout 100 flutter test test/prints_transacoes_test.dart --plain-name "print AddTransactionPage nova claro" --update-goldens --dart-define=VARIANTE=$v > /tmp/var_$v.log 2>&1
-            echo "variante $v rc=$?"
-            tail -4 /tmp/prints_diag.log || true
+            PRINTS=1 timeout 100 flutter test test/prints_transacoes_test.dart --plain-name "print AddTransactionPage nova claro" --update-goldens --dart-define=VARIANTE=$v > /tmp/var_$v.log 2>&1 || echo "variante $v rc=$?"
+            tail -5 /tmp/prints_diag.log || true
+            grep -E 'tests? passed|failed|Some tests' /tmp/var_$v.log | tail -2 || true
           done
 
       - name: Prints visuais
@@ -60,7 +60,7 @@ jobs:
           # Um arquivo por vez e com limite de tempo: um print travado não derruba o runner.
           rc=0
           for f in $(ls test/prints_*_test.dart); do
-            PRINTS=1 timeout 300 flutter test "$f" --update-goldens || rc=$?
+            PRINTS=1 timeout 100 flutter test "$f" --update-goldens || rc=$?
           done
           exit $rc
 
