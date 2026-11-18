@@ -64,6 +64,8 @@ Map<String, dynamic> _ajustes(String modo) => {
       'forceFullDarkBackground': false,
       'outlinedIcons': true,
       'font': 'Geist',
+      // Sem EasyLocalization o formato do sistema (TimeDigits) quebra: fixa 24 h.
+      'use24HourFormat': '24-hour',
       'selectedWalletPk': '0',
       'showExtraInfoText': true,
       'nonCompactTransactions': false,

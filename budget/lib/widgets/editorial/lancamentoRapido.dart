@@ -2,9 +2,9 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart' show popRoute;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/casosComuns.dart';
+import 'package:budget/struct/mbSync/conexoes.dart' show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl;
 import 'package:budget/struct/settings.dart';
-import 'package:budget/widgets/editorial/painelTransacao.dart' show mbRotulosUnicos;
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -54,7 +54,8 @@ Future<bool> mbLancarRapido(BuildContext context, MbAtalhoRapido a) async {
   var valor = a.valor;
   var carteiraPk = '${appStateSettings['selectedWalletPk'] ?? '0'}';
   final contas = Provider.of<AllWallets>(context, listen: false).list;
-  final nomes = mbRotulosUnicos([for (final w in contas) (w.walletPk, w.name)]);
+  // Corrente e poupança do mesmo banco têm o mesmo nome: o tipo diferencia.
+  final nomes = mbRotulosPorPk({for (final w in contas) w.walletPk: w.name}, await mbTiposDasCarteiras());
   final lancar = await openBottomSheet(
     context,
     fullSnap: true,

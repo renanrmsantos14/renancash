@@ -4,6 +4,8 @@ import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/conexoes.dart'
+    show mbRotulosPorPk, mbTiposDasCarteiras;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/openPopup.dart';
@@ -58,7 +60,7 @@ double? mbLerValor(String texto) {
 }
 
 /// pk → rótulo; nomes repetidos ganham " (2)", " (3)"... para o seletor não esconder qual é qual.
-Map<String, String> mbRotulosUnicos(Iterable<(String, String)> itens) {
+Map<String, String> _rotulosUnicos(Iterable<(String, String)> itens) {
   final vistos = <String, int>{};
   return {
     for (final (pk, nome) in itens)
@@ -100,6 +102,7 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
       t?.walletFk ?? '${appStateSettings["selectedWalletPk"] ?? "0"}';
   late DateTime _data = t?.dateCreated ?? DateTime.now();
   List<TransactionCategory> _categorias = const [];
+  Map<String, String> _tiposCarteiras = const {};
   String? _erro;
   bool _salvando = false;
   late final String _inicial;
@@ -122,6 +125,9 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
     super.initState();
     _inicial = _retrato();
     _podeTrocarFormulario = _podeSair;
+    mbTiposDasCarteiras().then((tipos) {
+      if (mounted && tipos.isNotEmpty) setState(() => _tiposCarteiras = tipos);
+    });
     (widget.categorias ?? () => database.getAllCategories())().then((lista) {
       // Correção de saldo ("0") não é categoria de uso.
       if (mounted) {
@@ -281,17 +287,18 @@ class _FormularioTransacaoState extends State<FormularioTransacao> {
         .where((c) => _categoriaPk != null && c.mainCategoryPk == _categoriaPk)
         .toList();
     final nomesCategorias =
-        mbRotulosUnicos([for (final c in categorias) (c.categoryPk, c.name)]);
+        _rotulosUnicos([for (final c in categorias) (c.categoryPk, c.name)]);
     final nomesSubs =
-        mbRotulosUnicos([for (final c in subs) (c.categoryPk, c.name)]);
+        _rotulosUnicos([for (final c in subs) (c.categoryPk, c.name)]);
     // Conta arquivada só aparece se for a da própria transação.
     final arquivadas = carteirasArquivadas();
     final contas = [
       for (final w in carteiras)
         if (w.walletPk == _carteiraPk || !arquivadas.contains(w.walletPk)) w
     ];
-    final nomesContas =
-        mbRotulosUnicos([for (final w in contas) (w.walletPk, w.name)]);
+    // Corrente e poupança do mesmo banco têm o mesmo nome: o tipo diferencia.
+    final nomesContas = mbRotulosPorPk(
+        {for (final w in contas) w.walletPk: w.name}, _tiposCarteiras);
     final agora = DateTime.now();
     final hoje = _data.year == agora.year &&
         _data.month == agora.month &&
