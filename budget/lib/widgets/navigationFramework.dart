@@ -3,6 +3,7 @@ import 'package:budget/widgets/editorial/layoutDesktop.dart'
 import 'package:budget/widgets/editorial/versaoCanto.dart'
     show FaixaVersao, mbAlturaFaixaVersao;
 import 'dart:async';
+import 'package:budget/struct/mbSync/agendador.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/colors.dart';
 import 'package:budget/database/initializeDefaultDatabase.dart';
@@ -308,6 +309,7 @@ Future<bool> runAllCloudFunctions(BuildContext context,
   errorSigningInDuringCloud = false;
   try {
     loadingIndeterminateKey.currentState?.setVisibility(true);
+    mbIniciarSyncAutomatico();
     await sincronizarMeuBanco(); // nunca lança; erro fica na tela "Meu Banco"
     unawaited(atualizadorVerificarAutomatico(context)); // não bloqueia a UI
     await runForceSignIn(context);

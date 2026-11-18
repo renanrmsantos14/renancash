@@ -4,7 +4,9 @@ import 'package:budget/struct/atualizador.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/pareamento.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/oficial.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
@@ -13,6 +15,8 @@ import 'package:budget/functions.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/textInput.dart';
+import 'dart:async' show TimeoutException;
+
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -41,6 +45,8 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
   bool _atualizando = false;
   bool _procurandoAtualizacao = false;
   String? _msgAtualizacao;
+  bool _copiaUnica = false;
+  String? _msgCopiaUnica;
 
   @override
   void initState() {
@@ -140,6 +146,122 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
     await meuBancoDesconectar();
     await _carregar();
   }
+
+  Future<bool> _confirmar(String titulo, String descricao, String rotulo,
+          IconData icone) async =>
+      await openPopup<bool>(
+        context,
+        title: titulo,
+        description: descricao,
+        icon: icone,
+        onSubmitLabel: rotulo,
+        onCancelLabel: "Cancelar",
+        onSubmit: () => popRoute(context, true),
+        onCancel: () => popRoute(context, false),
+      ) ==
+      true;
+
+  // Roda uma das ações de cópia única; erro de rede vira mensagem e nada fica pela metade sem aviso.
+  Future<void> _copiaUnicaRodar(
+      Future<String> Function(MbCliente cliente) acao) async {
+    if (_copiaUnica || meuBancoSincronizando.value) return;
+    final cliente = await mbClienteConfigurado();
+    if (cliente == null) {
+      openSnackbar(SnackbarMessage(title: "Este aparelho não está pareado."));
+      return;
+    }
+    setState(() {
+      _copiaUnica = true;
+      _msgCopiaUnica = null;
+    });
+    // A flag de sincronização é ligada por quem executa (mbEmRodada), não durante os diálogos de confirmação.
+    String msg;
+    try {
+      msg = await acao(cliente);
+    } on MbRecusado catch (e) {
+      msg = e.mensagem;
+    } on MbErroHttp catch (e) {
+      msg = e.mensagem;
+    } on TimeoutException {
+      msg = "Tempo esgotado ao falar com o Meu Banco. Tente de novo.";
+    } catch (e) {
+      if (kDebugMode) debugPrint("Meu Banco: falha na cópia única: $e");
+      msg = "Não foi possível concluir agora. Confira a internet e tente de novo.";
+    }
+    if (mounted) {
+      setState(() {
+        _copiaUnica = false;
+        _msgCopiaUnica = msg.isEmpty ? null : msg;
+      });
+    }
+    if (msg.isNotEmpty) openSnackbar(SnackbarMessage(title: msg));
+  }
+
+  Future<void> _tornarOficial() async {
+    if (kIsWeb) return;
+    await _copiaUnicaRodar((cliente) async {
+      // O plano é calculado antes e mostrado no diálogo; nada é enviado sem confirmação.
+      final preparo = await mbPrepararOficial(cliente);
+      final p = preparo.plano;
+      if (!await _confirmar(
+          "Enviar tudo como oficial?",
+          "Serão enviados ${p.enviados} registros deste aparelho e apagados ${p.apagados} que existem no Meu Banco e não existem aqui (carteiras, categorias, orçamentos, metas, lançamentos, regras e assinaturas). Os outros aparelhos devem usar \"Recomeçar pela nuvem\" em seguida.",
+          "Enviar tudo",
+          Icons.cloud_upload_rounded)) return "";
+      if (p.apagados > 50 &&
+          !await _confirmar(
+              "Apagar ${p.apagados} registros da nuvem?",
+              "Isso é bastante coisa. Confirme só se este aparelho realmente tem os dados corretos.",
+              "Apagar mesmo",
+              Icons.warning_amber_rounded)) return "";
+      final r = await mbExecutarOficial(cliente, preparo);
+      await sincronizarMeuBanco();
+      return "Enviados ${r.enviados}, apagados ${r.apagados}." +
+          (r.rejeitados.isEmpty
+              ? ""
+              : " ${r.rejeitados.length} rejeitado(s), seguem pendentes: ${r.rejeitados.take(3).join('; ')}");
+    });
+  }
+
+  Future<void> _recomecarPelaNuvem() async {
+    await _copiaUnicaRodar((cliente) async {
+      final c = await mbContarNuvem(cliente);
+      if (c.lancamentos == 0 || c.categorias == 0) {
+        return 'O servidor ainda não tem lançamentos e categorias do RenanCash. Use "Enviar tudo como oficial" no celular antes.';
+      }
+      if (!await _confirmar(
+          "Recomeçar pela nuvem?",
+          "O Meu Banco tem ${c.lancamentos} lançamentos, ${c.categorias} categorias e ${c.carteiras} carteiras. Os dados deste aparelho (carteiras, categorias, orçamentos, metas, lançamentos e regras) serão apagados e baixados de novo; o que só existe aqui será perdido.",
+          "Apagar e baixar",
+          Icons.cloud_download_rounded)) return "";
+      return await mbRecomecarPelaNuvem(cliente) ??
+          "Pronto: este aparelho agora tem os dados do Meu Banco.";
+    });
+  }
+
+  Widget _copiaUnicaSecao() => _secao("Cópia única", [
+        Text(
+            kIsWeb ? "Os dados do celular são os oficiais. Aqui, recomece pela nuvem depois de o celular enviar tudo." : "Os dados do celular são os oficiais. Primeiro envie tudo do celular; depois, na web, recomece pela nuvem.",
+            style: EdTexto.corpo(context)),
+        const SizedBox(height: 12),
+        // Só o celular é a fonte oficial; a web apenas recomeça pela nuvem.
+        if (!kIsWeb) ...[
+          OutlinedButton(
+            onPressed: _copiaUnica ? null : _tornarOficial,
+            child: _rotuloBotao(_copiaUnica ? "Aguarde…" : "Enviar tudo como oficial"),
+          ),
+          const SizedBox(height: 10),
+        ],
+        OutlinedButton(
+          onPressed: _copiaUnica ? null : _recomecarPelaNuvem,
+          child: _rotuloBotao(_copiaUnica ? "Aguarde…" : "Recomeçar pela nuvem"),
+        ),
+        if (_msgCopiaUnica != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_msgCopiaUnica!, style: EdTexto.rotulo(context)),
+          ),
+      ]);
 
   Widget _secao(String titulo, List<Widget> filhos) => Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 0),
@@ -303,6 +425,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
           ),
           _secao("Contas conectadas",
               [widget.contasConectadas ?? const ContasConectadas()]),
+          _copiaUnicaSecao(),
           if (!kIsWeb)
             _secao("Pareamento", [
               _campos(),

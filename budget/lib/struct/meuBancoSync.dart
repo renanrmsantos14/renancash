@@ -217,9 +217,38 @@ Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) {
   return _rodar(clienteParaTeste);
 }
 
-Future<bool> _rodar(MbCliente? clienteParaTeste) async {
+Future<bool> _rodar(MbCliente? clienteParaTeste) =>
+    _rodarCom(() => _sincronizarUmaVez(clienteParaTeste));
+
+// Roda `acao` como a rodada em curso: o sync periódico e os pulls que chegarem no meio esperam a rodada extra.
+// Para operações que trocam o estado inteiro (enviar tudo como oficial, recomeçar pela nuvem).
+Future<T> mbEmRodada<T>(Future<T> Function() acao) async {
+  while (_rodadaEmCurso != null) {
+    await _rodadaEmCurso!.catchError((_) => false);
+  }
+  late T resultado;
+  Object? erro;
+  StackTrace? pilha;
+  await _rodarCom(() async {
+    try {
+      resultado = await acao();
+    } catch (e, st) {
+      erro = e;
+      pilha = st;
+    }
+    return true;
+  });
+  if (erro != null) Error.throwWithStackTrace(erro!, pilha!);
+  return resultado;
+}
+
+// Uma sincronização dentro de `mbEmRodada` (que já é a rodada em curso: sincronizarMeuBanco ficaria esperando por ela).
+Future<bool> mbSincronizarNaRodada(MbCliente? cliente) =>
+    _sincronizarUmaVez(cliente);
+
+Future<bool> _rodarCom(Future<bool> Function() corpo) async {
   meuBancoSincronizando.value = true;
-  final atual = _rodadaEmCurso = _sincronizarUmaVez(clienteParaTeste);
+  final atual = _rodadaEmCurso = corpo();
   // Nunca deve lançar (os erros viram meuBancoUltimoErro), mas se lançar não pode deixar a rodada presa:
   // sem isto _rodadaEmCurso ficaria preenchido e toda chamada seguinte esperaria para sempre.
   final ok = await atual.catchError((_) => false);
@@ -249,11 +278,14 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     final existentes = <String>{};
     final atuais = await mbProjetarLocal(espelho, await mbLerAplicado(),
         agora: agora, existentes: existentes);
+    final soLinha = <Espelho>[];
     final mudancas = detectarMudancasLocais(
         espelho: espelho,
         atuais: atuais,
         agora: agora,
-        existentes: existentes);
+        existentes: existentes,
+        soLinha: soLinha);
+    if (soLinha.isNotEmpty) await mbGravarEspelho(soLinha);
     // Ajustes não têm exclusão local, mas guardam a projeção para não serem reenviados a cada rodada.
     await mbGravarEspelho([
       for (final m in mudancas)

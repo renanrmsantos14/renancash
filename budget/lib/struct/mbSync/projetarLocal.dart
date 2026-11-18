@@ -2,6 +2,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/configuracoes.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
+import 'package:budget/struct/mbSync/linha.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
@@ -37,20 +38,23 @@ Projetado mbProjCarteira(TransactionWallet w) => Projetado(
       'ordem': w.order,
       'moeda': _naoVazio(w.currency),
       'decimais': w.decimals,
+      ...mbComLinha(const {}, w.toJson(serializer: mbSerializador)),
     },
     mbEditadoEm(w.dateTimeModified));
 
 Projetado mbProjCategoria(TransactionCategory c) => Projetado(
     'categorias',
     idDoPk(c.categoryPk),
-    projetarCategoria(CatLocal(
-        pk: c.categoryPk,
-        nome: c.name,
-        receita: c.income,
-        cor: c.colour,
-        icone: c.iconName,
-        paiPk: c.mainCategoryPk,
-        ordem: c.order)),
+    mbComLinha(
+        projetarCategoria(CatLocal(
+            pk: c.categoryPk,
+            nome: c.name,
+            receita: c.income,
+            cor: c.colour,
+            icone: c.iconName,
+            paiPk: c.mainCategoryPk,
+            ordem: c.order)),
+        c.toJson(serializer: mbSerializador)),
     mbEditadoEm(c.dateTimeModified));
 
 // `servidor`: dados do registro vigente no servidor. Um sinalizador falso só é enviado (como 0) se o servidor tem o 1.
@@ -60,14 +64,16 @@ Projetado mbProjOrcamento(Budget b, {Map<String, dynamic>? servidor}) {
   return Projetado(
       'orcamentos',
       idDoPk(b.budgetPk),
-      projetarOrcamento(OrcLocal(
-          pk: b.budgetPk,
-          nome: b.name,
-          valor: b.amount,
-          categoriaPks: b.categoryFks,
-          arquivado: sinal(b.archived, 'arquivado'),
-          limiteAbsoluto:
-              sinal(b.isAbsoluteSpendingLimit, 'limite_absoluto'))),
+      mbComLinha(
+          projetarOrcamento(OrcLocal(
+              pk: b.budgetPk,
+              nome: b.name,
+              valor: b.amount,
+              categoriaPks: b.categoryFks,
+              arquivado: sinal(b.archived, 'arquivado'),
+              limiteAbsoluto:
+                  sinal(b.isAbsoluteSpendingLimit, 'limite_absoluto'))),
+          b.toJson(serializer: mbSerializador)),
       mbEditadoEm(b.dateTimeModified));
 }
 
@@ -75,11 +81,11 @@ Projetado mbProjOrcamento(Budget b, {Map<String, dynamic>? servidor}) {
 Projetado mbProjLimite(CategoryBudgetLimit l) => Projetado(
     'limites',
     idDoPk(l.categoryLimitPk),
-    {
+    mbComLinha({
       'orcamento_id': idDoPk(l.budgetFk),
       'categoria_id': idDoPk(l.categoryFk),
       'valor': l.amount,
-    },
+    }, l.toJson(serializer: mbSerializador)),
     mbEditadoEm(l.dateTimeModified));
 
 Projetado mbProjObjetivo(Objective o, {List<String> aplicacoes = const []}) {
@@ -87,14 +93,16 @@ Projetado mbProjObjetivo(Objective o, {List<String> aplicacoes = const []}) {
   return Projetado(
       divida ? 'dividas' : 'metas',
       idDoPk(o.objectivePk),
-      projetarObjetivo(ObjLocal(
-          pk: o.objectivePk,
-          nome: o.name,
-          divida: divida,
-          receita: o.income,
-          valor: o.amount,
-          prazo: o.endDate,
-          aplicacaoIds: aplicacoes)),
+      mbComLinha(
+          projetarObjetivo(ObjLocal(
+              pk: o.objectivePk,
+              nome: o.name,
+              divida: divida,
+              receita: o.income,
+              valor: o.amount,
+              prazo: o.endDate,
+              aplicacaoIds: aplicacoes)),
+          o.toJson(serializer: mbSerializador)),
       mbEditadoEm(o.dateTimeModified));
 }
 
@@ -132,7 +140,7 @@ Projetado mbProjLancamento(Transaction t, String carteiraNome,
   final p = Projetado(
       'lancamentos',
       idDoPk(t.transactionPk),
-      projetarLancamento(LancLocal(
+      mbComLinha(projetarLancamento(LancLocal(
           pk: t.transactionPk,
           nome: t.name,
           nota: t.note,
@@ -152,6 +160,7 @@ Projetado mbProjLancamento(Transaction t, String carteiraNome,
           periodo: t.periodLength,
           fim: t.endDate,
           vencimento: t.originalDateDue)),
+          t.toJson(serializer: mbSerializador)),
       mbEditadoEm(t.dateTimeModified));
   if (tipo == null) return p;
   if (!t.paid && (servidor?['pago'] == 1 || servidor?['despago'] == 1)) {
@@ -184,7 +193,10 @@ Projetado? mbProjRegra(
       base);
   return dados == null
       ? null
-      : Projetado('regras', idDoPk(a.associatedTitlePk), dados,
+      : Projetado(
+          'regras',
+          idDoPk(a.associatedTitlePk),
+          mbComLinha(dados, a.toJson(serializer: mbSerializador)),
           mbEditadoEm(a.dateTimeModified));
 }
 
@@ -229,7 +241,9 @@ bool mbEhLancamentoManual(Transaction t) =>
 // transação de outro tipo): ausência nelas não pode virar tombstone.
 Future<Map<String, Projetado>> mbProjetarLocal(
     Map<String, Espelho> espelho, Map<String, String> aplicado,
-    {required String agora, Set<String>? existentes}) async {
+    {required String agora,
+    Set<String>? existentes,
+    bool todasConfiguracoes = false}) async {
   final out = <String, Projetado>{};
   final semPrefixo = mbIdsSemPrefixo([for (final e in espelho.values) e.registro]);
   void add(Projetado? p) {
@@ -252,7 +266,11 @@ Future<Map<String, Projetado>> mbProjetarLocal(
   final catPorPk = {for (final c in cats) c.categoryPk: c};
   cats.forEach((c) => add(mbProjCategoria(c)));
   for (final a in await database.select(database.associatedTitles).get()) {
-    add(mbProjRegra(a, espelho['regras/${mbIdLocal(a.associatedTitlePk, semPrefixo)}']?.registro.dados));
+    final id = mbIdLocal(a.associatedTitlePk, semPrefixo);
+    final regra = mbProjRegra(a, espelho['regras/$id']?.registro.dados);
+    // Título vazio ou com '*' não é projetável, mas a regra existe: não pode virar exclusão no servidor.
+    if (regra == null) existentes?.add('regras/$id');
+    add(regra);
   }
   final orcamentos = await database.select(database.budgets).get();
   for (final b in orcamentos) {
@@ -320,7 +338,8 @@ Future<Map<String, Projetado>> mbProjetarLocal(
             servidorTemEscolha('ajustes', pk.startsWith('mb:') ? pk.substring(3) : pk),
         editadoEm: t == null ? agora : mbEditadoEm(t.dateTimeModified)));
   }
-  for (final c in await mbProjConfiguracoes(espelho, existentes ?? <String>{})) {
+  for (final c in await mbProjConfiguracoes(espelho, existentes ?? <String>{},
+      todas: todasConfiguracoes)) {
     out[c.chave] = c;
   }
   return out;

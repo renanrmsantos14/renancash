@@ -3,6 +3,7 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/configuracoes.dart';
 import 'package:budget/struct/mbSync/detectar.dart';
+import 'package:budget/struct/mbSync/linha.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
@@ -62,6 +63,31 @@ class _Cache {
     _primeira.clear();
     _categoriaExiste.clear();
   }
+}
+
+// Linha Drift completa que veio em `dados['linha']`; null se não veio, se não bate com este app ou se os campos
+// mapeados dela divergem de `dados` (o painel do Worker edita `dados` e mantém a linha antiga: o mapeado vale).
+// `proj` reprojeta a linha; `ignorar` são chaves que a reprojeção não sabe reproduzir.
+T? _linha<T>(Map<String, dynamic> d,
+    T Function(Map<String, dynamic>, {ValueSerializer? serializer}) ler,
+    Projetado? Function(T) proj,
+    {Set<String> ignorar = const {}}) {
+  final l = mbLerLinha(d);
+  if (l == null) return null;
+  final obj = mbLinhaComo((m) => ler(m, serializer: mbSerializador), l);
+  if (obj == null) return null;
+  final p = proj(obj);
+  if (p == null) return null;
+  for (final e in p.dados.entries) {
+    if (e.key == 'linha' || ignorar.contains(e.key)) continue;
+    if (!_igual(e.value, d[e.key])) return null;
+  }
+  return obj;
+}
+
+bool _igual(dynamic a, dynamic b) {
+  if (a is num && b is num) return a == b;
+  return jsonCanonico(a) == jsonCanonico(b);
 }
 
 Future<int> _contar(TableInfo tabela) async => (await database
@@ -162,6 +188,12 @@ Future<Projetado?> _carteira(
         decimals: Value((d['decimais'] as num?)?.toInt() ?? existente?.decimals ?? 2),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, TransactionWallet.fromJson, mbProjCarteira);
+  if (linha != null) {
+    await (database.update(database.wallets)..where((w) => w.walletPk.equals(pk)))
+        .write(linha.toCompanion(false).copyWith(
+            walletPk: const Value.absent(), dateTimeModified: modificado));
+  }
   return mbProjCarteira((await database.getWalletInstanceOrNull(pk))!);
 }
 
@@ -188,7 +220,16 @@ Future<List<Espelho>> _religarLancamentos(
               t.transactionPk.like('mb:%').not()))
         .write(TransactionsCompanion(walletFk: Value(pk)));
     if (n > 0 && e.projecao != null) {
-      out.add(Espelho(e.registro, {...e.projecao!, 'carteira': nome}, e.pendente, e.motivo));
+      final linha = e.projecao!['linha'];
+      out.add(Espelho(
+          e.registro,
+          {
+            ...e.projecao!,
+            'carteira': nome,
+            if (linha is Map) 'linha': {...linha, 'walletFk': pk},
+          },
+          e.pendente,
+          e.motivo));
     }
   }
   return out;
@@ -213,6 +254,15 @@ Future<Projetado?> _categoria(Registro r, Map<String, dynamic> d,
         order: Value(ordem),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, TransactionCategory.fromJson, mbProjCategoria);
+  if (linha != null) {
+    await (database.update(database.categories)
+          ..where((x) => x.categoryPk.equals(c.pk)))
+        .write(linha.toCompanion(false).copyWith(
+            categoryPk: const Value.absent(),
+            methodAdded: const Value.absent(),
+            dateTimeModified: modificado));
+  }
   return mbProjCategoria((await database.getCategoryInstanceOrNull(c.pk))!);
 }
 
@@ -235,6 +285,15 @@ Future<Projetado?> _regra(Registro r, Map<String, dynamic> d,
             await _contar(database.associatedTitles)),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, TransactionAssociatedTitle.fromJson, (a) => mbProjRegra(a, d));
+  if (linha != null) {
+    await (database.update(database.associatedTitles)
+          ..where((a) => a.associatedTitlePk.equals(g.pk)))
+        .write(linha.toCompanion(false).copyWith(
+            associatedTitlePk: const Value.absent(),
+            categoryFk: const Value.absent(),
+            dateTimeModified: modificado));
+  }
   final gravado = await (database.select(database.associatedTitles)
         ..where((a) => a.associatedTitlePk.equals(g.pk)))
       .getSingle();
@@ -276,6 +335,20 @@ Future<Projetado?> _orcamento(Registro r, Map<String, dynamic> d, DateTime hoje,
             [BudgetTransactionFilters.defaultBudgetTransactionFilters]),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, Budget.fromJson, (b) => mbProjOrcamento(b, servidor: d));
+  if (linha != null) {
+    // Compartilhamento é do aparelho: continua como está aqui.
+    await (database.update(database.budgets)..where((b) => b.budgetPk.equals(o.pk)))
+        .write(linha.toCompanion(false).copyWith(
+            budgetPk: const Value.absent(),
+            sharedKey: const Value.absent(),
+            sharedOwnerMember: const Value.absent(),
+            sharedDateUpdated: const Value.absent(),
+            sharedMembers: const Value.absent(),
+            sharedAllMembersEver: const Value.absent(),
+            memberTransactionFilters: const Value.absent(),
+            dateTimeModified: modificado));
+  }
   return mbProjOrcamento(
       (await (database.select(database.budgets)
             ..where((b) => b.budgetPk.equals(o.pk)))
@@ -304,6 +377,16 @@ Future<Projetado?> _limite(
         amount: Value((d['valor'] as num).toDouble()),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, CategoryBudgetLimit.fromJson, mbProjLimite);
+  if (linha != null) {
+    await (database.update(database.categoryBudgetLimits)
+          ..where((l) => l.categoryLimitPk.equals(pk)))
+        .write(linha.toCompanion(false).copyWith(
+            categoryLimitPk: const Value.absent(),
+            categoryFk: const Value.absent(),
+            budgetFk: const Value.absent(),
+            dateTimeModified: modificado));
+  }
   return mbProjLimite((await (database.select(database.categoryBudgetLimits)
         ..where((l) => l.categoryLimitPk.equals(pk)))
       .getSingle()));
@@ -333,6 +416,16 @@ Future<Projetado?> _objetivo(
         walletFk: Value(existente?.walletFk ?? '0'),
         dateTimeModified: modificado,
       ));
+  final linha = _linha(d, Objective.fromJson, (o) => mbProjObjetivo(o), ignorar: const {'aplicacao_ids'});
+  if (linha != null) {
+    // O tipo (meta ou dívida) vem da tabela do registro.
+    await (database.update(database.objectives)
+          ..where((x) => x.objectivePk.equals(o.pk)))
+        .write(linha.toCompanion(false).copyWith(
+            objectivePk: const Value.absent(),
+            type: const Value.absent(),
+            dateTimeModified: modificado));
+  }
   // Sem `aplicacao_ids` (registro de app antigo) os vínculos locais ficam como estão.
   if (o.aplicacaoIds != null) {
     await mbDefinirAplicacoesDaMeta(o.pk, o.aplicacaoIds!.map(mbPkAplicacao));
@@ -410,12 +503,55 @@ Future<Projetado?> _lancamento(Registro r, Map<String, dynamic> d,
         objectiveLoanFk: Value(l.dividaPk),
         dateTimeModified: modificado,
       ));
+  final nomeDaLinha = (() {
+    final fk = mbLerLinha(d)?['walletFk'];
+    return carteiras.where((w) => w.walletPk == fk).map((w) => w.name).firstOrNull;
+  })();
+  final linha = _linha(
+      d,
+      Transaction.fromJson,
+      (t) => mbProjLancamento(t, nomeDaLinha ?? ''),
+      // Orçamentos e `despago` vêm de outros campos; sem a carteira local o nome não é conferível.
+      ignorar: {'orcamento_ids', 'despago', if (nomeDaLinha == null) 'carteira'});
+  if (linha != null) {
+    // Chave que aponta para algo que ainda não chegou fica como a lógica acima resolveu.
+    final carteiraExiste = carteiras.any((w) => w.walletPk == linha.walletFk);
+    final subExiste = linha.subCategoryFk == null ||
+        await cache.categoriaExiste(linha.subCategoryFk!);
+    await (database.update(database.transactions)
+          ..where((x) => x.transactionPk.equals(l.pk)))
+        .write(linha.toCompanion(false).copyWith(
+              transactionPk: const Value.absent(),
+              categoryFk: await cache.categoriaExiste(linha.categoryFk)
+                  ? null
+                  : const Value.absent(),
+              walletFk: carteiraExiste ? null : const Value.absent(),
+              subCategoryFk: subExiste ? null : const Value.absent(),
+              objectiveFk: const Value.absent(),
+              objectiveLoanFk: const Value.absent(),
+              methodAdded: const Value.absent(),
+              transactionOwnerEmail: const Value.absent(),
+              transactionOriginalOwnerEmail: const Value.absent(),
+              sharedKey: const Value.absent(),
+              sharedOldKey: const Value.absent(),
+              sharedStatus: const Value.absent(),
+              sharedDateUpdated: const Value.absent(),
+              sharedReferenceBudgetPk: const Value.absent(),
+              // A ocorrência paga aqui continua paga (ver manterPaga).
+              paid: manterPaga ? const Value(true) : null,
+              createdAnotherFutureTransaction:
+                  manterPaga && existente.createdAnotherFutureTransaction == true
+                      ? const Value(true)
+                      : null,
+              dateTimeModified: modificado,
+            ));
+  }
   await mbGravarEscolhaDeOrcamento(l.pk, l.orcamentoPks);
   final t = await (database.select(database.transactions)
         ..where((x) => x.transactionPk.equals(l.pk)))
       .getSingle();
   final nomeCarteira =
-      carteiras.where((w) => w.walletPk == carteira).map((w) => w.name).firstOrNull ?? '';
+      carteiras.where((w) => w.walletPk == t.walletFk).map((w) => w.name).firstOrNull ?? '';
   final p = mbProjLancamento(t, nomeCarteira,
       orcamentos: l.orcamentoPks, servidor: d);
   if (manterPaga) p.dados['pago'] = 0;

@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'dart:ffi';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
+import 'package:budget/struct/mbSync/configuracoes.dart';
+import 'package:budget/struct/mbSync/detectar.dart';
+import 'package:budget/struct/mbSync/linha.dart';
+import 'package:budget/struct/mbSync/oficial.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
@@ -24,6 +30,7 @@ class ClienteFalso extends MbCliente {
   final List<Registro> enviados = [];
   Map<String, dynamic> extra = {};
   bool semRede = false;
+  final Set<String> rejeitarTabelas = {};
 
   @override
   Future<Map<String, dynamic>> puxar(String? desde) async => {
@@ -39,8 +46,15 @@ class ClienteFalso extends MbCliente {
   Future<({int aceitos, List<({int indice, String motivo})> rejeitados})> enviar(
       List<Registro> lote) async {
     if (semRede) throw http.ClientException('sem rede');
-    enviados.addAll(lote);
-    return (aceitos: lote.length, rejeitados: <({int indice, String motivo})>[]);
+    final rej = [
+      for (var i = 0; i < lote.length; i++)
+        if (rejeitarTabelas.contains(lote[i].tabela)) (indice: i, motivo: 'dados inválidos')
+    ];
+    enviados.addAll([
+      for (var i = 0; i < lote.length; i++)
+        if (!rej.any((x) => x.indice == i)) lote[i]
+    ]);
+    return (aceitos: lote.length - rej.length, rejeitados: rej);
   }
 }
 
@@ -61,6 +75,9 @@ Iterable<Registro> _semCatsMb(Iterable<Registro> l) =>
         !r.id.startsWith('cashew:mb:cat:') &&
         r.id != 'cashew:mb:orc:geral' &&
         r.id != 'cashew:mb:meta:reserva');
+
+// `linha` (linha Drift completa) tem testes próprios; aqui só os campos mapeados.
+Map<String, dynamic> _semLinha(Map<String, dynamic>? d) => {...?d}..remove('linha');
 
 Future<List<Transaction>> _txs() => database.select(database.transactions).get();
 
@@ -353,7 +370,7 @@ void main() {
       final enviadas = metasEnviadas().toList();
       expect(enviadas, hasLength(1));
       expect(enviadas.single.id, 'cashew:mb:meta:reserva');
-      expect(enviadas.single.dados, {'nome': 'Reserva de emergência', 'valor_alvo': 0.0, 'aplicacao_ids': <String>[]});
+      expect(_semLinha(enviadas.single.dados), {'nome': 'Reserva de emergência', 'valor_alvo': 0.0, 'aplicacao_ids': <String>[]});
     });
 
     test('Reserva já existente no servidor não é recriada; apagada, não volta', () async {
@@ -435,7 +452,7 @@ void main() {
       await mbDefinirAplicacoesDaMeta('m1', ['mb:inv:i2', 'mb:inv:i1']);
       cliente.enviados.clear();
       await sync();
-      expect(metasEnviadas().singleWhere((r) => r.id == 'cashew:m1').dados,
+      expect(_semLinha(metasEnviadas().singleWhere((r) => r.id == 'cashew:m1').dados),
           {'nome': 'Viagem', 'valor_alvo': 2000.0, 'prazo': '2027-01-31', 'aplicacao_ids': ['i1', 'i2']});
       cliente.enviados.clear();
       await sync();
@@ -1123,7 +1140,7 @@ void main() {
     await sync();
     final l = _de('limites').single;
     expect(l.id, 'cashew:l1');
-    expect(l.dados, {'orcamento_id': 'cashew:b1', 'categoria_id': 'cashew:c1', 'valor': 30});
+    expect(_semLinha(l.dados), {'orcamento_id': 'cashew:b1', 'categoria_id': 'cashew:c1', 'valor': 30});
     cliente.enviados.clear();
     await sync();
     expect(_de('limites'), isEmpty);
@@ -1329,6 +1346,482 @@ void main() {
       cliente.enviados.clear();
       await sync();
       expect(configs(), isEmpty);
+    });
+  });
+
+  group('linha (linha Drift completa)', () {
+    // Passa o que este aparelho enviou para um aparelho novo (banco vazio), como se viesse do servidor.
+    Future<void> outroAparelho() async {
+      final vindos = [
+        for (final r in cliente.enviados)
+          Registro(r.tabela, r.id, r.dados, _futuro(), r.deletedAt == null ? null : _futuro())
+      ];
+      await database.close();
+      database = FinanceDatabase(NativeDatabase.memory());
+      cliente.enviados.clear();
+      cliente.servidor
+        ..clear()
+        ..addAll(vindos);
+    }
+
+    const manuais = {
+      'carteiras', 'categorias', 'orcamentos', 'limites', 'metas', 'dividas', 'lancamentos', 'regras'
+    };
+    Iterable<Registro> manuaisEnviados() =>
+        _semCatsMb(cliente.enviados).where((r) => manuais.contains(r.tabela));
+
+    test('ida e volta preserva as colunas e não gera reenvio', () async {
+      final modificado = DateTime.now();
+      await database.into(database.wallets).insert(WalletsCompanion.insert(
+          walletPk: const Value('w1'),
+          name: 'Inter',
+          order: 3,
+          colour: const Value('0xff112233'),
+          dateTimeModified: Value(modificado)));
+      await _categoria('c1', 'Mercado');
+      await _categoria('c2', 'Feira');
+      await database.into(database.budgets).insert(BudgetsCompanion.insert(
+          budgetPk: const Value('b1'),
+          name: 'Casa',
+          amount: 500,
+          startDate: DateTime(2026, 3, 2, 12),
+          endDate: DateTime(2026, 3, 15, 12),
+          periodLength: 2,
+          order: 4,
+          colour: const Value('0xffaa0000'),
+          reoccurrence: const Value(BudgetReoccurence.weekly),
+          pinned: const Value(true),
+          walletFks: const Value(['w1']),
+          categoryFks: const Value(['c1']),
+          budgetTransactionFilters:
+              const Value([BudgetTransactionFilters.includeIncome]),
+          dateTimeModified: Value(modificado)));
+      for (final (pk, par, valor) in [('t1', 't2', -50.0), ('t2', 't1', 50.0)]) {
+        await database.into(database.transactions).insert(
+            TransactionsCompanion.insert(
+                transactionPk: Value(pk),
+                name: 'Transferência',
+                amount: valor,
+                note: '',
+                categoryFk: 'c1',
+                subCategoryFk: Value(pk == 't1' ? 'c2' : null),
+                pairedTransactionFk: Value(par),
+                walletFk: const Value('w1'),
+                income: Value(valor > 0),
+                dateCreated: Value(DateTime(2026, 3, 5, 9)),
+                dateTimeModified: Value(modificado)));
+      }
+      await database.into(database.objectives).insert(ObjectivesCompanion.insert(
+          objectivePk: const Value('m1'),
+          name: 'Viagem',
+          amount: 2000,
+          order: 7,
+          archived: const Value(true),
+          pinned: const Value(true),
+          emojiIconName: const Value('🏖️'),
+          colour: const Value('0xff00aa00'),
+          dateTimeModified: Value(modificado)));
+      await sync();
+      expect(manuaisEnviados().every((r) => r.dados!['linha'] != null), true);
+      await outroAparelho();
+      await sync();
+
+      final w = (await database.getWalletInstanceOrNull('w1'))!;
+      expect((w.colour, w.order), ('0xff112233', 3));
+      final b = await (database.select(database.budgets)
+            ..where((x) => x.budgetPk.equals('b1')))
+          .getSingle();
+      expect(b.colour, '0xffaa0000');
+      expect(b.startDate, DateTime(2026, 3, 2, 12));
+      expect(b.endDate, DateTime(2026, 3, 15, 12));
+      expect((b.periodLength, b.reoccurrence, b.pinned, b.order),
+          (2, BudgetReoccurence.weekly, true, 4));
+      expect(b.walletFks, ['w1']);
+      expect(b.categoryFks, ['c1']);
+      expect(b.budgetTransactionFilters, [BudgetTransactionFilters.includeIncome]);
+      final t1 = (await _txs()).singleWhere((t) => t.transactionPk == 't1');
+      expect((t1.subCategoryFk, t1.pairedTransactionFk, t1.walletFk),
+          ('c2', 't2', 'w1'));
+      final m = await (database.select(database.objectives)
+            ..where((x) => x.objectivePk.equals('m1')))
+          .getSingle();
+      expect((m.archived, m.pinned, m.emojiIconName, m.colour, m.order),
+          (true, true, '🏖️', '0xff00aa00', 7));
+
+      // Sem eco nem reenvio infinito nas rodadas seguintes.
+      expect(manuaisEnviados(), isEmpty);
+      for (var i = 0; i < 2; i++) {
+        cliente.enviados.clear();
+        await sync();
+        expect(manuaisEnviados(), isEmpty);
+      }
+    });
+
+    test('registro sem linha (app antigo ou painel) continua sendo aplicado', () async {
+      await _categoria('c1', 'Mercado');
+      cliente.servidor.add(Registro('categorias', 'cashew:c1',
+          {'nome': 'Supermercado', 'tipo': 'despesa', 'linha': 'lixo'}, _futuro(), null));
+      await sync();
+      expect((await database.getCategoryInstanceOrNull('c1'))!.name, 'Supermercado');
+    });
+
+    test('lançamento usa a carteira da linha; sem a carteira cai na 0 e é religado depois', () async {
+      await _categoria('c1', 'Mercado');
+      Map<String, dynamic> linhaTx(String carteira) => {
+            'transactionPk': 't1',
+            'pairedTransactionFk': null,
+            'name': 'Feira',
+            'amount': -20.0,
+            'note': '',
+            'categoryFk': 'c1',
+            'subCategoryFk': null,
+            'walletFk': carteira,
+            'dateCreated': DateTime(2026, 3, 5, 9).millisecondsSinceEpoch,
+            'originalDateDue': DateTime(2026, 3, 5, 9).millisecondsSinceEpoch,
+            'income': false,
+            'periodLength': null,
+            'reoccurrence': null,
+            'endDate': null,
+            'upcomingTransactionNotification': null,
+            'type': null,
+            'paid': true,
+            'createdAnotherFutureTransaction': null,
+            'skipPaid': false,
+            'objectiveFk': null,
+            'objectiveLoanFk': null,
+            'budgetFksExclude': null,
+          };
+      cliente.servidor.add(Registro(
+          'lancamentos',
+          'cashew:t1',
+          {
+            'data': '2026-03-05',
+            'descricao': 'Feira',
+            'valor': -20,
+            'categoria_id': 'cashew:c1',
+            'carteira': 'Nome que não bate',
+            'linha': linhaTx('w1')
+          },
+          _futuro(),
+          null));
+      await sync();
+      expect((await _txs()).single.walletFk, '0');
+      cliente.servidor.add(Registro('carteiras', 'cashew:w1', {'nome': 'Outro nome'}, _futuro(), null));
+      await sync();
+      // A carteira chegou com nome diferente do `carteira` do lançamento: valeria a religação por nome;
+      // com a linha, uma nova versão do lançamento aponta direto para a carteira pelo pk.
+      cliente.servidor
+        ..removeWhere((r) => r.tabela == 'lancamentos')
+        ..add(Registro(
+            'lancamentos',
+            'cashew:t1',
+            {
+              'data': '2026-03-05',
+              'descricao': 'Feira',
+              'valor': -20,
+              'categoria_id': 'cashew:c1',
+              'carteira': 'Outro nome',
+              'linha': linhaTx('w1')
+            },
+            DateTime.now().add(const Duration(hours: 2)).toUtc().toIso8601String(),
+            null));
+      await sync();
+      expect((await _txs()).single.walletFk, 'w1');
+    });
+
+    test('acima de 7500 bytes a linha não vai; abaixo vai sem as colunas de aparelho', () {
+      final pequeno = mbComLinha({'nome': 'x'},
+          {'name': 'x', 'dateTimeModified': 1, 'sharedKey': 'k', 'methodAdded': 1});
+      expect(pequeno['linha'], {'name': 'x'});
+      final grande = mbComLinha({'nome': 'x'}, {'categoryFks': 'y' * 8000});
+      expect(grande, {'nome': 'x'});
+    });
+
+    test('só a linha difere (primeira rodada após atualizar): regrava o espelho sem enviar', () {
+      final antigo = {'nome': 'Casa', 'valor': 5};
+      final atual = Projetado('orcamentos', 'cashew:b1', {...antigo, 'linha': {'name': 'Casa'}}, null);
+      final reg = Registro('orcamentos', 'cashew:b1', antigo, '2026-01-01T00:00:00.000Z', null);
+      final soLinha = <Espelho>[];
+      final m = detectarMudancasLocais(
+          espelho: {atual.chave: Espelho(reg, antigo, false, null)},
+          atuais: {atual.chave: atual},
+          agora: '2026-11-18T12:00:00.000Z',
+          soLinha: soLinha);
+      expect(m, isEmpty);
+      expect(soLinha.single.pendente, false);
+      expect(soLinha.single.projecao!.containsKey('linha'), true);
+      // Edição real de coluna fora do mapeado (linha mudou e o espelho já tinha linha) continua sendo enviada.
+      final comLinha = {...antigo, 'linha': {'name': 'Casa', 'colour': 'a'}};
+      final editado = Projetado('orcamentos', 'cashew:b1', {...antigo, 'linha': {'name': 'Casa', 'colour': 'b'}}, null);
+      final m2 = detectarMudancasLocais(
+          espelho: {editado.chave: Espelho(reg, comLinha, false, null)},
+          atuais: {editado.chave: editado},
+          agora: '2026-11-18T12:00:00.000Z');
+      expect(m2, hasLength(1));
+    });
+
+    test('linha antiga do painel não sobrescreve campo mapeado editado', () async {
+      await database.into(database.wallets).insert(WalletsCompanion.insert(
+          walletPk: const Value('w1'),
+          name: 'Inter',
+          order: 3,
+          colour: const Value('0xff112233'),
+          dateTimeModified: Value(DateTime.now())));
+      await sync();
+      await outroAparelho();
+      final r = cliente.servidor.singleWhere((x) => x.tabela == 'carteiras');
+      cliente.servidor
+        ..clear()
+        ..add(Registro('carteiras', r.id, {...r.dados!, 'cor': '0xff999999'}, _futuro(), null));
+      await sync();
+      expect((await database.getWalletInstanceOrNull('w1'))!.colour, '0xff999999');
+    });
+
+    test('tamanho final acima de 8000 bytes tira a linha mesmo com campos da base', () {
+      final p = Projetado('orcamentos', 'cashew:b1', {'nome': 'x', 'linha': {'name': 'x'}}, null);
+      final d = dadosParaEnvio(p, {'extra': 'y' * 8100});
+      expect(d.containsKey('linha'), false);
+      expect(dadosParaEnvio(p, {'extra': 'y'}).containsKey('linha'), true);
+    });
+
+    test('projeção sem linha não herda a linha antiga do servidor', () {
+      final p = Projetado('orcamentos', 'cashew:b1', {'nome': 'Casa'}, null);
+      final dados = dadosParaEnvio(p, {'nome': 'Velho', 'linha': {'name': 'Velho'}});
+      expect(dados.containsKey('linha'), false);
+      expect(dados['nome'], 'Casa');
+    });
+  });
+
+  group('configurações ampliadas', () {
+    test('todas as chaves da lista existem nas preferências padrão', () async {
+      final padrao = await getDefaultPreferences();
+      // carteirasArquivadas já existia na lista e é criada só quando há carteira arquivada.
+      expect(mbConfigsSincronizadas.where((k) => !padrao.containsKey(k)),
+          {'carteirasArquivadas'});
+      expect(
+          mbConfigsSincronizadas,
+          containsAll([
+            'selectedPeriodCycleTypePieChart',
+            'customPeriodPastDaysNetWorth',
+            'cycleStartDateCreditDebts',
+            'customCurrencies',
+            'percentagePrecision',
+            'customNavBarShortcut2',
+            'username'
+          ]));
+      expect(mbConfigsSincronizadas.contains('theme'), false);
+      expect(mbConfigsSincronizadas.contains('selectedWalletPk'), false);
+    });
+
+    test('chave nova sobe quando difere do padrão e a remota é aplicada', () async {
+      sharedPreferences = await SharedPreferences.getInstance();
+      appStateSettings = {
+        'percentagePrecision': 7,
+        'cyclePeriodLengthNetWorth': 4,
+        'username': '',
+      };
+      cliente.servidor.add(Registro(
+          'configuracoes', 'username', {'valor': '"Renan"'}, _futuro(), null));
+      await sync();
+      final ids = cliente.enviados
+          .where((r) => r.tabela == 'configuracoes')
+          .map((r) => r.id)
+          .toSet();
+      expect(ids, containsAll(['percentagePrecision', 'cyclePeriodLengthNetWorth']));
+      expect(appStateSettings['username'], 'Renan');
+    });
+  });
+
+  group('cópia única', () {
+    final servidorAntigo = '2026-01-01T00:00:00.000Z';
+    Registro viv(String tabela, String id) =>
+        Registro(tabela, id, {'nome': id}, servidorAntigo, null);
+
+    test('planejamento: envia tudo com updated_at agora e apaga só tabela manual ausente', () {
+      const agora = '2026-11-18T12:00:00.000Z';
+      final atuais = {
+        for (final p in [
+          Projetado('categorias', 'cashew:c1', {'nome': 'Mercado'}, null),
+          Projetado('ajustes', 'a1', {'nome': 'x'}, null),
+          Projetado('lancamentos', 'cashew:t1', {'valor': 1}, '2026-02-01T00:00:00.000Z'),
+        ])
+          p.chave: p
+      };
+      final plano = mbPlanejarOficial(
+        atuais: atuais,
+        servidor: [
+          viv('categorias', 'cashew:c1'),
+          viv('categorias', 'cashew:c9'),
+          viv('lancamentos', 'cashew:t9'),
+          viv('assinaturas', 'cashew:s1'),
+          viv('revisoes', 'x'),
+          viv('ajustes', 'y'),
+          viv('configuracoes', 'font'),
+          viv('limites', 'cashew:l1'),
+          Registro('carteiras', 'cashew:w1', null, servidorAntigo, servidorAntigo),
+        ],
+        existentes: {'limites/cashew:l1'},
+        agora: agora,
+      );
+      // Ajustes não entram no "oficial".
+      expect(plano.registros.any((r) => r.tabela == 'ajustes'), false);
+      expect(plano.enviados, 2);
+      expect(plano.apagados, 3);
+      expect(plano.registros.every((r) => r.updatedAt == agora), true);
+      final apagados = plano.registros.where((r) => r.deletedAt != null);
+      expect({for (final r in apagados) r.chave},
+          {'categorias/cashew:c9', 'lancamentos/cashew:t9', 'assinaturas/cashew:s1'});
+      expect(apagados.every((r) => r.dados == null && r.deletedAt == agora), true);
+      // O que o servidor já guardava e este aparelho não projeta é preservado (como no envio normal).
+      expect(plano.registros.firstWhere((r) => r.chave == 'categorias/cashew:c1').dados,
+          {'nome': 'Mercado'});
+    });
+
+    test('tornar oficial envia tudo (inclusive configuração padrão), apaga o que falta e não reenvia', () async {
+      sharedPreferences = await SharedPreferences.getInstance();
+      appStateSettings = {'showNetWorth': false};
+      await _categoria('c1', 'Mercado');
+      await database.into(database.transactions).insert(TransactionsCompanion.insert(
+          transactionPk: const Value('t1'),
+          name: 'x',
+          amount: -1,
+          note: '',
+          categoryFk: 'c1',
+          dateTimeModified: Value(DateTime.now())));
+      cliente.servidor.addAll([viv('categorias', 'cashew:c9'), viv('revisoes', 'r1')]);
+      final antes = DateTime.now().toUtc().toIso8601String();
+      final r = await mbTornarOficial(cliente);
+      expect(r.apagados, 1);
+      expect(r.enviados, greaterThan(1));
+      expect(r.rejeitados, isEmpty);
+      final c1 = cliente.enviados.singleWhere((x) => x.id == 'cashew:c1');
+      expect(c1.updatedAt.compareTo(antes) >= 0, true);
+      expect(cliente.enviados.singleWhere((x) => x.id == 'cashew:c9').deletedAt, isNotNull);
+      expect(cliente.enviados.any((x) => x.tabela == 'revisoes'), false);
+      expect(cliente.enviados.any((x) => x.tabela == 'configuracoes' && x.id == 'showNetWorth'), true);
+      expect((await mbLerFila()).pendentes, 0);
+      // Sincronizar depois não reenvia nem traz de volta a categoria apagada.
+      cliente.enviados.clear();
+      await sync();
+      expect(_semCatsMb(cliente.enviados).where((x) => x.tabela != 'configuracoes'), isEmpty);
+      expect(await database.getCategoryInstanceOrNull('c9'), isNull);
+    });
+
+    test('recomeçar pela nuvem apaga o local, limpa espelho e cursor e baixa do servidor', () async {
+      await _categoria('c1', 'Mercado');
+      await _categoria('c-local', 'Só aqui');
+      await database.into(database.wallets).insert(WalletsCompanion.insert(
+          walletPk: const Value('w-local'), name: 'Local', order: 2));
+      await database.into(database.transactions).insert(TransactionsCompanion.insert(
+          transactionPk: const Value('t-local'),
+          name: 'x',
+          amount: -1,
+          note: '',
+          categoryFk: 'c1',
+          dateTimeModified: Value(DateTime.now())));
+      await sync();
+      await mbGravarEstado({'cursor': 'antigo'});
+      cliente.servidor
+        ..clear()
+        ..addAll([
+          Registro('categorias', 'cashew:c1',
+              {'nome': 'Mercado', 'tipo': 'despesa'}, servidorAntigo, null),
+          Registro('lancamentos', 'cashew:t1', {
+            'data': '2026-03-05',
+            'descricao': 'Feira',
+            'valor': -20,
+            'categoria_id': 'cashew:c1'
+          }, servidorAntigo, null)
+        ]);
+      final erro = await mbRecomecarPelaNuvem(cliente);
+      expect(erro, isNull);
+      expect(await database.getCategoryInstanceOrNull('c-local'), isNull);
+      expect(await database.getWalletInstanceOrNull('w-local'), isNull);
+      expect((await _txs()).where((t) => t.transactionPk == 't-local'), isEmpty);
+      expect(await database.getCategoryInstanceOrNull('c1'), isNotNull);
+      final espelho = await mbLerEspelho();
+      expect(espelho.keys.where((k) => k.contains('c-local') || k.contains('t-local')), isEmpty);
+      expect(await mbLerEstado('cursor'), isNot('antigo'));
+    });
+
+    test('recomeçar recusa se o servidor só tem categorias (sem lançamentos)', () async {
+      await _categoria('c1', 'Mercado');
+      cliente.servidor.add(viv('categorias', 'cashew:c9'));
+      final erro = await mbRecomecarPelaNuvem(cliente);
+      expect(erro, contains('lançamentos e categorias'));
+      expect(await database.getCategoryInstanceOrNull('c1'), isNotNull);
+      expect(await database.getCategoryInstanceOrNull('c9'), isNull);
+    });
+
+    test('tornar oficial recusa aparelho sem lançamentos e não envia nada', () async {
+      await _categoria('c1', 'Mercado');
+      cliente.servidor.add(viv('lancamentos', 'cashew:t9'));
+      await expectLater(mbPrepararOficial(cliente), throwsA(isA<MbRecusado>()));
+      expect(cliente.enviados, isEmpty);
+    });
+
+    test('rejeitado no oficial continua pendente e é informado', () async {
+      await _categoria('c1', 'Mercado');
+      await database.into(database.transactions).insert(TransactionsCompanion.insert(
+          transactionPk: const Value('t1'),
+          name: 'x',
+          amount: -1,
+          note: '',
+          categoryFk: 'c1',
+          dateTimeModified: Value(DateTime.now())));
+      cliente.rejeitarTabelas.add('lancamentos');
+      final r = await mbTornarOficial(cliente);
+      expect(r.rejeitados, hasLength(1));
+      expect(r.rejeitados.single, contains('lancamentos'));
+      final fila = await mbPendentes();
+      expect(fila.map((e) => e.registro.tabela), ['lancamentos']);
+    });
+
+    test('regra com título vazio não vira tombstone no oficial', () async {
+      await _categoria('c1', 'Mercado');
+      await database.into(database.transactions).insert(TransactionsCompanion.insert(
+          transactionPk: const Value('t1'),
+          name: 'x',
+          amount: -1,
+          note: '',
+          categoryFk: 'c1',
+          dateTimeModified: Value(DateTime.now())));
+      await database.into(database.associatedTitles).insert(
+          AssociatedTitlesCompanion.insert(
+              associatedTitlePk: const Value('r1'),
+              categoryFk: 'c1',
+              title: '',
+              order: 0));
+      cliente.servidor.add(viv('regras', 'cashew:r1'));
+      final r = await mbTornarOficial(cliente);
+      expect(r.apagados, 0);
+      expect(cliente.enviados.where((x) => x.tabela == 'regras'), isEmpty);
+    });
+
+    test('operação de rodada espera a rodada em curso e bloqueia o sync periódico', () async {
+      final ordem = <String>[];
+      final liberar = Completer<void>();
+      final longa = mbEmRodada(() async {
+        ordem.add('inicio');
+        await liberar.future;
+        ordem.add('fim');
+      });
+      await Future<void>.delayed(Duration.zero);
+      final periodico = sincronizarMeuBanco(clienteParaTeste: cliente)
+          .then((_) => ordem.add('sync'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(ordem, ['inicio']);
+      liberar.complete();
+      await longa;
+      await periodico;
+      expect(ordem, ['inicio', 'fim', 'sync']);
+    });
+
+    test('recomeçar pela nuvem recusa e não apaga nada se o servidor está vazio', () async {
+      await _categoria('c1', 'Mercado');
+      final erro = await mbRecomecarPelaNuvem(cliente);
+      expect(erro, contains('Enviar tudo como oficial'));
+      expect(await database.getCategoryInstanceOrNull('c1'), isNotNull);
     });
   });
 }
