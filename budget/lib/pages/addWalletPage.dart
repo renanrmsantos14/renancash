@@ -101,7 +101,8 @@ class _AddWalletPageState extends State<AddWalletPage> {
         final TransactionWallet walletJustAdded =
             await database.getWalletFromRowId(rowId);
         await correctWalletBalance(context, initialBalance, initialBalance,
-            walletJustAdded, DateTime.now(), "");
+            walletJustAdded, DateTime.now(), "",
+            saldoInicial: true);
       }
     }
 
@@ -471,7 +472,7 @@ class _AddWalletPageState extends State<AddWalletPage> {
                     Padding(
                       padding: const EdgeInsetsDirectional.only(start: 7),
                       child:
-                          Text("Saldo inicial", style: EdTexto.rotulo(context)),
+                          Text(tituloSaldoInicial, style: EdTexto.rotulo(context)),
                     ),
                     TappableTextEntry(
                       title: convertToMoney(
@@ -831,21 +832,72 @@ class _CorrectBalancePopupState extends State<CorrectBalancePopup> {
   }
 }
 
+/// Nome da transação criada com o saldo que a conta já tem ao ser cadastrada.
+const String tituloSaldoInicial = "Saldo inicial";
+
+/// Aviso ao criar a conta com saldo: [dinheiro] já vem formatado ("R$ 1.000,00").
+({String titulo, String descricao}) avisoContaCriada(
+        String nomeConta, String dinheiro) =>
+    (
+      titulo: "Conta criada",
+      descricao: "$nomeConta · saldo inicial $dinheiro",
+    );
+
+/// Saldo que a conta já tinha ao ser criada. É um ajuste de saldo (categoria "0"): entra no
+/// saldo da conta, mas não conta em Entradas/Saídas do resumo. Saldo zero não cria transação.
+Future<String?> criarSaldoInicialDaConta(
+  TransactionWallet wallet,
+  double valor, {
+  String? note,
+  DateTime? dateTime,
+}) async {
+  if (valor == 0) return null;
+  return createCorrectionTransaction(
+    valor,
+    wallet,
+    note: note,
+    dateTime: dateTime,
+    title: tituloSaldoInicial,
+  );
+}
+
+/// [saldoInicial]: criação da conta (nome "Saldo inicial" e aviso "Conta criada");
+/// sem ele é um ajuste de saldo comum ("Ajuste de saldo" / "Saldo corrigido").
 Future<bool> correctWalletBalance(
     BuildContext context,
     double differenceAmount,
     double newAmount,
     TransactionWallet wallet,
     DateTime? dateTime,
-    String title) async {
-  String transferString = wallet.name +
-      ": " +
-      convertToMoney(
-        Provider.of<AllWallets>(context, listen: false),
-        newAmount,
-        currencyKey: wallet.currency,
-        decimals: wallet.decimals,
-      );
+    String title,
+    {bool saldoInicial = false}) async {
+  final String dinheiro = convertToMoney(
+    Provider.of<AllWallets>(context, listen: false),
+    newAmount,
+    currencyKey: wallet.currency,
+    decimals: wallet.decimals,
+  );
+  String transferString = wallet.name + ": " + dinheiro;
+
+  if (saldoInicial) {
+    await criarSaldoInicialDaConta(
+      wallet,
+      differenceAmount,
+      note: tituloSaldoInicial + "\n" + transferString,
+      dateTime: dateTime,
+    );
+    final aviso = avisoContaCriada(wallet.name, dinheiro);
+    openSnackbar(
+      SnackbarMessage(
+        title: aviso.titulo,
+        description: aviso.descricao,
+        icon: appStateSettings["outlinedIcons"]
+            ? Icons.library_add_outlined
+            : Icons.library_add_rounded,
+      ),
+    );
+    return true;
+  }
 
   String note = "updated-total-balance".tr() + "\n" + transferString;
 
