@@ -83,7 +83,7 @@ void main() {
 
   testWidgets('lateral com marca e versão', (t) async {
     await _montar(t, const Size(1280, 800));
-    expect(find.text('Meu Banco'), findsOneWidget);
+    expect(find.text('RenanCash'), findsOneWidget);
     expect(find.textContaining('· dev'), findsOneWidget);
     expect(
         t
