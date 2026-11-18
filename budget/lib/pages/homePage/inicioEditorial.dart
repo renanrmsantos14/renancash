@@ -168,7 +168,9 @@ class _InicioEditorialState extends State<InicioEditorial> {
           _Topo(modelo: m),
           const SizedBox(height: 16),
           if (m.semDados)
-            const SemDadosInicio(dica: 'Ainda sem dados. Puxe a tela para atualizar.')
+            const SemDadosInicio()
+          else if (m.soManuais)
+            ContasManuaisInicio(contas: m.manuais)
           else
             CartaoSaldoCiclo(
               modelo: m,
@@ -182,7 +184,9 @@ class _InicioEditorialState extends State<InicioEditorial> {
                   fixo: widget._patrimonio,
                   onAbrir: _real ? (c) => mbAbrirCarteiras(context, c) : null),
           ],
-          if (_real || meuBancoPareadoConferido.value) const AtalhosInicio(),
+          // Estado vazio já traz "Nova transação" e "Adicionar conta": os atalhos repetiriam.
+          if (!m.semDados && (_real || meuBancoPareadoConferido.value))
+            const AtalhosInicio(),
           GastoPorDiaInicio(modelo: m),
           if (_real || widget._limites != null)
             LimitesInicio(fixos: widget._limites),
@@ -259,28 +263,91 @@ Future<void> mbAbrirCarteiras(BuildContext context, String carteiras) async {
       });
 }
 
-/// Sem dados: pareado, ainda não sincronizou (`dica`); não pareado, convite para conectar o banco.
+/// Nada no aparelho (nem Meu Banco nem conta manual com lançamentos): orienta o primeiro uso.
+/// Não pareado, oferece também conectar o banco; pareado, lembra que a sincronização puxa os dados.
 class SemDadosInicio extends StatelessWidget {
-  const SemDadosInicio({super.key, required this.dica});
+  const SemDadosInicio({super.key, this.dica = 'Puxe a tela para atualizar.'});
+
+  /// Frase extra quando o banco já está pareado (no desktop, "Use Atualizar.").
   final String dica;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
+    Widget acao(String rotulo, VoidCallback onTap) => TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.only(right: 16),
+              alignment: Alignment.centerLeft,
+              foregroundColor: e.acc),
+          child: Text(rotulo),
+        );
     return ValueListenableBuilder<bool>(
       valueListenable: meuBancoPareado,
-      builder: (context, pareado, _) => pareado
-          ? Text(dica, style: EdTexto.corpo(context).copyWith(color: e.mu))
-          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Conecte seu banco para ver quanto pode gastar no ciclo.',
-                  style: EdTexto.corpo(context).copyWith(color: e.mu)),
-              TextButton(
-                onPressed: () => pushRoute(context, const MeuBancoPage()),
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero, foregroundColor: e.acc),
-                child: const Text('Conectar banco'),
-              ),
+      builder: (context, pareado, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                pareado
+                    ? 'Ainda sem dados do banco. $dica'
+                    : 'Adicione uma conta ou transação para começar, ou conecte seu banco para ver quanto pode gastar no ciclo.',
+                style: EdTexto.corpo(context).copyWith(color: e.mu)),
+            const SizedBox(height: 4),
+            Wrap(children: [
+              acao('Nova transação', () => abrirTransacao(context)),
+              acao('Adicionar conta', () => pushRoute(context, EditWalletsPage())),
+              if (!pareado)
+                acao('Conectar banco', () => pushRoute(context, const MeuBancoPage())),
             ]),
+          ]),
+    );
+  }
+}
+
+/// Sem Meu Banco, só com contas manuais: o saldo delas (soma dos lançamentos) e uma linha por conta.
+/// Fora do total do Meu Banco: assim que o banco conecta, o cartão do ciclo assume o lugar.
+class ContasManuaisInicio extends StatelessWidget {
+  const ContasManuaisInicio({super.key, required this.contas});
+  final List<CarteiraInicio> contas;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = contas.fold<double>(0, (s, c) => s + c.saldo);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+            contas.length == 1
+                ? 'Saldo na conta manual'
+                : 'Saldo nas ${contas.length} contas manuais',
+            style: EdTexto.rotulo(context)),
+        const SizedBox(height: 8),
+        ContagemValor(
+            valor: total,
+            formatar: brl,
+            centavosMenores: true,
+            estilo: EdTexto.numeroGrande(context)),
+        const SizedBox(height: 10),
+        Text('Soma dos seus lançamentos · fora do Meu Banco',
+            style: EdTexto.rotulo(context)),
+        _Secao(titulo: 'Suas contas', filhos: [
+          for (final c in contas)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                Expanded(
+                    child: Text(c.nome,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: EdTexto.corpo(context)
+                            .copyWith(fontWeight: FontWeight.w500))),
+                const SizedBox(width: 8),
+                Text(brl(c.saldo), style: EdTexto.rotulo(context)),
+              ]),
+            ),
+        ]),
+      ],
     );
   }
 }

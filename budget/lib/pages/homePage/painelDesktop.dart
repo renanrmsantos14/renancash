@@ -162,8 +162,9 @@ class _PainelDesktopState extends State<PainelDesktop> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (m.semDados)
-                            const SemDadosInicio(
-                                dica: 'Ainda sem dados. Use Atualizar.')
+                            const SemDadosInicio(dica: 'Use Atualizar.')
+                          else if (m.soManuais)
+                            ContasManuaisInicio(contas: m.manuais)
                           else
                             CartaoSaldoCiclo(
                               modelo: m,
@@ -175,7 +176,7 @@ class _PainelDesktopState extends State<PainelDesktop> {
                                   mbAbrirOrcamentoCiclo(context, editar: true),
                             ),
                           if (!m.semDados) const AlertaPendenciasInicio(),
-                          if (real || meuBancoPareadoConferido.value)
+                          if (!m.semDados && (real || meuBancoPareadoConferido.value))
                             const AtalhosInicio(),
                           GastoPorDiaInicio(modelo: m),
                           // Empilhado na coluna estreita e sempre aberto.

@@ -88,16 +88,24 @@ class BudgetsListPageState extends State<BudgetsListPage> {
           ),
       ],
       slivers: [
-        // Só na aba; a página empilhada (pelo Mais) mostra só a lista.
-        if (!widget.enableBackButton)
-          const SliverToBoxAdapter(child: AnaliseOrcamentos()),
         StreamBuilder<List<Budget>>(
           stream: database.watchAllBudgets(hideArchived: true),
           builder: (context, snapshot) {
             final orcamentos = snapshot.data;
-            if (orcamentos == null) return const SliverToBoxAdapter();
+            // Só na aba; a página empilhada (pelo Mais) mostra só a lista.
+            final analise = widget.enableBackButton
+                ? null
+                : const SliverToBoxAdapter(
+                key: ValueKey('analise-orcamentos'), child: AnaliseOrcamentos());
+            if (orcamentos == null) {
+              return MultiSliver(children: [if (analise != null) analise]);
+            }
             if (orcamentos.isEmpty) {
-              return const SliverToBoxAdapter(child: SemOrcamentos());
+              // "Criar orçamento" vem antes da análise: abaixo dela ficava fora da tela no celular.
+              return MultiSliver(children: [
+                const SliverToBoxAdapter(child: SemOrcamentos()),
+                if (analise != null) analise,
+              ]);
             }
             Widget item(int i) => EntradaSuave(
                   key: ValueKey(orcamentos[i].budgetPk),
@@ -134,8 +142,11 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                       ),
                     ),
             );
-            if (paraLimites == null) return lista;
+            if (paraLimites == null) {
+              return MultiSliver(children: [if (analise != null) analise, lista]);
+            }
             return MultiSliver(children: [
+              if (analise != null) analise,
               lista,
               SliverToBoxAdapter(
                 child: Padding(

@@ -54,6 +54,9 @@ description: "Verifica as telas de Orçamentos e Metas no padrão editorial (Eta
 - Grades desktop (`enableDoubleColumn`): lista de orçamentos `mainAxisExtent: 238` (cartão tem ~233 px), histórico 104; placeholder do cartão 230 px. Prints desktop 1440x900 em `prints_orcamentos_test.dart` pegam overflow.
 - Os prints rodam sem EasyLocalization: chaves e textos traduzidos (ex.: "Goals", "savings-goal", "today, November 18", "save R$ 33,78/day for 148 days") saem em inglês só nos prints; conferir pt-BR no app.
 
+## Orçamentos vazio no celular
+- Na aba (`BudgetsListPage(enableBackButton: false)`) o estado vazio (`SemOrcamentos`, botão "Criar orçamento") vem **antes** da `AnaliseOrcamentos` (patrimônio e gráficos); abaixo dela o botão saía da tela em 412x915. A Análise tem `ValueKey('analise-orcamentos')` para não remontar entre estados. Teste: `orcamentos_vazio_test.dart` (412x915: botão dentro da tela, acima de "Análise" na aba, toque abre `AddBudgetPage`; reprova no código antigo). Print: `PRINTS=1 flutter test test/prints_orcamentos_test.dart --update-goldens --name "vazio celular"` → `orcamentos_vazio_celular_412x915.png`.
+
 ## Acabamento
 - Nomes de categoria, orçamento e meta ao lado do valor ocupam o espaço flexível (`Expanded`) e quebram em até 2 linhas antes de truncar; o valor fica à direita com largura intrínseca (conferir `Alimentação` e `Almoço Betinhos` nos prints do orçamento).
 

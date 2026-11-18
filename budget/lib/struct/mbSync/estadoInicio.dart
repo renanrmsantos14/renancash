@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/currencyFunctions.dart' show amountRatioToPrimaryCurrencyGivenPk;
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbLerCicloGeral;
@@ -37,11 +38,22 @@ class ModeloInicio {
   final List<double> porDia;
   final List<ContaInicio> contas;
   final List<CartaoInicio> cartoes;
+
+  /// Contas (carteiras) manuais com lançamentos: ficam fora do total do Meu Banco, mas contam como dados.
+  final List<CarteiraInicio> manuais;
+
   /// "26 out – 25 nov" (sem o prefixo "Ciclo"); "Ciclo atual" quando não há datas.
   String get periodo => ciclo.startsWith('Ciclo ') && ciclo != 'Ciclo atual'
       ? ciclo.substring(6)
       : ciclo;
-  bool get semDados => contas.isEmpty && cartoes.isEmpty && porDia.isEmpty;
+
+  /// Nada para mostrar: sem Meu Banco (contas, cartões, gasto por dia) e sem conta manual com lançamentos.
+  bool get semDados =>
+      contas.isEmpty && cartoes.isEmpty && porDia.isEmpty && manuais.isEmpty;
+
+  /// Só contas manuais: o saldo do ciclo do Meu Banco não existe, mostra-se o que há nas manuais.
+  bool get soManuais =>
+      manuais.isNotEmpty && contas.isEmpty && cartoes.isEmpty && porDia.isEmpty;
 
   // Igualdade por conteúdo: permite ignorar recargas que não mudaram nada (sem setState).
   @override
@@ -60,7 +72,8 @@ class ModeloInicio {
       indiceHoje == o.indiceHoje &&
       listEquals(porDia, o.porDia) &&
       listEquals(contas, o.contas) &&
-      listEquals(cartoes, o.cartoes);
+      listEquals(cartoes, o.cartoes) &&
+      listEquals(manuais, o.manuais);
 
   @override
   int get hashCode => Object.hash(ciclo, saudacao, disponivel, consumido,
@@ -81,6 +94,7 @@ class ModeloInicio {
     required this.indiceHoje,
     required this.contas,
     required this.cartoes,
+    this.manuais = const [],
   });
 }
 
@@ -172,6 +186,8 @@ ModeloInicio montarModeloInicio({
   // Orçamento Geral (o que "Definir limite do ciclo" edita): limite e gasto vêm dele, pela mesma
   // consulta da tela do orçamento. Sem Geral no aparelho, valem os números do Worker.
   ({double limite, double gasto, double aVencer})? geral,
+  // Contas manuais com lançamentos (`_lerCarteiras`): sem Meu Banco, são o que a Início mostra.
+  List<CarteiraInicio> manuais = const [],
 }) {
   final ini = DateTime.tryParse('${ciclo['inicio']}');
   final fim = DateTime.tryParse('${ciclo['fim']}');
@@ -296,6 +312,7 @@ ModeloInicio montarModeloInicio({
     indiceHoje: indice,
     contas: linhas,
     cartoes: cartoes,
+    manuais: manuais,
   );
 }
 
@@ -375,6 +392,7 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
     sincronizadoEm: await mbLerEstado('sincronizado_em'),
     nome: nome,
     agora: agora,
+    manuais: (await _lerCarteiras()).manuais,
   );
   return (modelo: modelo, transacoes: txs);
 }
@@ -456,22 +474,9 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
       .fold<double>(0, (s, c) => s + _num(c['balance']));
   // Investimentos (soma dos ajustes de saldo da carteira) entra no patrimônio. As carteiras do
   // Meu Banco (mb:) já estão nas linhas de contas e fatura; as manuais aparecem à parte, fora do total.
-  final linhas = await database.customSelect(
-      'SELECT w.wallet_pk AS pk, w.name AS nome, COALESCE(SUM(t.amount), 0) AS saldo '
-      'FROM wallets w LEFT JOIN transactions t ON t.wallet_fk = w.wallet_pk '
-      'GROUP BY w.wallet_pk, w.name ORDER BY w."order"').get();
-  var investimentos = 0.0;
-  final arquivadas = carteirasArquivadas();
-  final carteiras = <CarteiraInicio>[];
-  for (final l in linhas) {
-    final pk = l.read<String>('pk');
-    final saldo = l.read<double>('saldo');
-    if (pk == mbCarteiraInvestimentos) {
-      investimentos = saldo;
-    } else if (!pk.startsWith(mbPrefixo) && saldo != 0 && !arquivadas.contains(pk)) {
-      carteiras.add((nome: l.read<String>('nome'), saldo: saldo));
-    }
-  }
+  final lidas = await _lerCarteiras();
+  final investimentos = lidas.investimentos;
+  final carteiras = [for (final c in lidas.manuais) if (c.saldo != 0) c];
   return (
     patrimonio: mbPatrimonio(
         correntes: saldoBancario(false),
@@ -488,6 +493,38 @@ Future<PatrimonioInicio> mbCarregarPatrimonioInicio(DateTime agora) async {
         agora: agora),
     semDados: contas.isEmpty
   );
+}
+
+/// Carteiras locais: `manuais` = as que não são do Meu Banco nem arquivadas e têm lançamentos
+/// (saldo = soma deles, que pode ser 0, já convertida para a moeda principal, para que o total
+/// e as linhas em R$ não misturem moedas); `investimentos` = saldo da carteira Investimentos.
+Future<({List<CarteiraInicio> manuais, double investimentos})> _lerCarteiras() async {
+  final todas = await database.getAllWallets();
+  final allWallets =
+      AllWallets(list: todas, indexedByPk: {for (final w in todas) w.walletPk: w});
+  final linhas = await database.customSelect(
+      'SELECT w.wallet_pk AS pk, w.name AS nome, COALESCE(SUM(t.amount), 0) AS saldo, '
+      'COUNT(t.transaction_pk) AS n '
+      'FROM wallets w LEFT JOIN transactions t ON t.wallet_fk = w.wallet_pk '
+      'GROUP BY w.wallet_pk, w.name ORDER BY w."order"').get();
+  var investimentos = 0.0;
+  final arquivadas = carteirasArquivadas();
+  final manuais = <CarteiraInicio>[];
+  for (final l in linhas) {
+    final pk = l.read<String>('pk');
+    if (pk == mbCarteiraInvestimentos) {
+      investimentos = l.read<double>('saldo');
+    } else if (!pk.startsWith(mbPrefixo) &&
+        l.read<int>('n') > 0 &&
+        !arquivadas.contains(pk)) {
+      manuais.add((
+        nome: l.read<String>('nome'),
+        saldo: l.read<double>('saldo') *
+            amountRatioToPrimaryCurrencyGivenPk(allWallets, pk)
+      ));
+    }
+  }
+  return (manuais: manuais, investimentos: investimentos);
 }
 
 Future<List<InvestimentoBanco>> _investimentosSalvos() async {
