@@ -4,7 +4,7 @@ import { hashToken, tokenDoCabecalho } from "./app.js";
 import { CHAVE_HISTORICO, serieMensal } from "./historico.js";
 
 export const USO_TOKEN_MS = 60 * 1000; // ultimo_uso é gravado no máximo 1 vez por minuto
-export const INTERVALO_ATUALIZAR_MS = 10 * 60 * 1000;
+export const INTERVALO_ATUALIZAR_MS = 5 * 60 * 1000;
 
 export async function autenticarAparelho(request, db, agoraIso) {
   const token = tokenDoCabecalho(request.headers.get("authorization"));
