@@ -621,25 +621,25 @@ class _BudgetHistoryLineGraphState extends State<_BudgetHistoryLineGraph> {
                           fontSize: 13,
                           text: widget.budget.reoccurrence ==
                                   BudgetReoccurence.weekly
-                              ? DateFormat('MMM\ndd', context.locale.toString())
+                              ? DateFormat('MMM\ndd', Localizations.localeOf(context).toString())
                                   .format(startDate)
                               : widget.budget.reoccurrence ==
                                       BudgetReoccurence.daily
                                   ? DateFormat(
-                                          'MMM\ndd', context.locale.toString())
+                                          'MMM\ndd', Localizations.localeOf(context).toString())
                                       .format(startDate)
                                   : widget.budget.reoccurrence ==
                                           BudgetReoccurence.monthly
                                       ? DateFormat(
-                                              'MMM', context.locale.toString())
+                                              'MMM', Localizations.localeOf(context).toString())
                                           .format(startDate)
                                       : widget.budget.reoccurrence ==
                                               BudgetReoccurence.yearly
                                           ? DateFormat('yyyy',
-                                                  context.locale.toString())
+                                                  Localizations.localeOf(context).toString())
                                               .format(startDate)
                                           : DateFormat('MMM',
-                                                  context.locale.toString())
+                                                  Localizations.localeOf(context).toString())
                                               .format(startDate),
                           textColor: dynamicPastel(context, widget.color,
                                   amount: 0.8, inverse: true)
