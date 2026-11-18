@@ -28,7 +28,6 @@ import 'package:flutter/material.dart' hide SliverReorderableList;
 import 'package:flutter/services.dart' hide TextInput;
 import 'package:budget/widgets/editRowEntry.dart';
 import 'package:budget/modified/reorderable_list.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:provider/provider.dart';
 import 'exchangeRatesPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -203,7 +202,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                       child: TotalContas(
                         total: total,
                         quantidade: contas.length,
-                        formatar: (v) => convertToMoney(allWallets, v),
+                        formatar: (v) =>
+                            convertToMoney(allWallets, v, allDecimals: true),
                       ),
                     ),
                   SliverReorderableList(
@@ -234,6 +234,8 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                         animar: DateTime.now().difference(_aberta) <
                             const Duration(milliseconds: 600),
                         child: EditRowEntry(
+                          padding: const EdgeInsetsDirectional.fromSTEB(
+                              16, 12, 6, 12),
                           extraIcon: principal
                               ? appStateSettings["outlinedIcons"]
                                   ? Icons.star_outlined
@@ -267,6 +269,7 @@ class _EditWalletsPageState extends State<EditWalletsPage> {
                                 (v) => convertToMoney(allWallets, v,
                                     currencyKey: wallet.currency,
                                     decimals: wallet.decimals,
+                                    allDecimals: true,
                                     addCurrencyName:
                                         !allWallets.allContainSameCurrency())),
                           ),
@@ -582,8 +585,8 @@ class ShowCurrencyLabelSettingToggle extends StatelessWidget {
         },
         initialValue: appStateSettings["showCurrencyLabel"] == true,
         icon: appStateSettings["outlinedIcons"]
-            ? Symbols.event_list_sharp
-            : Symbols.event_list_rounded,
+            ? Icons.currency_exchange_outlined
+            : Icons.currency_exchange_rounded,
       ),
     );
   }
@@ -637,19 +640,25 @@ class PrimaryCurrencySetting extends StatelessWidget {
       afterWidget: Tappable(
         color: Theme.of(context).colorScheme.secondaryContainer,
         borderRadius: 10,
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(
-              horizontal: 16, vertical: 10),
-          child: Builder(builder: (context) {
-            return TextFont(
-              text: (Provider.of<AllWallets>(context)
-                      .indexedByPk[appStateSettings["selectedWalletPk"]]
-                      ?.currency
-                      ?.allCaps) ??
-                  "",
-              fontSize: 14,
-            );
-          }),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.symmetric(
+                horizontal: 16, vertical: 10),
+            child: Center(
+              widthFactor: 1,
+              child: Builder(builder: (context) {
+                return TextFont(
+                  text: (Provider.of<AllWallets>(context)
+                          .indexedByPk[appStateSettings["selectedWalletPk"]]
+                          ?.currency
+                          ?.allCaps) ??
+                      "",
+                  fontSize: 14,
+                );
+              }),
+            ),
+          ),
         ),
       ),
       openPage: Provider.of<AllWallets>(context).indexedByPk.length > 1

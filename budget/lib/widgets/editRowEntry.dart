@@ -153,10 +153,12 @@ class EditRowEntry extends StatelessWidget {
                                     borderRadius: borderRadius,
                                     child: Container(
                                       alignment: iconAlignment,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 44, minHeight: 44),
                                       height: disableIntrinsicContentHeight
                                           ? extraButtonHeight
                                           : double.infinity,
-                                      width: 40,
+                                      width: 44,
                                       child: ScaledAnimatedSwitcher(
                                         keyToWatch: extraIcon.toString(),
                                         child: Icon(
@@ -177,16 +179,18 @@ class EditRowEntry extends StatelessWidget {
                                     borderRadius: borderRadius,
                                     child: Container(
                                       alignment: iconAlignment,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 44, minHeight: 44),
                                       margin: EdgeInsetsDirectional.only(
                                         end: hideReorder == true &&
                                                 showMoreWidget == null
-                                            ? 10
+                                            ? 6
                                             : 0,
                                       ),
                                       height: disableIntrinsicContentHeight
                                           ? extraButtonHeight
                                           : double.infinity,
-                                      width: 40,
+                                      width: 44,
                                       child: Icon(
                                           appStateSettings["outlinedIcons"]
                                               ? Icons.delete_outlined
@@ -213,13 +217,15 @@ class EditRowEntry extends StatelessWidget {
                                             borderRadius: borderRadius,
                                             child: Container(
                                               alignment: iconAlignment,
+                                              constraints: const BoxConstraints(
+                                                  minWidth: 44, minHeight: 44),
                                               margin:
                                                   EdgeInsetsDirectional.only(
                                                 end: showMoreWidget == null
-                                                    ? 10
+                                                    ? 6
                                                     : 0,
                                               ),
-                                              width: 40,
+                                              width: 44,
                                               height:
                                                   disableIntrinsicContentHeight
                                                       ? extraButtonHeight
@@ -237,9 +243,11 @@ class EditRowEntry extends StatelessWidget {
                                         opacity: 0.2,
                                         child: Container(
                                           alignment: iconAlignment,
+                                          constraints: const BoxConstraints(
+                                              minWidth: 44, minHeight: 44),
                                           margin: EdgeInsetsDirectional.only(
-                                              end: 10),
-                                          width: 40,
+                                              end: 6),
+                                          width: 44,
                                           height: disableIntrinsicContentHeight
                                               ? null
                                               : double.infinity,

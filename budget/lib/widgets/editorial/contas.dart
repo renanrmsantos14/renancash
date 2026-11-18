@@ -260,23 +260,30 @@ class LinhaConta extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(nome,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: EdTexto.corpo(context)
-                        .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(nome,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: EdTexto.corpo(context).copyWith(
+                              fontSize: 15, fontWeight: FontWeight.w500)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(saldo,
+                        style: EdTexto.corpo(context).copyWith(
+                            fontSize: 15, fontWeight: FontWeight.w500)),
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(detalhe,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: EdTexto.rotulo(context)),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(saldo,
-              style: EdTexto.corpo(context)
-                  .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
         ],
       ),
     );

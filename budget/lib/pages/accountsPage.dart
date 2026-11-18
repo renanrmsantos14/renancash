@@ -106,22 +106,32 @@ class AccountsPageState extends State<AccountsPage> {
           hasScrollBody: false,
           child: Center(
             child: googleUser == null
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SettingsContainerOutlined(
-                        title: getPlatform() == PlatformOS.isIOS
-                            ? "google-drive-backup".tr()
-                            : "sign-in-with-google".tr(),
-                        icon: getPlatform() == PlatformOS.isIOS
-                            ? MoreIcons.google_drive
-                            : MoreIcons.google,
-                        isExpanded: false,
-                        onTap: () async {
-                          await signInAndSync(context, next: () {});
-                        },
-                      )
-                    ],
+                ? Padding(
+                    padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: 30),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SettingsContainerOutlined(
+                          title: getPlatform() == PlatformOS.isIOS
+                              ? "google-drive-backup".tr()
+                              : "sign-in-with-google".tr(),
+                          icon: getPlatform() == PlatformOS.isIOS
+                              ? MoreIcons.google_drive
+                              : MoreIcons.google,
+                          isExpanded: false,
+                          onTap: () async {
+                            await signInAndSync(context, next: () {});
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "onboarding-info-3".tr(),
+                          textAlign: TextAlign.center,
+                          style: EdTexto.rotulo(context),
+                        ),
+                      ],
+                    ),
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -197,7 +207,7 @@ class AccountsPageState extends State<AccountsPage> {
                             }
                           },
                           padding: EdgeInsetsDirectional.symmetric(
-                              horizontal: 17, vertical: 12),
+                              horizontal: 20, vertical: 13),
                           fontSize: 15,
                         ),
                       ),
@@ -214,6 +224,7 @@ class AccountsPageState extends State<AccountsPage> {
                                   opacity: currentlyExporting ? 0.4 : 1,
                                   duration: Duration(milliseconds: 200),
                                   child: OutlinedButtonStacked(
+                                    borderRadius: 12,
                                     text: "backup".tr(),
                                     iconData: appStateSettings["outlinedIcons"]
                                         ? Icons.cloud_upload_outlined
@@ -240,6 +251,7 @@ class AccountsPageState extends State<AccountsPage> {
                             SizedBox(width: 15),
                             Expanded(
                               child: OutlinedButtonStacked(
+                                borderRadius: 12,
                                 text: "restore".tr(),
                                 iconData: appStateSettings["outlinedIcons"]
                                     ? Icons.cloud_download_outlined
@@ -377,6 +389,7 @@ class SyncCloudBackupButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButtonStacked(
+      borderRadius: 12,
       text: getPlatform() == PlatformOS.isIOS
           ? "devices".tr().capitalizeFirst
           : "sync".tr(),
@@ -400,6 +413,7 @@ class BackupsCloudBackupButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButtonStacked(
+      borderRadius: 12,
       text: "backups".tr(),
       iconData: appStateSettings["outlinedIcons"]
           ? Icons.folder_outlined
@@ -552,7 +566,7 @@ class _SignInWithGoogleFlyInState extends State<SignInWithGoogleFlyIn> {
                             padding: const EdgeInsetsDirectional.symmetric(
                                 horizontal: 22, vertical: 12),
                             child: Button(
-                              label: "Continue with Google",
+                              label: "sign-in-with-google".tr(),
                               onTap: () async {
                                 await signInGoogle();
                                 setState(() {
