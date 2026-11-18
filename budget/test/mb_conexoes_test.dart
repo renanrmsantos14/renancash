@@ -37,7 +37,7 @@ void main() {
       {'type': 'BANK', 'subtype': 'CHECKING_ACCOUNT', 'name': 'Conta Inter', 'balance': 10.5},
       {'type': 'CREDIT', 'name': 'Cartão Gold', 'balance': 600},
     ]);
-    expect(c.sigla, 'BA'); // mesma regra da Início
+    expect(c.sigla, 'IN'); // mesma regra da Início
     expect(c.situacao.situacao, MbSituacao.reconectar);
     expect(c.situacao.rotulo, 'Senha mudou');
     expect(c.contas.first.tipo, 'Conta corrente');

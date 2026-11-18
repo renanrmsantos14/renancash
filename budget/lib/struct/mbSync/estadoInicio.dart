@@ -145,7 +145,12 @@ double _num(Object? v) => v is num ? v.toDouble() : 0;
 
 /// Duas letras do banco para o avatar (Início e Contas conectadas).
 String mbSigla(String nome) {
-  final letras = nome.replaceAll(RegExp(r'[^A-Za-zÀ-ú]'), '');
+  // "Banco Inter" é IN, não BA: pula o prefixo genérico (só "Banco" sozinho fica BA).
+  final letras = nome
+      .trim()
+      .replaceFirst(
+          RegExp(r'^(?:(?:banco|conta|cart[ãa]o|d[eoa]s?)\s+)+', caseSensitive: false), '')
+      .replaceAll(RegExp(r'[^A-Za-zÀ-ú]'), '');
   return letras.isEmpty
       ? '··'
       : letras.substring(0, letras.length < 2 ? 1 : 2).toUpperCase();
