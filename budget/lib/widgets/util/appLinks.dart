@@ -323,15 +323,19 @@ Future<Transaction?> gravarTransacaoDeLink(TransacaoDeLink t) async {
   return null;
 }
 
-// Os testes trocam o gravador para provar que nada é gravado antes da confirmação.
+// Os testes trocam o gravador (e o resolvedor de categoria/conta, que usa o banco) para provar
+// que nada é gravado antes da confirmação.
 @visibleForTesting
 Future<Transaction?> Function(TransacaoDeLink) gravadorDeLink =
     gravarTransacaoDeLink;
+@visibleForTesting
+Future<TransacaoDeLink?> Function(BuildContext, Map<String, String?>)
+    preparadorDeLink = prepararTransacaoDeLink;
 
 // Link de transação única: prepara, pede confirmação e só então grava.
 Future<Transaction?> processAddTransactionFromParams(
     BuildContext context, Map<String, String?> params) async {
-  final t = await prepararTransacaoDeLink(context, params);
+  final t = await preparadorDeLink(context, params);
   if (t == null) return null;
   if (!await confirmarTransacoesDeLink(context, [t])) return null;
   return gravadorDeLink(t);
@@ -342,7 +346,7 @@ Future<List<Transaction?>> processAddTransactionsFromJson(
     BuildContext context, List<Map<String, String?>> itens) async {
   final List<TransacaoDeLink> prontas = [];
   for (final params in itens) {
-    final t = await prepararTransacaoDeLink(context, params);
+    final t = await preparadorDeLink(context, params);
     if (t != null) prontas.add(t);
   }
   if (!await confirmarTransacoesDeLink(context, prontas)) return [];

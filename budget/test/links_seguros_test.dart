@@ -2,22 +2,16 @@
 // link de pareamento repetido abre um único popup.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' show DynamicLibrary;
 
 import 'package:budget/database/tables.dart';
-import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
 import 'package:budget/struct/throttler.dart';
 import 'package:budget/widgets/navigationFramework.dart' show navigatorKey;
 import 'package:budget/widgets/util/appLinks.dart';
-import 'package:drift/drift.dart' hide isNull, isNotNull;
-import 'package:drift/native.dart';
-import 'package:flutter/material.dart' hide Table;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqlite3/open.dart';
 
 final _token = 'mb_${'A' * 43}';
 
@@ -40,11 +34,10 @@ bool _tem(String texto) => find.text(texto).evaluate().isNotEmpty;
 final _carteira = TransactionWallet(
     walletPk: '0', name: 'Inter', dateCreated: DateTime(2026), order: 0, decimals: 2, currency: 'brl');
 
-void main() {
-  setUpAll(() {
-    open.overrideFor(OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-  });
+final _mercado = TransactionCategory(
+    categoryPk: 'c1', name: 'Mercado', dateCreated: DateTime(2026), order: 0, income: false);
 
+void main() {
   group('parseAppLink: decodifica uma vez só', () {
     test('% e acento chegam como o usuário digitou', () {
       final uri = Uri.parse(
@@ -67,17 +60,6 @@ void main() {
       t.view.physicalSize = const Size(800, 1400); // fonte de teste tem glifos largos
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
-      await t.runAsync(() async {
-        TestWidgetsFlutterBinding.ensureInitialized();
-        SharedPreferences.setMockInitialValues({});
-        sharedPreferences = await SharedPreferences.getInstance();
-        database = FinanceDatabase(NativeDatabase.memory());
-        await database.into(database.wallets).insert(WalletsCompanion.insert(
-            walletPk: const Value('0'), name: 'Inter', order: 0, currency: const Value('brl')));
-        await database.into(database.categories).insert(CategoriesCompanion.insert(
-            categoryPk: const Value('c1'), name: 'Mercado', order: 0, income: const Value(false)));
-      });
-      addTearDown(() => database.close());
       appStateSettings = {
         'materialYou': false,
         'accentSystemColor': false,
@@ -94,7 +76,23 @@ void main() {
         gravadas.add(item);
         return null;
       };
-      addTearDown(() => gravadorDeLink = gravarTransacaoDeLink);
+      // Sem banco: a categoria vem do parâmetro categoryPk (só "c1" existe), como o resolvedor real faria.
+      preparadorDeLink = (ctx, params) async {
+        if (params['categoryPk'] != 'c1') return null;
+        return TransacaoDeLink(
+          title: params['title'] ?? '',
+          note: params['note'] ?? '',
+          amount: double.parse(params['amount'] ?? '0'),
+          walletPk: '0',
+          dateCreated: null,
+          main: _mercado,
+          sub: null,
+        );
+      };
+      addTearDown(() {
+        gravadorDeLink = gravarTransacaoDeLink;
+        preparadorDeLink = prepararTransacaoDeLink;
+      });
       await t.pumpWidget(Provider<AllWallets>.value(
         value: AllWallets(list: [_carteira], indexedByPk: {'0': _carteira}),
         child: MaterialApp(
