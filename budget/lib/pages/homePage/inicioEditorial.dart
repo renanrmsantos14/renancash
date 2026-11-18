@@ -42,10 +42,21 @@ import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarnin
 /// Início do celular: responde "quanto posso gastar neste ciclo".
 /// Layout fixo; blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
 class InicioEditorial extends StatefulWidget {
-  const InicioEditorial({super.key}) : _modelo = null;
-  const InicioEditorial.comModelo(ModeloInicio modelo, {super.key})
-      : _modelo = modelo;
+  const InicioEditorial({super.key})
+      : _modelo = null,
+        _atalhos = null,
+        _metas = null;
+  const InicioEditorial.comModelo(
+    ModeloInicio modelo, {
+    super.key,
+    List<MbAtalhoRapido>? atalhos,
+    List<({String nome, double total, double alvo})>? metas,
+  })  : _modelo = modelo,
+        _atalhos = atalhos,
+        _metas = metas;
   final ModeloInicio? _modelo;
+  final List<MbAtalhoRapido>? _atalhos;
+  final List<({String nome, double total, double alvo})>? _metas;
 
   @override
   State<InicioEditorial> createState() => _InicioEditorialState();
@@ -139,18 +150,19 @@ class _InicioEditorialState extends State<InicioEditorial> {
             CartaoSaldoCiclo(
               modelo: m,
               onTap: _real ? () => mbAbrirOrcamentoCiclo(context, editar: false) : null,
-              onDefinirLimite:
-                  _real ? () => mbAbrirOrcamentoCiclo(context, editar: true) : null,
+              onDefinirLimite: () => mbAbrirOrcamentoCiclo(context, editar: true),
             ),
-          if (_real) const LancamentoRapidoInicio(),
-          if (_real) const AtalhosInicio(),
-          if (_real) const MetasEmprestimosInicio(),
+          if (_real || widget._atalhos != null)
+            LancamentoRapidoInicio(atalhos: widget._atalhos),
+          if (_real || meuBancoPareadoConferido.value) const AtalhosInicio(),
+          if (_real ||
+              widget._metas != null ||
+              meuBancoEmprestimos.value.abertos.isNotEmpty)
+            MetasEmprestimosInicio(metas: widget._metas),
           if (m.contas.isNotEmpty)
             ContasInicio(
                 modelo: m,
-                onGerenciar: _real
-                    ? () => pushRoute(context, const MeuBancoPage())
-                    : null,
+                onGerenciar: () => pushRoute(context, const MeuBancoPage()),
                 onAbrirConta: _real ? (c) => mbAbrirConta(context, c) : null),
         ],
       );
@@ -615,11 +627,12 @@ class _SemLimite extends StatelessWidget {
 /// Metas (não arquivadas) e empréstimos ao pai em aberto, em grupos de até 2 linhas.
 /// Com um grupo só, ele dá o título do bloco e o subtítulo some. Sem nada, o bloco some.
 class MetasEmprestimosInicio extends StatefulWidget {
-  const MetasEmprestimosInicio({super.key, this.colunaFlex});
+  const MetasEmprestimosInicio({super.key, this.colunaFlex, this.metas});
 
   /// Computador: vira uma coluna `Expanded(flex)` de uma Row, com 40 px à direita.
   /// Vazio, não ocupa a coluna.
   final int? colunaFlex;
+  final List<({String nome, double total, double alvo})>? metas;
 
   @override
   State<MetasEmprestimosInicio> createState() => _MetasEmprestimosInicioState();
@@ -630,71 +643,92 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
   late final Stream<List<Objective>> _metas = database.watchAllObjectives(
       objectiveType: ObjectiveType.goal, hideArchived: true);
 
+  Widget _construir(
+      BuildContext context, List<Objective> metasDb, MbEmprestimos emprestimos) {
+    final fixas = widget.metas;
+    final temMetas = fixas != null ? fixas.isNotEmpty : metasDb.isNotEmpty;
+    final qtdMetas = fixas != null ? fixas.length : metasDb.length;
+    final abertos = emprestimos.abertos;
+    if (!temMetas && abertos.isEmpty) return const SizedBox.shrink();
+    final unico = !temMetas || abertos.isEmpty;
+    final n = AjustesInicio.linhasMetas;
+    final grupos = [
+      if (temMetas)
+        _Grupo(
+          titulo: 'Metas',
+          subtitulo: !unico,
+          acao: qtdMetas > n ? 'Ver todas' : null,
+          onAcao: () =>
+              pushRoute(context, const ObjectivesListPage(backButton: true)),
+          linhas: [
+            if (fixas != null)
+              for (final m in fixas.take(n))
+                _LinhaProgresso(
+                  titulo: m.nome,
+                  valor: '${brl(m.total)} de ${brl(m.alvo)}',
+                  fracao: m.alvo > 0 ? m.total / m.alvo : 0,
+                )
+            else
+              for (final o in metasDb.take(n))
+                WatchTotalAndAmountOfObjective(
+                  objective: o,
+                  builder: (alvo, total, fracao) => _LinhaProgresso(
+                    titulo: o.name,
+                    valor: '${brl(total)} de ${brl(alvo)}',
+                    fracao: fracao,
+                    onTap: () => pushRoute(
+                        context, ObjectivePage(objectivePk: o.objectivePk)),
+                  ),
+                ),
+          ],
+        ),
+      if (abertos.isNotEmpty)
+        _Grupo(
+          titulo: 'Empréstimos',
+          subtitulo: !unico,
+          nota: abertos.length > n ? 'mais ${abertos.length - n}' : null,
+          linhas: [
+            for (final e in abertos.take(n))
+              _LinhaProgresso(
+                titulo: switch (DateTime.tryParse(e.data ?? '')) {
+                  final d? => 'Empréstimo de ${diaMes(d)}',
+                  null => 'Empréstimo',
+                },
+                valor: 'Falta ${brl(e.restante)}',
+                fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
+              ),
+          ],
+        ),
+    ];
+    final bloco = _Secao(
+      titulo: unico ? grupos.single.titulo : 'Metas e empréstimos',
+      divisores: false,
+      filhos: grupos,
+    );
+    final flex = widget.colunaFlex;
+    return flex == null
+        ? bloco
+        : Expanded(
+            flex: flex,
+            child: Padding(
+                padding: const EdgeInsets.only(right: 40), child: bloco));
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.metas != null) {
+      return ValueListenableBuilder<MbEmprestimos>(
+        valueListenable: meuBancoEmprestimos,
+        builder: (context, emprestimos, _) =>
+            _construir(context, const <Objective>[], emprestimos),
+      );
+    }
     return StreamBuilder<List<Objective>>(
       stream: _metas,
       builder: (context, snap) => ValueListenableBuilder<MbEmprestimos>(
         valueListenable: meuBancoEmprestimos,
-        builder: (context, emprestimos, _) {
-          final metas = snap.data ?? const <Objective>[];
-          final abertos = emprestimos.abertos;
-          if (metas.isEmpty && abertos.isEmpty) return const SizedBox.shrink();
-          final unico = metas.isEmpty || abertos.isEmpty;
-          final n = AjustesInicio.linhasMetas;
-          final grupos = [
-            if (metas.isNotEmpty)
-              _Grupo(
-                titulo: 'Metas',
-                subtitulo: !unico,
-                acao: metas.length > n ? 'Ver todas' : null,
-                onAcao: () => pushRoute(
-                    context, const ObjectivesListPage(backButton: true)),
-                linhas: [
-                  for (final o in metas.take(n))
-                    WatchTotalAndAmountOfObjective(
-                      objective: o,
-                      builder: (alvo, total, fracao) => _LinhaProgresso(
-                        titulo: o.name,
-                        valor: '${brl(total)} de ${brl(alvo)}',
-                        fracao: fracao,
-                        onTap: () => pushRoute(context,
-                            ObjectivePage(objectivePk: o.objectivePk)),
-                      ),
-                    ),
-                ],
-              ),
-            if (abertos.isNotEmpty)
-              _Grupo(
-                titulo: 'Empréstimos',
-                subtitulo: !unico,
-                nota: abertos.length > n ? 'mais ${abertos.length - n}' : null,
-                linhas: [
-                  for (final e in abertos.take(n))
-                    _LinhaProgresso(
-                      titulo: switch (DateTime.tryParse(e.data ?? '')) {
-                        final d? => 'Empréstimo de ${diaMes(d)}',
-                        null => 'Empréstimo',
-                      },
-                      valor: 'Falta ${brl(e.restante)}',
-                      fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
-                    ),
-                ],
-              ),
-          ];
-          final bloco = _Secao(
-            titulo: unico ? grupos.single.titulo : 'Metas e empréstimos',
-            divisores: false,
-            filhos: grupos,
-          );
-          final flex = widget.colunaFlex;
-          return flex == null
-              ? bloco
-              : Expanded(
-                  flex: flex,
-                  child: Padding(
-                      padding: const EdgeInsets.only(right: 40), child: bloco));
-        },
+        builder: (context, emprestimos, _) =>
+            _construir(context, snap.data ?? const <Objective>[], emprestimos),
       ),
     );
   }

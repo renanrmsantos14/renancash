@@ -4,6 +4,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/emprestimos.dart' show meuBancoEmprestimos;
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbMudouGeral;
 import 'package:budget/struct/mbSync/revisao.dart' show mbAtualizarRevisar;
@@ -28,14 +29,19 @@ Future<void> mbAtualizarComAviso() async =>
 class PainelDesktop extends StatefulWidget {
   const PainelDesktop({super.key})
       : _modelo = null,
-        _transacoes = const [];
+        _transacoes = const [],
+        _metas = null;
   const PainelDesktop.comDados(ModeloInicio modelo,
-      {super.key, List<TransacaoInicio> transacoes = const []})
+      {super.key,
+      List<TransacaoInicio> transacoes = const [],
+      List<({String nome, double total, double alvo})>? metas})
       : _modelo = modelo,
-        _transacoes = transacoes;
+        _transacoes = transacoes,
+        _metas = metas;
 
   final ModeloInicio? _modelo;
   final List<TransacaoInicio> _transacoes;
+  final List<({String nome, double total, double alvo})>? _metas;
 
   @override
   State<PainelDesktop> createState() => _PainelDesktopState();
@@ -144,27 +150,30 @@ class _PainelDesktopState extends State<PainelDesktop> {
                     onTap: real
                         ? () => mbAbrirOrcamentoCiclo(context, editar: false)
                         : null,
-                    onDefinirLimite: real
-                        ? () => mbAbrirOrcamentoCiclo(context, editar: true)
-                        : null,
+                    onDefinirLimite: () =>
+                        mbAbrirOrcamentoCiclo(context, editar: true),
                     lateral: _GastoPorDia(modelo: m),
                   ),
-                if (real) const AtalhosInicio(),
+                if (real || meuBancoPareadoConferido.value)
+                  const AtalhosInicio(),
                 const SizedBox(height: 8),
                 // Mesmos blocos do celular, lado a lado, mais as últimas transações.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Metas leem o banco local; fora do app (testes, prints) a coluna sai.
-                    if (real) const MetasEmprestimosInicio(colunaFlex: 3),
+                    // Metas leem o banco local; nos testes/prints pode receber metas fixas.
+                    if (real ||
+                        widget._metas != null ||
+                        meuBancoEmprestimos.value.abertos.isNotEmpty)
+                      MetasEmprestimosInicio(
+                          colunaFlex: 3, metas: widget._metas),
                     if (m.contas.isNotEmpty) ...[
                       Expanded(
                         flex: 3,
                         child: ContasInicio(
                             modelo: m,
-                            onGerenciar: real
-                                ? () => pushRoute(context, const MeuBancoPage())
-                                : null,
+                            onGerenciar: () =>
+                                pushRoute(context, const MeuBancoPage()),
                             onAbrirConta:
                                 real ? (c) => mbAbrirConta(context, c) : null),
                       ),
