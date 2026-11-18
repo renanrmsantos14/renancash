@@ -165,6 +165,38 @@ class MedidorEditorial extends StatelessWidget {
   }
 }
 
+/// Contorno tracejado dos dias que ainda não chegaram.
+class _Tracejado extends CustomPainter {
+  _Tracejado(this.cor);
+  final Color cor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = cor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final r = Rect.fromLTWH(.5, .5, size.width - 1, size.height - 1);
+    const traco = 3.0, vao = 2.0;
+    void linha(Offset a, Offset b) {
+      final d = (b - a);
+      final n = d.distance;
+      final u = d / n;
+      for (var t = 0.0; t < n; t += traco + vao) {
+        final fim = t + traco > n ? n : t + traco;
+        canvas.drawLine(a + u * t, a + u * fim, p);
+      }
+    }
+    linha(r.topLeft, r.topRight);
+    linha(r.topRight, r.bottomRight);
+    linha(r.bottomRight, r.bottomLeft);
+    linha(r.bottomLeft, r.topLeft);
+  }
+
+  @override
+  bool shouldRepaint(_Tracejado o) => o.cor != cor;
+}
+
 class BarrasDias extends StatelessWidget {
   const BarrasDias(
       {super.key,
@@ -192,7 +224,14 @@ class BarrasDias extends StatelessWidget {
               if (i > 0) const SizedBox(width: 3),
               Expanded(
                 child: i > indiceHoje
-                    ? const SizedBox.shrink()
+                    ? Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                            height: altura * .3,
+                            child: CustomPaint(
+                                painter: _Tracejado(e.mu.withOpacity(.4)),
+                                child: const SizedBox.expand())),
+                      )
                     : Transform(
                         alignment: Alignment.bottomCenter,
                         transform: Matrix4.diagonal3Values(1, escala(i), 1),

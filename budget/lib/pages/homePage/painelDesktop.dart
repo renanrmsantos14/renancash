@@ -4,6 +4,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/casosComuns.dart' show MbAtalhoRapido;
 import 'package:budget/struct/mbSync/emprestimos.dart' show meuBancoEmprestimos;
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart' show mbMudouGeral;
@@ -30,18 +31,30 @@ class PainelDesktop extends StatefulWidget {
   const PainelDesktop({super.key})
       : _modelo = null,
         _transacoes = const [],
-        _metas = null;
+        _metas = null,
+        _atalhos = null,
+        _patrimonio = null,
+        _limites = null;
   const PainelDesktop.comDados(ModeloInicio modelo,
       {super.key,
       List<TransacaoInicio> transacoes = const [],
-      List<({String nome, double total, double alvo})>? metas})
+      List<({String nome, double total, double alvo})>? metas,
+      List<MbAtalhoRapido>? atalhos,
+      PatrimonioInicio? patrimonio,
+      List<LimiteInicio>? limites})
       : _modelo = modelo,
         _transacoes = transacoes,
-        _metas = metas;
+        _metas = metas,
+        _atalhos = atalhos,
+        _patrimonio = patrimonio,
+        _limites = limites;
 
   final ModeloInicio? _modelo;
   final List<TransacaoInicio> _transacoes;
   final List<({String nome, double total, double alvo})>? _metas;
+  final List<MbAtalhoRapido>? _atalhos; // prints: sem banco
+  final PatrimonioInicio? _patrimonio;
+  final List<LimiteInicio>? _limites;
 
   @override
   State<PainelDesktop> createState() => _PainelDesktopState();
@@ -142,48 +155,68 @@ class _PainelDesktopState extends State<PainelDesktop> {
                     atualizando: _atualizando,
                     onAtualizar: _atualizar),
                 const SizedBox(height: 28),
-                if (m.semDados)
-                  const SemDadosInicio(dica: 'Ainda sem dados. Use Atualizar.')
-                else
-                  CartaoSaldoCiclo(
-                    modelo: m,
-                    onTap: real
-                        ? () => mbAbrirOrcamentoCiclo(context, editar: false)
-                        : null,
-                    onDefinirLimite: () =>
-                        mbAbrirOrcamentoCiclo(context, editar: true),
-                    lateral: _GastoPorDia(modelo: m),
-                  ),
-                if (real || meuBancoPareadoConferido.value)
-                  const AtalhosInicio(),
-                const SizedBox(height: 8),
-                // Mesmos blocos do celular, lado a lado, mais as últimas transações.
+                // Mesmas seções do celular em duas colunas: ciclo e lançamentos à esquerda,
+                // limites, metas, empréstimos e transações à direita.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Metas leem o banco local; nos testes/prints pode receber metas fixas.
-                    if (real ||
-                        widget._metas != null ||
-                        meuBancoEmprestimos.value.abertos.isNotEmpty)
-                      MetasEmprestimosInicio(
-                          colunaFlex: 3, metas: widget._metas),
-                    if (m.contas.isNotEmpty) ...[
-                      Expanded(
-                        flex: 3,
-                        child: ContasInicio(
-                            modelo: m,
-                            onGerenciar: () =>
-                                pushRoute(context, const MeuBancoPage()),
-                            onAbrirConta:
-                                real ? (c) => mbAbrirConta(context, c) : null),
-                      ),
-                      const SizedBox(width: 40),
-                    ],
                     Expanded(
-                        flex: 4,
-                        child: Padding(
-                            padding: const EdgeInsets.only(top: 20),
-                            child: _Tabela(transacoes: _transacoes))),
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (m.semDados)
+                            const SemDadosInicio(
+                                dica: 'Ainda sem dados. Use Atualizar.')
+                          else
+                            CartaoSaldoCiclo(
+                              modelo: m,
+                              onTap: real
+                                  ? () => mbAbrirOrcamentoCiclo(context,
+                                      editar: false)
+                                  : null,
+                              onDefinirLimite: () =>
+                                  mbAbrirOrcamentoCiclo(context, editar: true),
+                            ),
+                          if (!m.semDados) ...[
+                            const AlertaPendenciasInicio(),
+                            if (real || widget._patrimonio != null)
+                              ResumoInicio(modelo: m, fixo: widget._patrimonio),
+                          ],
+                          if (real || widget._atalhos != null)
+                            LancamentoRapidoInicio(atalhos: widget._atalhos),
+                          if (real || meuBancoPareadoConferido.value)
+                            const AtalhosInicio(),
+                          GastoPorDiaInicio(modelo: m),
+                          if (m.contas.isNotEmpty)
+                            ContasInicio(
+                                modelo: m,
+                                onGerenciar: () =>
+                                    pushRoute(context, const MeuBancoPage()),
+                                onAbrirConta:
+                                    real ? (c) => mbAbrirConta(context, c) : null),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 40),
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (real || widget._limites != null)
+                            LimitesInicio(fixos: widget._limites),
+                          // Metas leem o banco local; nos testes/prints pode receber metas fixas.
+                          if (real ||
+                              widget._metas != null ||
+                              meuBancoEmprestimos.value.abertos.isNotEmpty)
+                            MetasEmprestimosInicio(metas: widget._metas),
+                          Padding(
+                              padding: const EdgeInsets.only(top: 20),
+                              child: _Tabela(transacoes: _transacoes)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -271,40 +304,6 @@ class _Topo extends StatelessWidget {
             onPressed: atualizando ? null : onAtualizar,
             child: Text(atualizando ? 'Atualizando…' : 'Atualizar'),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _GastoPorDia extends StatelessWidget {
-  const _GastoPorDia({required this.modelo});
-  final ModeloInicio modelo;
-
-  @override
-  Widget build(BuildContext context) {
-    final pontas = modelo.periodo.split(' – ');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Gasto por dia', style: EdTexto.rotulo(context)),
-        const SizedBox(height: 16),
-        Expanded(
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            child: BarrasDias(
-                valores: modelo.porDia,
-                indiceHoje: modelo.indiceHoje,
-                altura: 90),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(child: Text(pontas.first, style: EdTexto.mono(context))),
-            Text(pontas.length > 1 ? pontas.last : '',
-                style: EdTexto.mono(context)),
-          ],
         ),
       ],
     );
