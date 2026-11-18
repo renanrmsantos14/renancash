@@ -219,7 +219,7 @@ function h(tag, attrs, ...filhos) {
 
 const aplicarAjuste = (t) => { t.cat_orig = t.category; t.category = categoriaEfetiva(t); return t; };
 
-const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
+const SITUACAO = { PAID: "Paga", OPEN: "Aberta", CLOSED: "Fechada", PARTIAL: "Paga em parte", PAST_DUE_UNCONFIRMED: "Vencida (pagamento não confirmado)", PAST_DUE_UNPAID: "Vencida e não paga" };
 const STATUS_TX = { POSTED: "Lançada", PENDING: "Pendente" };
 const CORTE_FATURA = 7; // a API não traz o fechamento nem liga a compra à fatura: estima-se o fechamento 7 dias antes do vencimento
 

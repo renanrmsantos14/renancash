@@ -398,7 +398,8 @@ Future<({ModeloInicio modelo, List<({Transaction transaction, TransactionCategor
 }
 
 /// Fatura aberta de um cartão de crédito. `destaque`: vence em até 3 dias (ou já passou) e há valor a pagar.
-typedef FaturaAberta = ({String nome, double valor, DateTime? vence, int? dias, bool destaque});
+/// `minimo`: pagamento mínimo informado pelo banco (creditData.minimumPayment); null sem a informação.
+typedef FaturaAberta = ({String nome, double valor, DateTime? vence, int? dias, bool destaque, double? minimo});
 
 List<FaturaAberta> mbFaturasAbertas({
   required List<Map<String, dynamic>> contas,
@@ -424,6 +425,9 @@ List<FaturaAberta> mbFaturasAbertas({
       vence: vence,
       dias: dias,
       destaque: valor > 0 && dias != null && dias <= 3,
+      minimo: aberta is Map && aberta['minimum_payment'] is num && _num(aberta['minimum_payment']) > 0
+          ? _num(aberta['minimum_payment'])
+          : null,
     ));
   }
   return out;
@@ -598,11 +602,18 @@ List<BancoInicio> mbAgruparPorBanco({
 
   for (final c in contas.where((c) => c['type'] == 'BANK')) {
     final g = grupo(c['bank'] ?? c['name'])..sincronizado = true;
+    // Cheque especial em uso (bankData.overdraftUsedLimit) aparece na linha e a destaca: tem juros altos.
+    final especial = c['overdraft_used'] is num ? _num(c['overdraft_used']) : 0.0;
+    // Aplicação automática do saldo (bankData.automaticallyInvestedBalance): só informa, o total não muda
+    // (o Pluggy não diz se ela já está dentro do saldo).
+    final automatico = c['auto_invested'] is num ? _num(c['auto_invested']) : 0.0;
     g.contas.add((
-      rotulo: c['subtype'] == 'SAVINGS_ACCOUNT' ? 'Poupança' : 'Conta corrente',
+      rotulo: (c['subtype'] == 'SAVINGS_ACCOUNT' ? 'Poupança' : 'Conta corrente') +
+          (especial > 0.005 ? ' · ${brl(especial)} do cheque especial' : '') +
+          (automatico > 0.005 ? ' · ${brl(automatico)} rendendo automático' : ''),
       valor: _num(c['balance']),
       fatura: false,
-      destaque: false,
+      destaque: especial > 0.005,
       carteiras: mbPkConta('${c['id']}')
     ));
   }
@@ -662,7 +673,8 @@ List<BancoInicio> mbAgruparPorBanco({
       for (final x in g.faturas)
         (
           rotulo: 'Fatura${g.faturas.length > 1 ? ' ${x.f.nome}' : ''}'
-              '${x.f.vence == null ? '' : ' · vence ${_dd(x.f.vence!)}'}',
+              '${x.f.vence == null ? '' : ' · vence ${_dd(x.f.vence!)}'}'
+              '${x.f.minimo == null ? '' : ' · mínimo ${brl(x.f.minimo!)}'}',
           valor: -x.f.valor.abs(),
           fatura: true,
           destaque: x.f.destaque,

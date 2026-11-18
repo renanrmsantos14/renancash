@@ -118,6 +118,23 @@ export function alertasCredito({ transacoes, hoje }) {
     });
 }
 
+// ---------- Consentimento do Open Finance ----------
+
+const DIAS_CONSENTIMENTO = 7;
+
+// Um aviso por conexão quando faltam DIAS_CONSENTIMENTO dias ou menos para o consentimento vencer (a chave leva a data,
+// então renovar e chegar perto do próximo vencimento avisa de novo).
+export function alertasConsentimento({ conexoes, hoje }) {
+  return conexoes.flatMap((c) => {
+    const vence = c.consentimento_expira?.slice(0, 10);
+    if (!vence) return [];
+    const n = dias(hoje, vence);
+    if (n < 0 || n > DIAS_CONSENTIMENTO) return [];
+    return [{ chave: `consentimento:${c.id}:${vence}`, titulo: `Autorização do ${c.conector || "banco"} vence ${n === 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`}`,
+      corpo: `Renove a autorização do Open Finance no Meu Pluggy até ${dm(vence)} para o app continuar lendo essa conta.` }];
+  });
+}
+
 // ---------- Queda de conexão ----------
 
 // Uma notificação por queda: `avisos` = conexões com problema agora, `avisadas` = ids já notificados (o app limpa o id quando volta).

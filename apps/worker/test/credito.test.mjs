@@ -11,3 +11,13 @@ test("rotativo, fatura parcelada e anuidade recentes viram aviso; o resto não",
   assert.deepEqual(a.map((x) => [x.chave, x.titulo]), [["credito:r", "Cartão no rotativo"], ["credito:p", "Fatura parcelada"], ["credito:f", "Anuidade cobrada"]]);
   assert.match(a[2].corpo, /R\$\s45,90 em 18\/11/);
 });
+
+test("consentimento do Open Finance: avisa nos últimos 7 dias", async () => {
+  const { alertasConsentimento } = await import("../src/alertas.js");
+  const a = alertasConsentimento({ hoje: "2026-11-18", conexoes: [
+    { id: "i1", conector: "Inter", consentimento_expira: "2026-11-20T03:00:00.000Z" },
+    { id: "i2", conector: "Santander", consentimento_expira: "2027-01-01T00:00:00.000Z" },
+    { id: "i3", conector: "Velho", consentimento_expira: "2026-11-01T00:00:00.000Z" },
+  ] });
+  assert.deepEqual(a.map((x) => [x.chave, x.titulo]), [["consentimento:i1:2026-11-20", "Autorização do Inter vence em 2 dias"]]);
+});

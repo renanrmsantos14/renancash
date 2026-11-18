@@ -236,6 +236,10 @@ class _CartaoConexao extends StatelessWidget {
                         Text(
                             'Atualizada ${haQuanto(c.atualizado!, DateTime.now())}',
                             style: EdTexto.rotulo(context)),
+                      for (final r in c.rodape(DateTime.now()))
+                        Text(r.texto,
+                            style: EdTexto.rotulo(context)
+                                .copyWith(color: r.alerta ? e.warntx : null)),
                     ],
                   ),
                 ),

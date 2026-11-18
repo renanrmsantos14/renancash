@@ -49,7 +49,7 @@ export async function esquecerItem(db, id, agoraIso) {
 export async function listarConexoes(db, env, agoraIso) {
   await idsConexoes(db, env, agoraIso); // instalação nova: copia as conexões do secret
   const [itens, contas] = await db.batch([
-    db.prepare("SELECT id, conector, status, criado, atualizado FROM pluggy_items WHERE removido IS NULL ORDER BY criado, id"),
+    db.prepare("SELECT id, conector, status, criado, atualizado, proximo_sync, consentimento_expira FROM pluggy_items WHERE removido IS NULL ORDER BY criado, id"),
     db.prepare(`SELECT id, item_id, type, subtype, name, bank, balance FROM accounts WHERE item_id IS NOT NULL AND item_id NOT IN (${REMOVIDOS}) ORDER BY type, name`),
   ]);
   const porItem = new Map();
@@ -63,14 +63,16 @@ export async function listarConexoes(db, env, agoraIso) {
       precisaReconectar: PROBLEMA.test(i.status ?? ""),
       criado: i.criado ?? null,
       atualizado: i.atualizado ?? null,
+      proximoSync: i.proximo_sync ?? null,
+      consentimentoExpira: i.consentimento_expira ?? null,
       contas: daConexao,
     };
   });
 }
 
 export function atualizarStatus(db, item, agoraIso) {
-  return db.prepare("UPDATE pluggy_items SET status = ?2, conector = ?3, atualizado = ?4 WHERE id = ?1")
-    .bind(item.id, item.status ?? null, item.connector?.name ?? null, agoraIso).run();
+  return db.prepare("UPDATE pluggy_items SET status = ?2, conector = ?3, atualizado = ?4, proximo_sync = ?5, consentimento_expira = ?6 WHERE id = ?1")
+    .bind(item.id, item.status ?? null, item.connector?.name ?? null, agoraIso, item.nextAutoSyncAt ?? null, item.consentExpiresAt ?? null).run();
 }
 
 const SINCRONIZAR = new Set(["item/updated", "item/error", "item/waiting_user_input", "item/login_succeeded"]);

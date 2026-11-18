@@ -50,6 +50,10 @@ export function mapearConta(c, banco, itemId, ts) {
     available_limit: num(c.creditData?.availableCreditLimit),
     due_date: dia(c.creditData?.balanceDueDate),
     closing_date: dia(c.creditData?.balanceCloseDate),
+    minimum_payment: num(c.creditData?.minimumPayment),
+    overdraft_limit: num(c.bankData?.overdraftContractedLimit),
+    overdraft_used: num(c.bankData?.overdraftUsedLimit),
+    auto_invested: num(c.bankData?.automaticallyInvestedBalance),
     bank: banco,
     item_id: itemId,
     updated_at: ts,
@@ -112,16 +116,35 @@ export function avisoItem(item, banco) {
   };
 }
 
-// Snapshot "faturas:<conta>" no formato que o painel lê. O Pluggy não informa a situação das faturas
-// (todas vêm como "Fechada"); a aberta vem do saldo e do vencimento atual da conta.
+// Situação da fatura fechada pelos pagamentos (payments[] do /bills): PAID quando cobrem o total, PARTIAL quando
+// cobrem parte, CLOSED quando o banco não informa pagamento nenhum (não quer dizer que não foi paga).
+export function situacaoFatura(b) {
+  const pagos = (b.payments || []).map((p) => num(p.amount)).filter((v) => v != null);
+  const pago = Math.round(pagos.reduce((s, v) => s + Math.abs(v), 0) * 100) / 100;
+  const total = num(b.totalAmount) ?? 0;
+  const situacao = !pagos.length ? "CLOSED" : pago + 0.01 >= total ? "PAID" : pago > 0 ? "PARTIAL" : "CLOSED";
+  return { situacao, pago: pagos.length ? pago : null };
+}
+
+// Juros, multa e IOF cobrados na fatura (financeCharges[]). Null quando o banco não informa.
+function encargosFatura(b) {
+  const v = (b.financeCharges || []).map((c) => num(c.amount)).filter((x) => x != null);
+  return v.length ? Math.round(v.reduce((s, x) => s + Math.abs(x), 0) * 100) / 100 : null;
+}
+
+// Snapshot "faturas:<conta>" no formato que o painel lê. A aberta vem do saldo e do vencimento atual da conta,
+// com o pagamento mínimo de creditData.
 export function mapearFaturas(contaPluggy, bills) {
   const venc = dia(contaPluggy.creditData?.balanceDueDate);
   const saldo = num(contaPluggy.balance);
   return {
     results: bills
       .filter((b) => dia(b.dueDate) !== venc)
-      .map((b) => ({ id: b.id, dueDate: b.dueDate, totalAmount: b.totalAmount, payment_status: "CLOSED" })),
-    open_bill: venc ? { available: true, due_date: venc, total_amount: saldo } : null,
+      .map((b) => {
+        const { situacao, pago } = situacaoFatura(b);
+        return { id: b.id, dueDate: b.dueDate, totalAmount: b.totalAmount, payment_status: situacao, pago, minimo: num(b.minimumPaymentAmount), encargos: encargosFatura(b) };
+      }),
+    open_bill: venc ? { available: true, due_date: venc, total_amount: saldo, minimum_payment: num(contaPluggy.creditData?.minimumPayment) } : null,
     total_pending_debt: saldo,
   };
 }

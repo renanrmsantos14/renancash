@@ -141,7 +141,7 @@ test("GET /api/pluggy/items lista as conexões ativas com banco, status e contas
   const { conexoes } = await r.json();
   assert.equal(conexoes.length, 1);
   assert.deepEqual(conexoes[0], {
-    id: ID_A, banco: "Inter", status: "UPDATED", precisaReconectar: false, criado: T, atualizado: T,
+    id: ID_A, banco: "Inter", status: "UPDATED", precisaReconectar: false, criado: T, atualizado: T, proximoSync: null, consentimentoExpira: null,
     contas: [{ id: "c1", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Conta Inter", bank: "Inter", balance: 10.5 }],
   });
 });

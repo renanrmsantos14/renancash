@@ -22,7 +22,7 @@ const json = (texto) => (texto == null ? null : JSON.parse(texto));
 export async function puxar(db, desde, agoraIso, extras = {}) {
   const janela = inicioDaJanela(desde);
   const [contas, transacoes, registros, pendentes, config, snapshots, ultimaSync] = await db.batch([
-    db.prepare("SELECT id, type, subtype, name, bank, balance, credit_limit, available_limit, due_date, closing_date, item_id, updated_at, (item_id IN (SELECT id FROM pluggy_items WHERE removido IS NOT NULL)) AS removida FROM accounts ORDER BY type, name"),
+    db.prepare("SELECT id, type, subtype, name, bank, balance, credit_limit, available_limit, due_date, closing_date, minimum_payment, overdraft_limit, overdraft_used, auto_invested, item_id, updated_at, (item_id IN (SELECT id FROM pluggy_items WHERE removido IS NOT NULL)) AS removida FROM accounts ORDER BY type, name"),
     db.prepare("SELECT * FROM transactions WHERE ?1 IS NULL OR updated_at > ?1 ORDER BY date, id").bind(janela),
     db.prepare("SELECT tabela, id, dados, updated_at, deleted_at FROM registros WHERE (?1 IS NULL AND deleted_at IS NULL) OR server_at > ?1 ORDER BY server_at").bind(janela),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),

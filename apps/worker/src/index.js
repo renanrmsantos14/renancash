@@ -4,7 +4,7 @@ import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
-import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
+import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
@@ -363,7 +363,8 @@ const lerSnapshot = async (db, key, vazio) => {
 async function avaliarAlertas(env) {
   const db = env.DB;
   const b = await baseCiclo(env);
-  const [avisos, vistas, avisadas] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", [])]);
+  const [avisos, vistas, avisadas, conexoes] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", []),
+    db.prepare("SELECT id, conector, consentimento_expira FROM pluggy_items WHERE removido IS NULL AND consentimento_expira IS NOT NULL").all().then((r) => r.results)]);
   const ts = agora();
   const geral = consumoGeral(b);
   const { novas, ids } = comprasNovas({ ...b, vistas });
@@ -373,6 +374,7 @@ async function avaliarAlertas(env) {
     ...alertaCompras({ compras: novas, contas: b.contas, geral, agora: ts }),
     ...alertasFatura(b),
     ...alertasCredito(b),
+    ...alertasConsentimento({ conexoes, hoje: b.hoje }),
     ...alertasRevisao(b),
   ];
   await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);

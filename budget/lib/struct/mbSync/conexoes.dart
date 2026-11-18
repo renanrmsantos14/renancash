@@ -48,12 +48,16 @@ class MbConexao {
       required this.status,
       required this.precisaReconectar,
       required this.atualizado,
+      this.proximoSync,
+      this.consentimentoExpira,
       required this.contas});
   final String id;
   final String banco;
   final String? status;
   final bool precisaReconectar;
   final DateTime? atualizado;
+  /// Próxima atualização automática do Pluggy (nextAutoSyncAt) e vencimento do consentimento do Open Finance.
+  final DateTime? proximoSync, consentimentoExpira;
   final List<MbContaConexao> contas;
 
   factory MbConexao.deJson(Map<String, dynamic> j) {
@@ -67,6 +71,8 @@ class MbConexao {
       status: j['status'] as String?,
       precisaReconectar: j['precisaReconectar'] == true,
       atualizado: DateTime.tryParse('${j['atualizado']}')?.toLocal(),
+      proximoSync: DateTime.tryParse('${j['proximoSync']}')?.toLocal(),
+      consentimentoExpira: DateTime.tryParse('${j['consentimentoExpira']}')?.toLocal(),
       // O banco da conexão vale para a regra do Santander quando a conta não traz o seu.
       contas: [
         for (final c in contas) MbContaConexao.deJson({'bank': j['banco'], ...c})
@@ -93,6 +99,35 @@ class MbConexao {
         };
 
   String get sigla => mbSigla(banco);
+
+  /// Dias até o consentimento vencer (negativo: já venceu). Null sem a data.
+  int? diasParaConsentimento(DateTime agora) => consentimentoExpira == null
+      ? null
+      : DateTime(consentimentoExpira!.year, consentimentoExpira!.month, consentimentoExpira!.day)
+          .difference(DateTime(agora.year, agora.month, agora.day))
+          .inDays;
+
+  /// Linhas de rodapé do cartão da conexão: próxima atualização e consentimento (aviso nos últimos 15 dias).
+  List<({String texto, bool alerta})> rodape(DateTime agora) {
+    String dm(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    String hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final out = <({String texto, bool alerta})>[];
+    final p = proximoSync;
+    if (p != null && p.isAfter(agora)) {
+      final mesmoDia = p.year == agora.year && p.month == agora.month && p.day == agora.day;
+      out.add((texto: 'O banco atualiza de novo ${mesmoDia ? 'às ${hm(p)}' : 'em ${dm(p)} às ${hm(p)}'}', alerta: false));
+    }
+    final n = diasParaConsentimento(agora);
+    if (n != null && n <= 15) {
+      out.add((
+        texto: n < 0
+            ? 'A autorização do Open Finance venceu em ${dm(consentimentoExpira!)}. Renove no Meu Pluggy.'
+            : 'A autorização do Open Finance vence ${n == 0 ? 'hoje' : n == 1 ? 'amanhã' : 'em $n dias'}. Renove no Meu Pluggy.',
+        alerta: true
+      ));
+    }
+    return out;
+  }
 }
 
 /// Conector agregador (MeuPluggy, do Open Finance) não é banco: o nome sai das

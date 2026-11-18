@@ -72,7 +72,7 @@ test("faturas: aberta vem da conta; a de mesmo vencimento não duplica", () => {
   ]);
   assert.deepEqual(f.results.map((b) => b.id), ["b"]);
   assert.equal(f.results[0].payment_status, "CLOSED");
-  assert.deepEqual(f.open_bill, { available: true, due_date: "2026-11-17", total_amount: 420 });
+  assert.deepEqual(f.open_bill, { available: true, due_date: "2026-11-17", total_amount: 420, minimum_payment: null });
   assert.equal(mapearFaturas({ balance: 1 }, []).open_bill, null);
 });
 
@@ -175,4 +175,21 @@ test("transferência para o próprio titular não é gasto", async () => {
   assert.equal(valorGasto(t, false), 0);
   assert.equal(naoEhGasto({ ...t, ajuste_gasto: 1 }), false); // o usuário manda
   assert.equal(naoEhGasto({ ...t, entre_minhas: 0 }), false);
+});
+
+test("faturas: paga, paga em parte, sem pagamento informado; encargos e mínimo", () => {
+  const conta = { balance: 900, creditData: { balanceDueDate: "2026-12-10", minimumPayment: 135 } };
+  const f = mapearFaturas(conta, [
+    { id: "a", dueDate: "2026-10-10", totalAmount: 500, minimumPaymentAmount: 75, payments: [{ amount: 300 }, { amount: 200 }], financeCharges: [{ type: "IOF", amount: 1.2 }, { type: "LATE_PAYMENT_INTEREST", amount: 3.4 }] },
+    { id: "b", dueDate: "2026-11-10", totalAmount: 800, payments: [{ amount: 120 }] },
+    { id: "c", dueDate: "2026-09-10", totalAmount: 400 },
+  ]);
+  assert.deepEqual(f.results.map((b) => [b.id, b.payment_status, b.pago]), [["a", "PAID", 500], ["b", "PARTIAL", 120], ["c", "CLOSED", null]]);
+  assert.deepEqual([f.results[0].encargos, f.results[0].minimo, f.results[1].encargos], [4.6, 75, null]);
+  assert.equal(f.open_bill.minimum_payment, 135);
+});
+
+test("conta: cheque especial, aplicado automático e mínimo da fatura", () => {
+  const c = mapearConta({ id: "1", type: "BANK", balance: -50, bankData: { overdraftContractedLimit: 1000, overdraftUsedLimit: 50, automaticallyInvestedBalance: 300 } }, "Inter", "i", "ts");
+  assert.deepEqual([c.overdraft_limit, c.overdraft_used, c.auto_invested, c.minimum_payment], [1000, 50, 300, null]);
 });
