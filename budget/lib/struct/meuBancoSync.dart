@@ -6,6 +6,7 @@ import 'package:budget/pages/addWalletPage.dart'
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/aplicarLocal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
@@ -424,6 +425,8 @@ Future<void> _criarCarteiraSeFaltar(String pk, String nome) async {
 }
 
 Future<void> _aplicar(MbResultado r) async {
+  final apagadas = await mbEspelhoApagadas('transactions');
+  final transacoes = [for (final t in r.transacoes) if (!apagadas.contains(t.pk)) t];
   // Carteiras: criadas se faltarem; as existentes não são tocadas (preserva ordem e edições).
   for (final conta in r.contas) {
     await _criarCarteiraSeFaltar(conta.walletPk, conta.nome);
@@ -452,7 +455,7 @@ Future<void> _aplicar(MbResultado r) async {
   for (final e in r.categoriasProprias.entries) {
     await criarCategoriaSeFaltar(e.value, e.key, false);
   }
-  for (final t in r.transacoes) {
+  for (final t in transacoes) {
     // Estorno e cashback entram como despesa (valor positivo), então a categoria é de despesa.
     await criarCategoriaSeFaltar(t.categoriaPk, t.categoriaNome, t.receita);
   }
@@ -468,7 +471,7 @@ Future<void> _aplicar(MbResultado r) async {
   };
   // Upsert idempotente pelo pk "mb:<id>", direto no Drift (createOrUpdateTransaction marcaria a categoria como editada).
   // A subcategoria do mapa só entra na primeira importação: depois é escolha do usuário.
-  for (final t in r.transacoes) {
+  for (final t in transacoes) {
     final manter = editadas.contains(t.pk) && !t.pendente;
     final dados = TransactionsCompanion(
       transactionPk: Value(t.pk),
@@ -539,7 +542,7 @@ Future<void> _aplicar(MbResultado r) async {
       }
     }
   }
-  await mbGravarAplicado({for (final t in r.transacoes) t.pk: t.categoriaPk},
+  await mbGravarAplicado({for (final t in transacoes) t.pk: t.categoriaPk},
       removidos);
 }
 

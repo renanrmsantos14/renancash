@@ -1,7 +1,13 @@
 import 'dart:async';
 
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
+import 'package:budget/struct/mbSync/cliente.dart';
+import 'package:budget/struct/mbSync/espelho.dart';
+import 'package:budget/struct/mbSync/espelhoTriggers.dart';
+import 'package:budget/struct/mbSync/espelhoWs.dart';
 import 'package:budget/struct/meuBancoSync.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:drift/drift.dart' show TableUpdateQuery;
 
 /// Decide quando sincronizar sozinho. A escrita local continua imediata (feedback otimista); aqui só se agenda o envio.
@@ -77,6 +83,9 @@ class MbAgendador {
 
   void foiParaSegundoPlano() => _primeiroPlano = false;
 
+  /// Roda já (aviso em tempo real do servidor), sem esperar o debounce.
+  void pedirAgora() => _pedir();
+
   /// Para quem observa rodadas que este agendador não iniciou (botão, abertura do app).
   void fimDeRodada() => _ignorarAte = _agora().add(folga);
 
@@ -126,6 +135,53 @@ final MbAgendador mbAgendador = MbAgendador(
   emRodada: () => meuBancoSincronizando.value,
 );
 
+/// Espelho completo (atrás da flag `mbEspelho`): mesmo debounce, intervalo e backoff do sync atual.
+final MbAgendador mbEspelhoAgendador = MbAgendador(
+  rodar: mbEspelhoSincronizar,
+  pareado: () => mbEspelhoLigado() && meuBancoPareado.value,
+);
+
+MbEspelhoWs? _ws;
+
+// Android só mantém o WebSocket com o app em primeiro plano; na web ele fica aberto.
+Future<void> _abrirWs() async {
+  final cliente = await mbClienteConfigurado();
+  if (cliente == null) return;
+  (_ws ??= MbEspelhoWs(
+    abrir: () => mbCanalWsDoApp(cliente.base, cliente.token),
+    aparelho: () async => await mbLerEstado(mbChaveAparelhoServidor) ?? await mbEspelhoAparelhoId(database),
+    aoMudou: mbEspelhoAgendador.pedirAgora,
+    aoBanco: mbAgendador.pedirAgora,
+  ))
+      .iniciar();
+}
+
+void mbEspelhoVoltouAoApp() {
+  if (!mbEspelhoLigado()) return;
+  mbEspelhoAgendador.voltouAoApp();
+  _abrirWs();
+}
+
+void mbEspelhoSegundoPlano() {
+  mbEspelhoAgendador.foiParaSegundoPlano();
+  if (!kIsWeb) _ws?.parar();
+}
+
+/// Põe fila, agendador e WebSocket de acordo com a flag `mbEspelho`; chamada na abertura e quando a flag muda.
+Future<void> mbEspelhoReavaliar() async {
+  final ligado = mbEspelhoLigado();
+  // A fila só cresce com o espelho ativo; desligado, ela é esvaziada.
+  await mbEspelhoDefinirAtivo(database, ligado);
+  if (!ligado) {
+    mbEspelhoAgendador.parar();
+    _ws?.parar();
+    return;
+  }
+  mbEspelhoAgendador.iniciar();
+  mbEspelhoAgendador.voltouAoApp();
+  await _abrirWs();
+}
+
 bool _automaticoIniciado = false;
 
 /// Liga o sync automático (idempotente). Só age quando o app está pareado.
@@ -134,6 +190,7 @@ void mbIniciarSyncAutomatico() {
   _automaticoIniciado = true;
   meuBancoVerificarPareado();
   mbAgendador.iniciar();
+  unawaited(mbEspelhoReavaliar());
   meuBancoSincronizando.addListener(() {
     if (!meuBancoSincronizando.value) mbAgendador.fimDeRodada();
   });
@@ -148,4 +205,7 @@ void mbIniciarSyncAutomatico() {
         database.associatedTitles,
       ]))
       .listen((_) => mbAgendador.aoEditar());
+  // Qualquer tabela (inclusive `mb_saida`, avisada ao enfileirar configurações): o espelho cobre mais tabelas que o
+  // sync antigo. O que o próprio pull grava não reagenda (`aoNotificar` e `_rodando`).
+  database.tableUpdates(const TableUpdateQuery.any()).listen((_) => mbEspelhoAgendador.aoEditar());
 }

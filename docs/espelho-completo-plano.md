@@ -83,6 +83,12 @@ Testes: `mb_espelho_triggers_test.dart` (insert/update/delete enfileiram; no-op 
 Verificação: `flutter test`; `flutter build web` e conferir triggers no sql.js; APK debug contra `wrangler dev`.
 Riscos: sql.js regrava o IndexedDB a cada commit (debounce); isolate do workmanager (`mbPrepararIsolate` com o mesmo `beforeOpen`).
 
+Implementado (F2, atrás de `appStateSettings['mbEspelho']`, desligada por padrão e fora do sync):
+- Onde ficaram as marcações: vivem em `mb_estado` (chaves `ia_revisados`, `ia_padroes`, `arrumar_juntados`) e viajam na entidade `_config` com pk `estado:<chave>` (`mbEstadoEspelhado` em `espelho.dart`); as demais chaves de `mb_estado` são derivadas e não sincronizam. Gancho: `mbGravarEstado` em `armazem.dart`.
+- Lista única de tabelas e DDLs: `mbTabelasEspelhadas` em `espelhoTriggers.dart`. Triggers `mb_esp_<tabela>_{ins,upd,del}_<hash>` derivados do `PRAGMA table_info`; hash novo (coluna nova) recria sozinho em `beforeOpen`; `onUpgrade` derruba antes de migrar.
+- Divergências do plano: (1) `mb_espelho_ctl` ganhou a coluna `ativo`: com a flag desligada os triggers não enfileiram e a fila é esvaziada ao desligar, para não crescer sem limite; (2) `mbConfigsLocais` virou a função `mbConfigLocal` (lista exata + prefixos `widget`/`customNavBarShortcut` + sufixos `SetFiltersString`/`LastPage`), e `mbConfigsSincronizadas` continua existindo até a F5; (3) `espelho_pronto` fica para a F3; (4) o isolate do workmanager não abre o banco, então não precisa do `beforeOpen`; (5) [revisto na correção do code-review] o trigger de delete também grava `mb_apagados` e o de insert limpa; o mapeador `mb:` de `meuBancoSync.dart` já filtra por ele quando a flag está ligada; (6) `mb_meta_aplicacao` tem pk simples, não composta; (7) nomes de coluna entre aspas nos triggers e no upsert (`order` é reservada); (8) WebSocket com `web_socket_channel` (cabeçalho Bearer no IO, cookie na web).
+- O que a F3 precisa mudar no mapper `mb:` (não mexido na F2; as linhas `mb:` já entram na fila como qualquer outra): inserir só se a linha não existe local nem em `mb_apagados`; no update gravar só as colunas vindas do banco; registrar exclusão local em `mb_apagados`; remover o `dateTimeModified` fixo em 2000 e `_semEdicao` (a edição passa a valer pelo trigger); mover as revisões de `mb_registros` para `mb_revisoes`; remover o "repuxar".
+
 ### F3 — Semeio e troca pelo Android
 Arquivos: `espelho.dart` (`semearDoCelular`, `substituirPelaNuvem`); `budget/lib/pages/meuBancoPage.dart`; `mbSync/oficial.dart` (`mbLimparDadosLocais`); migração de revisões de `mb_registros` → `mb_revisoes`.
 Testes: semear em lotes e retomar após falha; web com `semeado:false` não escreve; substituir apaga e baixa tudo.
@@ -130,3 +136,9 @@ Limites atuais de D1/DO grátis; `connect-src 'self'` e `wss:`; JSON1/`json_patc
 - Ticket HMAC do WebSocket (plano B) não foi implementado: Android usa Bearer no cabeçalho e a web usa cookie com checagem de Origin.
 - Limite prático: o D1 aceita cerca de 1 MB por comando SQL; o Worker divide o POST em lotes de 1 MB.
 - `registrosDoEspelho` projeta categorias, regras, orçamentos, metas, assinaturas, revisões e ajustes (`mb:`). Limitações: o ajuste não leva a categoria aplicada, nome/nota/divida_id, nem `pluggy` das categorias; dívidas não são projetadas.
+
+### Correções do code-review (PR #95)
+- Contrato do Worker: o POST não devolve `cursor` (o cliente só adota cursor do GET); `rejeitados` `mais_antiga` traz `atual`, aplicado na hora; rejeição por tamanho ou tabela desconhecida fica em `mb_estado.espelho_rejeitados`; `aparelho` autenticado vem no POST/GET e é guardado em `mb_estado.espelho_aparelho_servidor` (o `mudou` próprio é filtrado por ele); a primeira página de cada pull recua 30 s só no `server_at`.
+- `date_time_modified` agora viaja no espelho (fora só da comparação do WHEN do trigger de update), para o outro aparelho não tratar a transação `mb:` como não editada.
+- Linha que falha no upsert vai para `mb_espelho_falhas` (JSON) e é reaplicada nos pulls seguintes; contador em `mb_estado.espelho_falhas`.
+- `mbEspelhoPrepararBanco` no `beforeOpen` tem try/catch; o hash do nome do trigger cobre o SQL completo; o push é agendado pela mudança em `mb_saida` (debounce 2 s); a config remota faz um único refresh no fim do pull; a flag `mbEspelho` liga e desliga `ativo`, agendador e WS em execução (`mbEspelhoReavaliar`); o backoff do WS só zera depois de 30 s aberto; `mbUriWsEspelho` mantém o prefixo do caminho.
