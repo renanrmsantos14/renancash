@@ -120,9 +120,25 @@ Verificação: uma semana de uso real antes de apagar; grep por `mbTornarOficial
 ## 4. Não confirmado no planejamento
 Limites atuais de D1/DO grátis; `connect-src 'self'` e `wss:`; JSON1/`json_patch` com null no node:sqlite; `aplicarLocal.dart`, `classificarDados.dart`, `arrumarDados.dart`, `backup.js`, `app.js`; índices de `transactions` no D1; isolate do workmanager com o mesmo `beforeOpen`.
 
+## 5. Mudanças de contrato na F1
+
+- Flag `ESPELHO="1"` (var do Worker; desligada por padrão, rotas novas respondem 404). O app pode checar a flag por 404 em `/api/espelho`.
+- `aparelho` não vem mais do corpo (o do corpo é ignorado): é o id do token Bearer, e a sessão por cookie é "web". Vale para o desempate do LWW, `semeando`, `semeado_por` e o aviso `mudou`. POST e GET `/api/espelho` (e o semear) devolvem `aparelho` (o id autenticado) para o cliente filtrar o próprio `mudou`.
+- `/semear` usa `lote` 0-based, `fim` e `substituir`. Respostas: 409 `ja_semeado` (já semeado, sem `substituir`), 409 `semeio_nao_iniciado` (lote > 0 sem o lote 0 antes), 403 com cookie. O espelho só vira `semeado` no lote com `fim: true`; antes disso o POST responde 409 `nao_semeado`.
+- POST `/api/espelho` não devolve mais `cursor` (um cursor global faria o cliente pular linhas de outros aparelhos); o `mudou` leva o cursor só como dica.
+- `rejeitados` com `motivo:"mais_antiga"` trazem `atual: {dados, updated_at, deleted_at, aparelho}` (a versão vencedora do servidor) para o cliente aplicar. Reenvio idêntico (mesmo `updated_at` e mesmo aparelho) conta como aceito, sem regravar.
+- Janela de sobreposição: o cliente pede a primeira página de cada pull com `desde` recuado 30 s (aplicar repetido é idempotente). No servidor, `server_at` é tirado logo antes do `db.batch` (depois de auth, parse, validação e leitura) para a linha não ficar atrás de um cursor já entregue.
+- Merge de colunas feito no Worker (leitura + gravação), preservando o texto JSON dos valores (sem arredondar reais); `{}` nunca vira NULL. Corrida entre dois aparelhos com schemas diferentes pode perder uma coluna; o LWW em si é garantido pelo SQL.
+- `semear` com `substituir` não apaga: no `fim`, as linhas vivas que o novo semeio não trouxe viram tombstone (`deleted_at` e `server_at` novos), e os outros aparelhos as recebem pelo cursor.
+- Limites de lote e de 16 KB por linha em bytes UTF-8.
+- O aviso `{"tipo":"mudou","cursor","aparelho"}` também sai no `fim` do semeio; `{"tipo":"banco"}` sai quando a sincronização do Pluggy dá certo.
+- `PUT /api/ajustes/:id` responde 410 com a flag ligada (o painel antigo perde a edição; F4).
+- Ticket HMAC do WebSocket (plano B) não foi implementado: Android usa Bearer no cabeçalho e a web usa cookie com checagem de Origin.
+- Limite prático: o D1 aceita cerca de 1 MB por comando SQL; o Worker divide o POST em lotes de 1 MB.
+- `registrosDoEspelho` projeta categorias, regras, orçamentos, metas, assinaturas, revisões e ajustes (`mb:`). Limitações: o ajuste não leva a categoria aplicada, nome/nota/divida_id, nem `pluggy` das categorias; dívidas não são projetadas.
+
 ### Correções do code-review (PR #95)
 - Contrato do Worker: o POST não devolve `cursor` (o cliente só adota cursor do GET); `rejeitados` `mais_antiga` traz `atual`, aplicado na hora; rejeição por tamanho ou tabela desconhecida fica em `mb_estado.espelho_rejeitados`; `aparelho` autenticado vem no POST/GET e é guardado em `mb_estado.espelho_aparelho_servidor` (o `mudou` próprio é filtrado por ele); a primeira página de cada pull recua 30 s só no `server_at`.
 - `date_time_modified` agora viaja no espelho (fora só da comparação do WHEN do trigger de update), para o outro aparelho não tratar a transação `mb:` como não editada.
 - Linha que falha no upsert vai para `mb_espelho_falhas` (JSON) e é reaplicada nos pulls seguintes; contador em `mb_estado.espelho_falhas`.
 - `mbEspelhoPrepararBanco` no `beforeOpen` tem try/catch; o hash do nome do trigger cobre o SQL completo; o push é agendado pela mudança em `mb_saida` (debounce 2 s); a config remota faz um único refresh no fim do pull; a flag `mbEspelho` liga e desliga `ativo`, agendador e WS em execução (`mbEspelhoReavaliar`); o backoff do WS só zera depois de 30 s aberto; `mbUriWsEspelho` mantém o prefixo do caminho.
-
