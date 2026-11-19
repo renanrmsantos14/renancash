@@ -139,8 +139,18 @@ final MbAgendador mbAgendador = MbAgendador(
 /// (é a rodada que descobre se o servidor tem espelho e semeia ou troca); só `mbEspelho = false` o impede.
 final MbAgendador mbEspelhoAgendador = MbAgendador(
   rodar: _rodarEspelho,
-  pareado: () => mbEspelhoPermitido() && meuBancoPareado.value,
+  pareado: () {
+    if (!mbEspelhoPermitido()) return _diag('desligado (mbEspelho = false)');
+    if (!meuBancoPareado.value) return _diag('aparelho não pareado');
+    return true;
+  },
 );
+
+/// Anota o motivo no diagnóstico; devolve false para servir de `return` nas checagens.
+bool _diag(String motivo) {
+  mbDiagnosticoEspelho.value = motivo;
+  return false;
+}
 
 /// O Android semeia (ou troca pela nuvem) só depois de o usuário confirmar o cartão da tela.
 bool _confirmado = false;
@@ -178,16 +188,46 @@ void mbEspelhoAdiar() {
 }
 
 String _mensagemErro(Object e) => e is MbErroHttp
-    ? 'O servidor respondeu: ${e.mensagem}.'
+    ? 'O servidor respondeu (HTTP ${e.status}): ${e.mensagem}.'
     : 'Sem conexão com o servidor. Confira a internet e tente de novo.';
 
+/// "Enviar dados para a nuvem" em Configurações: confirma o semeio (ou a troca) e roda a avaliação uma vez, esperando.
+/// Funciona mesmo que a avaliação automática tenha falhado ou o usuário tenha tocado em "Agora não". Devolve o
+/// resultado em texto para a tela (andamento fica em [mbProgressoEspelho]).
+Future<String> mbEspelhoEnviarAgora() async {
+  if (kIsWeb) return 'Só o celular envia os dados.';
+  if (!mbEspelhoPermitido()) return 'O espelho está desligado neste aparelho (mbEspelho = false).';
+  _confirmado = true;
+  _adiado = false;
+  _indisponivelDesde = null;
+  mbErroEspelho.value = '';
+  final ok = await _rodarEspelho();
+  final erro = mbErroEspelho.value;
+  if (erro.isNotEmpty) return erro;
+  if (!ok) return 'Não deu para concluir: ${mbDiagnosticoEspelho.value}.';
+  return switch (mbFaseEspelho.value) {
+    MbFaseEspelho.pronto => 'Pronto: este celular é a fonte oficial e os dados estão na nuvem.',
+    MbFaseEspelho.indisponivel => 'O servidor ainda não tem o espelho ligado (resposta 404).',
+    final f => 'Terminou na fase "${f.name}": ${mbDiagnosticoEspelho.value}.',
+  };
+}
+
 Future<bool> _rodarEspelho() async {
-  if (mbEspelhoPronto.value) return mbEspelhoSincronizar();
-  if (_adiado) return true;
+  if (mbEspelhoPronto.value) {
+    mbDiagnosticoEspelho.value = 'este aparelho já é espelho; sincronizando';
+    return mbEspelhoSincronizar();
+  }
+  if (_adiado) {
+    _diag('adiado pelo usuário ("Agora não")');
+    return true;
+  }
   final ate = _indisponivelDesde;
-  if (ate != null && DateTime.now().difference(ate) < _reverificar) return true;
+  if (ate != null && DateTime.now().difference(ate) < _reverificar) {
+    _diag('servidor sem espelho (404); pergunta de novo ao abrir o app');
+    return true;
+  }
   final cliente = mbClienteEspelhoParaTeste ?? await mbClienteConfigurado();
-  if (cliente == null) return false;
+  if (cliente == null) return _diag('sem pareamento (token ou endereço ausente)');
   try {
     final fase = await mbEspelhoDoApp(cliente).avaliar(
       podeSemear: !kIsWeb,
@@ -197,6 +237,13 @@ Future<bool> _rodarEspelho() async {
     );
     _indisponivelDesde = fase == MbFaseEspelho.indisponivel ? DateTime.now() : null;
     mbErroEspelho.value = '';
+    mbDiagnosticoEspelho.value = switch (fase) {
+      MbFaseEspelho.indisponivel => 'servidor sem espelho (404)',
+      MbFaseEspelho.aguardando => 'esperando o celular enviar os dados',
+      MbFaseEspelho.confirmar || MbFaseEspelho.confirmarTroca => 'esperando a confirmação do usuário',
+      MbFaseEspelho.pronto => 'ok',
+      _ => 'avaliado',
+    };
     if (fase == MbFaseEspelho.pronto) {
       await mbEspelhoReavaliar();
     } else if (fase != MbFaseEspelho.indisponivel) {
@@ -205,12 +252,12 @@ Future<bool> _rodarEspelho() async {
     }
     return true;
   } catch (e) {
-    // Só o semeio e a troca viram erro na tela; sem rede na simples consulta a fase não muda.
+    // Qualquer falha fica no diagnóstico; só o semeio e a troca viram erro cobrindo a tela.
+    final msg = _mensagemErro(e);
+    mbDiagnosticoEspelho.value = e is MbErroHttp ? 'HTTP ${e.status}: ${e.mensagem}' : 'sem rede ($e)';
+    mbErroEspelho.value = msg;
     final f = mbFaseEspelho.value;
-    if (f == MbFaseEspelho.semeando || f == MbFaseEspelho.trocando) {
-      mbErroEspelho.value = _mensagemErro(e);
-      mbFaseEspelho.value = MbFaseEspelho.erro;
-    }
+    if (f == MbFaseEspelho.semeando || f == MbFaseEspelho.trocando) mbFaseEspelho.value = MbFaseEspelho.erro;
     return false;
   } finally {
     mbProgressoEspelho.value = '';
@@ -264,6 +311,7 @@ Future<void> mbEspelhoReavaliar() async {
   final semeando = mbEspelhoPermitido() && await mbLerEstado(mbChaveSemeioEspelho) != null;
   await mbEspelhoDefinirAtivo(database, ligado || semeando);
   if (!mbEspelhoPermitido()) {
+    _diag('desligado (mbEspelho = false)');
     mbEspelhoAgendador.parar();
     _ws?.parar();
     return;
@@ -282,7 +330,9 @@ void mbIniciarSyncAutomatico() {
   _automaticoIniciado = true;
   meuBancoVerificarPareado();
   mbAgendador.iniciar();
-  unawaited(mbEspelhoReavaliar());
+  unawaited(mbEspelhoReavaliar().catchError((Object e) {
+    _diag('falha ao iniciar o agendador: $e');
+  }));
   // Pareou depois da abertura: o espelho descobre sozinho o que fazer (semear, trocar ou esperar).
   meuBancoPareado.addListener(() {
     if (meuBancoPareado.value) mbEspelhoAgendador.voltouAoApp();

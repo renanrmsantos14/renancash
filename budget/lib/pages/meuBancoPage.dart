@@ -10,6 +10,7 @@ import 'package:budget/struct/mbSync/oficial.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoDoApp, mbEspelhoLigado;
 import 'package:budget/struct/settings.dart';
+import 'package:budget/widgets/editorial/espelhoEnviar.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
@@ -254,6 +255,10 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
         Text(
             kIsWeb ? "Os dados do celular são os oficiais. Aqui, recomece pela nuvem depois de o celular enviar tudo." : "Os dados do celular são os oficiais. Primeiro envie tudo do celular; depois, na web, recomece pela nuvem.",
             style: EdTexto.corpo(context)),
+        const SizedBox(height: 12),
+        const EspelhoEnviarItem(),
+        const SizedBox(height: 8),
+        const EspelhoDiagnostico(),
         const SizedBox(height: 12),
         // Só o celular é a fonte oficial; a web apenas recomeça pela nuvem.
         if (!kIsWeb && !mbEspelhoLigado()) ...[

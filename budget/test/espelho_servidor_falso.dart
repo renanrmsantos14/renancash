@@ -132,6 +132,9 @@ class ClienteEspelhoFalso extends MbCliente {
   /// Worker sem ESPELHO: o GET responde 404.
   bool indisponivel = false;
 
+  /// Resposta de erro do servidor no GET (401, 403, 409...), antes de qualquer outra coisa.
+  MbErroHttp? erroNoGet;
+
   /// Id com que o servidor diz ter autenticado este aparelho (vai em `aparelho` do POST e do GET).
   String idServidor = 'servidor-a';
 
@@ -171,6 +174,7 @@ class ClienteEspelhoFalso extends MbCliente {
   Future<Map<String, dynamic>> espelhoPuxar(String? desde, {int limite = 2000}) async {
     if (semRede) throw http.ClientException('sem rede');
     cursoresPedidos.add(desde);
+    if (erroNoGet != null) throw erroNoGet!;
     if (indisponivel) throw MbErroHttp(404, 'não encontrado');
     await duranteGet?.call();
     return {...servidor.puxar(desde, limite), 'aparelho': idServidor};

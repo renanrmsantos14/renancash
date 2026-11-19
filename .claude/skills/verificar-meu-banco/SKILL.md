@@ -66,3 +66,6 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 - Com a flag `mbEspelho` desligada nada deve entrar em `mb_apagados` nem em `mb_saida`.
 - Semeio e troca (F3): `flutter test test/mb_espelho_semeio_test.dart test/espelho_fase_test.dart` cobre semeio em lotes e retomada, web sem escrever com `semeado:false`, troca que apaga e baixa tudo, aparência preservada e a tela de confirmação/espera. Prints: `ESPELHO_PRINTS=<pasta> flutter test test/espelho_fase_test.dart`. No aparelho: Worker com `ESPELHO=1`, confirmar "Este celular vira a fonte oficial", conferir contagem por tabela D1 x local (só em ambiente de teste; produção só com o OK do usuário).
 - Revisão do F3: `flutter test test/mb_espelho_fases_test.dart` cobre o 404 guardado, a fase `erro` com "Agora não"/"Tentar de novo" e a consulta sem rede; o servidor falso (`espelho_servidor_falso.dart`) valida o formato do cursor como o Worker.
+
+## Espelho: botão e diagnóstico (Configurações > Meu Banco)
+- "Enviar dados para a nuvem" (só Android, subtítulo "Este celular vira a fonte oficial") confirma e chama `mbEspelhoEnviarAgora()` (ignora "Agora não"); mostra andamento e o erro com HTTP e mensagem. A linha "Espelho: <fase> · <motivo>" vem de `mbDiagnosticoEspelho` (também na web). Testes: `test/espelho_enviar_test.dart`, `test/mb_espelho_fases_test.dart`.
