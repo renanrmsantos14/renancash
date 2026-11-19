@@ -2,6 +2,7 @@ import 'dart:ffi';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
@@ -131,5 +132,46 @@ void main() {
         .customSelect('SELECT COUNT(*) AS n FROM mb_apagados')
         .getSingle();
     expect(n.read<int>('n'), 0);
+  });
+
+  test('o sync do banco atualiza só o que vem do banco: pago e origem editados ficam', () async {
+    await bancoSync();
+    await database.customStatement(
+        "UPDATE transactions SET paid = 0, skip_paid = 1, method_added = 3 WHERE transaction_pk = 'mb:55'");
+    cliente.valor = -12.0;
+    await bancoSync();
+    final t = (await tx())!;
+    expect(t.amount, -12.0);
+    expect(t.paid, false);
+    expect(t.skipPaid, true);
+    expect(t.methodAdded?.index, 3);
+  });
+
+  test('revisões ficam em mb_revisoes (migradas de mb_registros) e saem de mb_registros', () async {
+    await mbCriarTabelas();
+    await database.customStatement(
+        "INSERT INTO mb_registros (tabela, id, dados, updated_at, deleted_at, pendente) VALUES "
+        "('revisoes', 'tx:9', '{\"tipo\":\"decisao\",\"resposta\":\"ok\"}', '2026-01-01T00:00:00.000Z', NULL, 0), "
+        "('revisoes', 'tx:8', NULL, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z', 0)");
+    await mbMigrarRevisoes(database);
+    var l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:9'], reason: 'só a viva migra');
+    expect(l['revisoes/tx:9']!.registro.dados!['resposta'], 'ok');
+    // Nova decisão com o espelho ligado vai para mb_revisoes, não para mb_registros.
+    await mbGravarEspelho([
+      Espelho(Registro('revisoes', 'tx:10', {'tipo': 'decisao', 'resposta': 'nao'}, '2026-02-01T00:00:00.000Z', null),
+          null, true, null)
+    ]);
+    final cru = await database.customSelect("SELECT pk FROM mb_revisoes ORDER BY pk").get();
+    expect([for (final x in cru) x.read<String>('pk')], ['tx:10', 'tx:9']);
+    final antigas = await database.customSelect("SELECT id FROM mb_registros WHERE id = 'tx:10'").get();
+    expect(antigas, isEmpty);
+    // Desfazer a decisão (tombstone) remove a linha.
+    await mbGravarEspelho([
+      Espelho(Registro('revisoes', 'tx:10', null, '2026-02-02T00:00:00.000Z', '2026-02-02T00:00:00.000Z'),
+          null, true, null)
+    ]);
+    l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:9']);
   });
 }

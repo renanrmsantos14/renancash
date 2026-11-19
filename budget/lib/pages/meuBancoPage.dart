@@ -8,6 +8,7 @@ import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/oficial.dart';
 import 'package:budget/struct/meuBancoSync.dart';
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoDoApp, mbEspelhoLigado;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -225,6 +226,16 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
 
   Future<void> _recomecarPelaNuvem() async {
     await _copiaUnicaRodar((cliente) async {
+      // Espelho ligado: a nuvem é o espelho, e a troca preserva a aparência deste aparelho.
+      if (mbEspelhoLigado()) {
+        if (!await _confirmar(
+            "Recomeçar pela nuvem?",
+            "Os dados deste aparelho serão apagados e baixados de novo do espelho; o que só existe aqui será perdido. A aparência fica como está.",
+            "Apagar e baixar",
+            Icons.cloud_download_rounded)) return "";
+        await mbEmRodada(mbEspelhoDoApp(cliente).substituirPelaNuvem);
+        return "Pronto: este aparelho agora tem os dados da nuvem.";
+      }
       final c = await mbContarNuvem(cliente);
       if (c.lancamentos == 0 || c.categorias == 0) {
         return 'O servidor ainda não tem lançamentos e categorias do RenanCash. Use "Enviar tudo como oficial" no celular antes.';
@@ -245,7 +256,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
             style: EdTexto.corpo(context)),
         const SizedBox(height: 12),
         // Só o celular é a fonte oficial; a web apenas recomeça pela nuvem.
-        if (!kIsWeb) ...[
+        if (!kIsWeb && !mbEspelhoLigado()) ...[
           OutlinedButton(
             onPressed: _copiaUnica ? null : _tornarOficial,
             child: _rotuloBotao(_copiaUnica ? "Aguarde…" : "Enviar tudo como oficial"),

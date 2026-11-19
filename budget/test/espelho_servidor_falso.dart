@@ -63,6 +63,30 @@ class ServidorEspelho {
     return {'aceitos': aceitos, 'rejeitados': rejeitados};
   }
 
+  bool _semeando = false;
+  final List<int> lotesDeSemeio = [];
+
+  /// Contrato de POST /api/espelho/semear: lotes de 0 em diante; o primeiro limpa o espelho e o `fim` marca `semeado`.
+  Map<String, dynamic> semear(int lote, List<Map<String, dynamic>> lote_, bool fim) {
+    if (semeado) throw MbErroHttp(409, 'ja_semeado');
+    if (lote == 0) {
+      linhas.clear();
+      _semeando = true;
+    } else if (!_semeando) {
+      throw MbErroHttp(409, 'semeio_nao_iniciado');
+    }
+    lotesDeSemeio.add(lote);
+    for (final l in lote_) {
+      linhas['${l['tabela']}|${l['pk']}'] = LinhaServidor(
+          (l['dados'] as Map?)?.cast<String, dynamic>(), l['updated_at'] as String, null, _serverAt(), 'semeio');
+    }
+    if (fim) {
+      semeado = true;
+      _semeando = false;
+    }
+    return {'aceitos': lote_.length, 'rejeitados': [], 'lote': lote, 'fim': fim, 'cursor': puxar(null, 1 << 30)['cursor']};
+  }
+
   Map<String, dynamic> puxar(String? desde, int limite) {
     final todas = [
       for (final e in linhas.entries) (e.value.serverAt, e.key, e.value)
@@ -111,6 +135,21 @@ class ClienteEspelhoFalso extends MbCliente {
     final r = servidor.enviar(aparelho, linhas);
     await duranteEnvio?.call();
     return {...r, 'aparelho': idServidor};
+  }
+
+  /// Lança no lote indicado (antes de o servidor receber), para testar a retomada.
+  int? cairNoLote;
+  final List<int> lotesEnviados = [];
+
+  @override
+  Future<Map<String, dynamic>> espelhoSemear(int lote, List<Map<String, dynamic>> linhas,
+      {required bool fim}) async {
+    if (semRede || cairNoLote == lote) {
+      cairNoLote = null;
+      throw http.ClientException('sem rede');
+    }
+    lotesEnviados.add(lote);
+    return {...servidor.semear(lote, linhas, fim), 'aparelho': idServidor};
   }
 
   @override

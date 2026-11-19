@@ -6,7 +6,7 @@ import 'package:budget/pages/addWalletPage.dart'
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/aplicarLocal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoLigado;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
@@ -488,13 +488,22 @@ Future<void> _aplicar(MbResultado r) async {
       skipPaid: const Value(false),
       methodAdded: const Value(MethodAdded.csv),
     );
+    // Com o espelho ligado a linha é compartilhada: a atualização grava só o que vem do banco (e a categoria
+    // decidida nas revisões, até a revisão passar a editar a linha direto). Pago, "pular pagamento" e origem
+    // pertencem a quem editou, e reescrevê-los a cada pull brigaria com os outros aparelhos.
+    final atualizacao = mbEspelhoLigado()
+        ? dados.copyWith(
+            paid: const Value.absent(),
+            skipPaid: const Value.absent(),
+            methodAdded: const Value.absent())
+        : dados;
     await database.into(database.transactions).insert(
         dados.copyWith(
             name: Value(t.nome),
             note: Value(t.nota),
             dateTimeModified: Value(_semEdicao),
             subCategoryFk: Value(t.subcategoriaPk)),
-        onConflict: DoUpdate((_) => dados));
+        onConflict: DoUpdate((_) => atualizacao));
   }
   final removidos = <String>[];
   // Importada antes de virar "não é gasto" (transferência): sai do app, sem ajuste para o servidor.

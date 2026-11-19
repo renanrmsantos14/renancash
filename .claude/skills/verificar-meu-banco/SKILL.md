@@ -64,3 +64,5 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 ## Espelho: checagens adicionais (correção do code-review)
 - `flutter test test/mb_espelho_*_test.dart` cobre: `mb_apagados` pelos triggers e pelo mapeador (`mb_espelho_mapeador_test.dart`), `date_time_modified` espelhado, `mb_espelho_falhas`, contrato C1-C4 (`atual`, `espelho_aparelho_servidor`, recuo de 30 s) e a URI do WebSocket.
 - Com a flag `mbEspelho` desligada nada deve entrar em `mb_apagados` nem em `mb_saida`.
+- Semeio e troca (F3): `flutter test test/mb_espelho_semeio_test.dart test/espelho_fase_test.dart` cobre semeio em lotes e retomada, web sem escrever com `semeado:false`, troca que apaga e baixa tudo, aparência preservada e a tela de confirmação/espera. Prints: `ESPELHO_PRINTS=<pasta> flutter test test/espelho_fase_test.dart`. No aparelho: Worker com `ESPELHO=1`, confirmar "Este celular vira a fonte oficial", conferir contagem por tabela D1 x local (só em ambiente de teste; produção só com o OK do usuário).
+

@@ -1,5 +1,6 @@
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/versaoCanto.dart';
+import 'package:budget/widgets/editorial/espelhoFase.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/mbSync/agendador.dart';
 import 'package:budget/struct/mbSync/segundoPlano.dart';
@@ -196,7 +197,7 @@ class App extends StatelessWidget {
           mainWidget = FadeIn(
               duration: Duration(milliseconds: 1000), child: mainWidget);
         }
-        return VersaoCanto(child: mainWidget);
+        return VersaoCanto(child: EspelhoFase(child: mainWidget));
       },
       // ),
     );

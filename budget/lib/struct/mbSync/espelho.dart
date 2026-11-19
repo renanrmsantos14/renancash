@@ -3,11 +3,12 @@ import 'dart:convert';
 
 import 'package:budget/main.dart' show appStateKey;
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado, mbMigrarRevisoes;
 import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigLocal;
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
+import 'package:budget/struct/mbSync/registro.dart' show isoMs;
 import 'package:budget/struct/settings.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
@@ -21,7 +22,28 @@ const int _lotePull = 2000;
 const Set<String> mbEstadoEspelhado = {'ia_revisados', 'ia_padroes', 'arrumar_juntados'};
 const String _prefixoEstado = 'estado:';
 
-bool mbEspelhoLigado() => appStateSettings['mbEspelho'] == true;
+/// Fase do espelho neste aparelho; a tela de confirmação e a de espera reagem a ela.
+enum MbFaseEspelho { desconhecida, indisponivel, aguardando, confirmar, semeando, trocando, pronto }
+
+final ValueNotifier<MbFaseEspelho> mbFaseEspelho = ValueNotifier(MbFaseEspelho.desconhecida);
+
+/// Texto de andamento do semeio ou da troca ("Enviando 1500 de 4000").
+final ValueNotifier<String> mbProgressoEspelho = ValueNotifier('');
+
+/// Este aparelho já semeou ou trocou os dados pela nuvem (`mb_estado.espelho_pronto`). Carregado por
+/// `mbEspelhoReavaliar`; sem isso o espelho fica desligado, mesmo com o Worker respondendo.
+final ValueNotifier<bool> mbEspelhoPronto = ValueNotifier(false);
+
+const String mbChaveProntoEspelho = 'espelho_pronto';
+const String _chaveSemeio = 'espelho_semeio';
+const int _loteSemeio = 500;
+
+/// `mbEspelho` nas configurações é só o desligamento de emergência (`false`); `true` força (desenvolvimento e
+/// testes). Ausente, o espelho liga sozinho quando `GET /api/espelho` responde e o aparelho está pronto.
+bool mbEspelhoLigado() {
+  final f = appStateSettings['mbEspelho'];
+  return f != false && (f == true || mbEspelhoPronto.value);
+}
 
 /// Enfileira uma entrada de `_config` (configuração ou marcação). Só entra se o espelho está ativo e o pull não está
 /// aplicando; é a mesma regra dos triggers.
@@ -372,25 +394,185 @@ class MbEspelho {
       configs.add((pk, valor));
     }
   }
+
+  // --- semeio (Android) e troca pela nuvem (os outros aparelhos) ---
+
+  Future<bool> estaPronto() async => await mbLerEstado(mbChaveProntoEspelho, db) == '1';
+
+  /// Decide o que este aparelho faz com o espelho e executa. Pronto: nada. Servidor sem espelho (404): nada.
+  /// Servidor semeado: troca os dados locais pelos da nuvem. Não semeado: a web espera; o Android pede
+  /// confirmação (`confirmado`) e então semeia, retomando um semeio interrompido sem perguntar de novo.
+  /// `protegido` envolve as operações longas (o sync antigo não pode rodar no meio delas).
+  Future<MbFaseEspelho> avaliar({
+    required bool podeSemear,
+    bool confirmado = false,
+    void Function(MbFaseEspelho fase)? aoFase,
+    Future<void> Function(Future<void> Function() acao)? protegido,
+  }) async {
+    MbFaseEspelho fase(MbFaseEspelho f) {
+      aoFase?.call(f);
+      return f;
+    }
+
+    final proteger = protegido ?? (a) => a();
+    if (await estaPronto()) return fase(MbFaseEspelho.pronto);
+    final Map<String, dynamic> r;
+    try {
+      r = await cliente.espelhoPuxar(null, limite: 1);
+    } on MbErroHttp catch (e) {
+      if (e.status == 404) return fase(MbFaseEspelho.indisponivel);
+      rethrow;
+    }
+    await _guardarAparelhoServidor(r);
+    Future<MbFaseEspelho> trocar() async {
+      fase(MbFaseEspelho.trocando);
+      await proteger(substituirPelaNuvem);
+      return fase(MbFaseEspelho.pronto);
+    }
+
+    if (r['semeado'] == true) return trocar();
+    if (!podeSemear) return fase(MbFaseEspelho.aguardando);
+    final emAndamento = await mbLerEstado(_chaveSemeio, db) != null;
+    if (!confirmado && !emAndamento) return fase(MbFaseEspelho.confirmar);
+    fase(MbFaseEspelho.semeando);
+    try {
+      await proteger(semearDoCelular);
+    } on MbErroHttp catch (e) {
+      // Outro aparelho semeou antes: este vira réplica.
+      if (e.status == 409 && e.mensagem.contains('ja_semeado')) return trocar();
+      rethrow;
+    }
+    return fase(MbFaseEspelho.pronto);
+  }
+
+  /// Envia tudo o que o espelho cobre, em lotes numerados de 0 (o servidor guarda o andamento). O progresso fica em
+  /// `mb_estado.espelho_semeio` e uma falha retoma do último lote confirmado. Só no fim, depois do `fim` aceito,
+  /// o cursor, a fila ativa e `espelho_pronto` são gravados: até lá nada do que o usuário fizer entra na fila.
+  Future<void> semearDoCelular({int tamanho = _loteSemeio}) async {
+    await mbMigrarRevisoes(db);
+    final salvo = await mbLerEstado(_chaveSemeio, db);
+    final retomada = salvo == null ? null : (json.decode(salvo) as Map).cast<String, dynamic>();
+    // `em` fixo no semeio inteiro: uma retomada reenvia as mesmas linhas com a mesma data.
+    final em = (retomada?['em'] as String?) ?? isoMs(DateTime.now());
+    var lote = (retomada?['lote'] as num?)?.toInt() ?? 0;
+    final ultima = retomada?['ultima'] as String?;
+    final todas = await _linhasSemeio(em);
+    final pendentes = [for (final l in todas) if (ultima == null || l.chave.compareTo(ultima) > 0) l];
+    var enviadas = todas.length - pendentes.length;
+    Map<String, dynamic> resposta;
+    var i = 0;
+    do {
+      final fatia = pendentes.skip(i).take(tamanho).toList();
+      i += fatia.length;
+      final fim = i >= pendentes.length;
+      mbProgressoEspelho.value = 'Enviando ${enviadas + fatia.length} de ${todas.length}';
+      resposta = await cliente.espelhoSemear(lote, [for (final l in fatia) l.linha], fim: fim);
+      enviadas += fatia.length;
+      lote++;
+      if (!fim) {
+        await _gravarEstado(_chaveSemeio, json.encode({'lote': lote, 'ultima': fatia.last.chave, 'em': em}));
+      }
+    } while (i < pendentes.length);
+    await _guardarAparelhoServidor(resposta);
+    await _marcarPronto(resposta['cursor'] as String?);
+  }
+
+  /// Linhas do semeio em ordem estável (tabela na ordem do espelho, depois pk): a chave serve para retomar.
+  Future<List<({String chave, Map<String, dynamic> linha})>> _linhasSemeio(String em) async {
+    final saida = <({String chave, Map<String, dynamic> linha})>[];
+    void somar(int ordem, String tabela, String pk, Map<String, dynamic> dados) => saida.add((
+          chave: '${ordem.toString().padLeft(3, '0')}|$pk',
+          linha: {'tabela': tabela, 'pk': pk, 'dados': dados, 'updated_at': em, 'deleted_at': null},
+        ));
+    for (var i = 0; i < mbTabelasEspelhadas.length; i++) {
+      final t = await _estrutura(mbTabelasEspelhadas[i]);
+      if (t == null) continue;
+      final linhas = await db.customSelect('SELECT x.*, ${t.pkSql('x')} AS _pk FROM ${t.nome} x').get();
+      for (final l in linhas) {
+        somar(i, t.nome, l.read<String>('_pk'), {
+          for (final c in t.enviadas) c: l.data[c],
+        });
+      }
+    }
+    final ordemConfig = mbTabelasEspelhadas.length;
+    for (final e in configuracoes().entries) {
+      if (e.value == null || mbConfigLocal(e.key)) continue;
+      final txt = json.encode(e.value);
+      if (txt.length > 4000) continue; // limite do valor no Worker
+      somar(ordemConfig, mbEntidadeConfig, e.key, {'v': e.value});
+    }
+    for (final c in mbEstadoEspelhado) {
+      final v = await mbLerEstado(c, db);
+      if (v != null) somar(ordemConfig, mbEntidadeConfig, '$_prefixoEstado$c', {'v': v});
+    }
+    saida.sort((a, b) => a.chave.compareTo(b.chave));
+    return saida;
+  }
+
+  Future<void> _marcarPronto(String? cursor) => db.transaction(() async {
+        if (cursor != null) await _gravarEstado('espelho_cursor', cursor);
+        await _gravarEstado(mbChaveProntoEspelho, '1');
+        await db.customStatement('DELETE FROM mb_estado WHERE chave = ?', [_chaveSemeio]);
+        await db.customStatement('DELETE FROM mb_saida');
+        await db.customStatement('UPDATE mb_espelho_ctl SET ativo = 1 WHERE id = 0');
+      });
+
+  /// Apaga os dados espelhados deste aparelho, baixa tudo da nuvem e marca o aparelho como pronto. A aparência
+  /// (`mbConfigLocal`) e o pareamento ficam. Se o download cair no meio, o aparelho continua não pronto e a
+  /// próxima rodada refaz a troca do zero.
+  Future<void> substituirPelaNuvem() async {
+    mbProgressoEspelho.value = 'Baixando os dados da nuvem';
+    await db.transaction(() async {
+      await db.customStatement('UPDATE mb_espelho_ctl SET aplicando = 1 WHERE id = 0');
+      for (final t in mbTabelasEspelhadas) {
+        // A carteira e a categoria '0' existem em todo aparelho.
+        final resto = switch (t) {
+          'wallets' => " WHERE wallet_pk <> '0'",
+          'categories' => " WHERE category_pk <> '0'",
+          _ => '',
+        };
+        await db.customStatement('DELETE FROM $t$resto');
+      }
+      for (final t in const ['mb_apagados', 'mb_saida', 'mb_espelho_falhas']) {
+        await db.customStatement('DELETE FROM $t');
+      }
+      // Sync antigo (F5 remove): o que ele guardou descreve dados que acabaram de sair.
+      final antigas = await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('mb_registros', 'mb_aplicado')").get();
+      for (final a in antigas) {
+        await db.customStatement('DELETE FROM ${a.read<String>('name')}');
+      }
+      await db.customStatement(
+          "DELETE FROM mb_estado WHERE chave NOT LIKE 'espelho\\_%' ESCAPE '\\' OR chave IN ('espelho_cursor', 'espelho_semeio', 'espelho_falhas', 'espelho_rejeitados', ?)",
+          [mbChaveProntoEspelho]);
+      await db.customStatement('UPDATE mb_espelho_ctl SET aplicando = 0 WHERE id = 0');
+    });
+    db.notifyUpdates({for (final t in mbTabelasEspelhadas) TableUpdate(t)});
+    await aplicarConfig('selectedWalletPk', '0');
+    await puxar();
+    await _marcarPronto(null);
+  }
 }
 
 /// Chave de `mb_estado` com o id que o servidor deu a este aparelho (usado para ignorar o próprio `mudou`).
 const String mbChaveAparelhoServidor = 'espelho_aparelho_servidor';
 
-/// Liga o espelho a este aparelho: banco global, configurações e cliente HTTP do pareamento.
+/// O espelho deste aparelho: banco global, configurações e cliente HTTP do pareamento.
+MbEspelho mbEspelhoDoApp(MbCliente cliente) => MbEspelho(
+      db: database,
+      cliente: cliente,
+      configuracoes: () => appStateSettings,
+      aplicarConfig: (chave, valor) {
+        // Igual ao que já está: não refaz nada por isso.
+        if (json.encode(appStateSettings[chave]) == json.encode(valor)) return Future.value();
+        return updateSettings(chave, valor, updateGlobalState: false, sincronizar: false);
+      },
+      aoAplicarConfigs: () => appStateKey.currentState?.refreshAppState(),
+      aoNotificar: mbAgendador.fimDeRodada,
+    );
+
+/// Envia e puxa (aparelho pronto).
 Future<bool> mbEspelhoSincronizar() async {
   final cliente = await mbClienteConfigurado();
-  if (cliente == null) return false;
-  return MbEspelho(
-    db: database,
-    cliente: cliente,
-    configuracoes: () => appStateSettings,
-    aplicarConfig: (chave, valor) {
-      // Igual ao que já está: não refaz nada por isso.
-      if (json.encode(appStateSettings[chave]) == json.encode(valor)) return Future.value();
-      return updateSettings(chave, valor, updateGlobalState: false, sincronizar: false);
-    },
-    aoAplicarConfigs: () => appStateKey.currentState?.refreshAppState(),
-    aoNotificar: mbAgendador.fimDeRodada,
-  ).sincronizar();
+  return cliente != null && await mbEspelhoDoApp(cliente).sincronizar();
 }
