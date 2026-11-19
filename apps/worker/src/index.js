@@ -433,30 +433,31 @@ async function identificar(request, env, url, ts) {
 }
 
 // Espelho completo (atrás da flag ESPELHO). O semeio só vale com token de aparelho; o WebSocket do navegador (cookie) exige Origin igual.
+// A identidade do aparelho (desempate do LWW, `mudou`) é o id do token; a sessão do painel é "web".
 async function rotaEspelho(request, env, url, caminho, ctx) {
-  const ts = agora();
-  const quem = await identificar(request, env, url, ts);
+  const quem = await identificar(request, env, url, agora());
   if (quem.erro) return quem.erro;
+  const aparelho = quem.aparelho ?? "web";
   const rota = `${request.method} ${caminho}`;
   const avisarClientes = (aviso) => ctx.waitUntil(avisar(env, aviso).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
   if (rota === "GET /api/espelho/ws") {
-    if (request.headers.get("upgrade") !== "websocket") return json({ erro: "Upgrade de WebSocket necessário" }, 426);
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return json({ erro: "Upgrade de WebSocket necessário" }, 426);
     if (!quem.aparelho && request.headers.get("origin") !== url.origin) return json({ erro: "Origem não permitida" }, 403);
     return hubDo(env).fetch(request);
   }
   if (rota === "GET /api/espelho") {
-    const r = await puxarEspelho(env.DB, url.searchParams.get("desde"), url.searchParams.get("limite"));
+    const r = await puxarEspelho(env.DB, url.searchParams.get("desde"), url.searchParams.get("limite"), aparelho);
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/espelho") {
-    const r = await enviarEspelho(env.DB, await request.json().catch(() => null), ts);
-    if (r.aceitos) avisarClientes({ tipo: "mudou", cursor: r.corpo.cursor, aparelho: r.aparelho });
+    const r = await enviarEspelho(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    if (r.gravadas) avisarClientes({ tipo: "mudou", cursor: r.cursor, aparelho }); // o cursor é só uma dica: o cliente puxa pelo próprio
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/espelho/semear") {
     if (!quem.aparelho) return json({ erro: "O semeio só vale com o token do aparelho" }, 403);
-    const r = await semear(env.DB, await request.json().catch(() => null), ts);
-    if (r.fim) avisarClientes({ tipo: "mudou", cursor: r.corpo.cursor, aparelho: r.aparelho });
+    const r = await semear(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    if (r.fim) avisarClientes({ tipo: "mudou", cursor: r.corpo.cursor, aparelho });
     return json(r.corpo, r.status);
   }
   return json({ erro: "Método não permitido" }, 405);

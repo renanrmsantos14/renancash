@@ -117,9 +117,14 @@ Limites atuais de D1/DO grátis; `connect-src 'self'` e `wss:`; JSON1/`json_patc
 ## 5. Mudanças de contrato na F1
 
 - Flag `ESPELHO="1"` (var do Worker; desligada por padrão, rotas novas respondem 404). O app pode checar a flag por 404 em `/api/espelho`.
-- `aparelho` é obrigatório no POST `/api/espelho` e no `/semear` (desempate do LWW e origem do aviso).
+- `aparelho` não vem mais do corpo (o do corpo é ignorado): é o id do token Bearer, e a sessão por cookie é "web". Vale para o desempate do LWW, `semeando`, `semeado_por` e o aviso `mudou`. POST e GET `/api/espelho` (e o semear) devolvem `aparelho` (o id autenticado) para o cliente filtrar o próprio `mudou`.
 - `/semear` usa `lote` 0-based, `fim` e `substituir`. Respostas: 409 `ja_semeado` (já semeado, sem `substituir`), 409 `semeio_nao_iniciado` (lote > 0 sem o lote 0 antes), 403 com cookie. O espelho só vira `semeado` no lote com `fim: true`; antes disso o POST responde 409 `nao_semeado`.
-- `rejeitados` do POST inclui `{motivo:"mais_antiga"}` quando o LWW recusa a linha.
+- POST `/api/espelho` não devolve mais `cursor` (um cursor global faria o cliente pular linhas de outros aparelhos); o `mudou` leva o cursor só como dica.
+- `rejeitados` com `motivo:"mais_antiga"` trazem `atual: {dados, updated_at, deleted_at, aparelho}` (a versão vencedora do servidor) para o cliente aplicar. Reenvio idêntico (mesmo `updated_at` e mesmo aparelho) conta como aceito, sem regravar.
+- Janela de sobreposição: o cliente pede a primeira página de cada pull com `desde` recuado 30 s (aplicar repetido é idempotente). No servidor, `server_at` é tirado logo antes do `db.batch` (depois de auth, parse, validação e leitura) para a linha não ficar atrás de um cursor já entregue.
+- Merge de colunas feito no Worker (leitura + gravação), preservando o texto JSON dos valores (sem arredondar reais); `{}` nunca vira NULL. Corrida entre dois aparelhos com schemas diferentes pode perder uma coluna; o LWW em si é garantido pelo SQL.
+- `semear` com `substituir` não apaga: no `fim`, as linhas vivas que o novo semeio não trouxe viram tombstone (`deleted_at` e `server_at` novos), e os outros aparelhos as recebem pelo cursor.
+- Limites de lote e de 16 KB por linha em bytes UTF-8.
 - O aviso `{"tipo":"mudou","cursor","aparelho"}` também sai no `fim` do semeio; `{"tipo":"banco"}` sai quando a sincronização do Pluggy dá certo.
 - `PUT /api/ajustes/:id` responde 410 com a flag ligada (o painel antigo perde a edição; F4).
 - Ticket HMAC do WebSocket (plano B) não foi implementado: Android usa Bearer no cabeçalho e a web usa cookie com checagem de Origin.

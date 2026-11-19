@@ -11,30 +11,35 @@ const CURSOR = /^([^|]+)\|([^|]+)\|([\s\S]+)$/; // server_at|tabela|pk (a pk pod
 const LINHAS = "SELECT json_extract(value, '$.tabela'), json_extract(value, '$.pk'), json_extract(value, '$.dados'), json_extract(value, '$.updated_at'), json_extract(value, '$.deleted_at'), ?2, ?3 FROM json_each(?1)";
 const COLUNAS = "INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) ";
 
-// Colunas novas de um aparelho com schema mais novo sobrevivem a um envio de schema antigo: o envio vencedor
-// sobrepõe as chaves que traz (inclusive null explícito) e mantém as demais. json_patch não serve: apaga a chave com null.
-const MESCLAR =
-  "json((SELECT '{' || group_concat(json_quote(key) || ':' || CASE type WHEN 'object' THEN value WHEN 'array' THEN value WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' WHEN 'null' THEN 'null' ELSE json_quote(value) END) || '}' " +
-  "FROM (SELECT key, type, value FROM json_each(espelho.dados) WHERE key NOT IN (SELECT key FROM json_each(excluded.dados)) UNION ALL SELECT key, type, value FROM json_each(excluded.dados))))";
-
-// LWW no SQL; `WHERE true` desfaz a ambiguidade do parser entre ON CONFLICT e a junção do SELECT (como em sync.js).
-// RETURNING só devolve o que foi gravado: o resto perdeu para uma versão mais nova (ou igual).
+// Mesmo `dados` que o cliente mandou, como texto: json_extract de um objeto reserializa e arredonda números reais.
+// LWW no SQL (guarda contra corrida entre a leitura e a gravação); `WHERE true` desfaz a ambiguidade do parser entre
+// ON CONFLICT e a junção do SELECT (como em sync.js). RETURNING só devolve o que foi gravado.
 const SQL_ENVIAR =
   `INSERT ${COLUNAS}${LINHAS} WHERE true ` +
-  `ON CONFLICT(tabela, pk) DO UPDATE SET dados = CASE WHEN excluded.dados IS NULL THEN NULL WHEN espelho.dados IS NULL THEN excluded.dados ELSE ${MESCLAR} END, ` +
-  "updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, server_at = excluded.server_at, aparelho = excluded.aparelho " +
+  "ON CONFLICT(tabela, pk) DO UPDATE SET dados = excluded.dados, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, server_at = excluded.server_at, aparelho = excluded.aparelho " +
   "WHERE excluded.updated_at > espelho.updated_at OR (excluded.updated_at = espelho.updated_at AND excluded.aparelho > COALESCE(espelho.aparelho, '')) " +
   "RETURNING tabela, pk";
 const SQL_SEMEAR = `INSERT OR REPLACE ${COLUNAS}${LINHAS}`;
+const SQL_ATUAIS =
+  "SELECT e.tabela, e.pk, e.dados, e.updated_at, e.deleted_at, e.aparelho FROM espelho e JOIN json_each(?1) j ON e.tabela = json_extract(j.value, '$.tabela') AND e.pk = json_extract(j.value, '$.pk')";
 
 const chaveLinha = (l) => JSON.stringify([l.tabela, l.pk]);
+const agoraBd = () => new Date().toISOString();
+const comDadosTexto = (l) => ({ ...l, dados: l.dados == null ? null : JSON.stringify(l.dados) });
+const baixa = (v) => ({ dados: v.dados == null ? null : JSON.parse(v.dados), updated_at: v.updated_at, deleted_at: v.deleted_at, aparelho: v.aparelho ?? "" });
+const maisNova = (l, atual, aparelho) => l.updated_at > atual.updated_at || (l.updated_at === atual.updated_at && aparelho > atual.aparelho);
+
+async function atuais(db, linhas) {
+  const { results } = await db.prepare(SQL_ATUAIS).bind(JSON.stringify(linhas.map((l) => ({ tabela: l.tabela, pk: l.pk })))).all();
+  return new Map(results.map((r) => [chaveLinha(r), baixa(r)]));
+}
 
 function emLotes(linhas) {
   const lotes = [];
   let atual = [];
   let bytes = 0;
   for (const l of linhas) {
-    const b = JSON.stringify(l).length;
+    const b = new TextEncoder().encode(JSON.stringify(l)).length; // o limite do D1 é em bytes, não em caracteres
     if (atual.length && bytes + b > MAX_BYTES_COMANDO) { lotes.push(atual); atual = []; bytes = 0; }
     atual.push(l);
     bytes += b;
@@ -55,29 +60,52 @@ const semeado = async (db) => (await metaDo(db)).semeado === "1";
 const cursorAtual = (db) =>
   db.prepare("SELECT server_at || '|' || tabela || '|' || pk AS c FROM espelho ORDER BY server_at DESC, tabela DESC, pk DESC LIMIT 1").first("c");
 
-const textoAparelho = (v) => (typeof v === "string" && v.length > 0 && v.length <= 80 ? v : null);
-
-export async function enviarEspelho(db, corpo, agoraIso) {
-  const aparelho = textoAparelho(corpo?.aparelho);
-  if (!aparelho) return { status: 400, corpo: { erro: "aparelho inválido" } };
-  const lote = validarLinhasEspelho(corpo.linhas, agoraIso);
+// `aparelho` vem da autenticação (id do token; sessão do painel = "web"), nunca do corpo: o desempate do LWW não pode ser forjado.
+// Gravação: o merge de colunas é feito aqui (leitura + gravação, não atômicas) para preservar o texto JSON de cada valor; a corrida
+// só pode perder uma coluna que dois aparelhos com schemas diferentes mandem ao mesmo tempo (o LWW em si é garantido pelo SQL).
+export async function enviarEspelho(db, corpo, agoraIso, aparelho) {
+  const lote = validarLinhasEspelho(corpo?.linhas, agoraIso);
   if ("erro" in lote) return { status: 400, corpo: { erro: lote.erro } };
   if (!(await semeado(db))) return { status: 409, corpo: { erro: "nao_semeado" } };
+  const mapa = lote.linhas.length ? await atuais(db, lote.linhas) : new Map();
+  const escrever = new Map();
+  const perdeu = [];
+  let repetidas = 0; // reenvio idêntico (mesmo updated_at e aparelho) é aceito sem regravar: o cliente pode repetir sem medo
+  for (const l of lote.linhas) {
+    const k = chaveLinha(l);
+    const atual = mapa.get(k);
+    if (atual && atual.updated_at === l.updated_at && atual.aparelho === aparelho) { repetidas++; continue; }
+    if (atual && !maisNova(l, atual, aparelho)) { perdeu.push(l); continue; }
+    const dados = l.dados && atual?.dados ? { ...atual.dados, ...l.dados } : l.dados;
+    const nova = { dados, updated_at: l.updated_at, deleted_at: l.deleted_at, aparelho };
+    mapa.set(k, nova);
+    escrever.set(k, { tabela: l.tabela, pk: l.pk, ...nova });
+  }
   const gravadas = new Set();
-  if (lote.linhas.length) {
-    const resultados = await db.batch(emLotes(lote.linhas).map((l) => db.prepare(SQL_ENVIAR).bind(JSON.stringify(l), agoraIso, aparelho)));
+  if (escrever.size) {
+    // server_at tirado aqui, colado no batch: ordena a página do cursor; um relógio tirado antes da leitura deixaria a linha atrás de um cursor já entregue.
+    const serverAt = agoraBd();
+    const resultados = await db.batch(emLotes([...escrever.values()].map(comDadosTexto)).map((l) => db.prepare(SQL_ENVIAR).bind(JSON.stringify(l), serverAt, aparelho)));
     for (const r of resultados) for (const x of r.results) gravadas.add(chaveLinha(x));
   }
-  const perdeu = lote.linhas.filter((l) => !gravadas.has(chaveLinha(l))).map((l) => ({ tabela: l.tabela, pk: l.pk, motivo: "mais_antiga" }));
-  return { status: 200, corpo: { aceitos: gravadas.size, rejeitados: [...lote.rejeitados, ...perdeu], cursor: await cursorAtual(db) }, aceitos: gravadas.size, aparelho };
+  for (const [k, l] of escrever) if (!gravadas.has(k)) perdeu.push(l); // perdeu a corrida para uma gravação mais nova
+  const vencedoras = perdeu.length ? await atuais(db, perdeu) : new Map();
+  const rejeitados = [...lote.rejeitados, ...perdeu.map((l) => ({ tabela: l.tabela, pk: l.pk, motivo: "mais_antiga", atual: vencedoras.get(chaveLinha(l)) }))];
+  return {
+    status: 200,
+    corpo: { aceitos: repetidas + gravadas.size, rejeitados, aparelho },
+    gravadas: gravadas.size,
+    aparelho,
+    cursor: gravadas.size ? await cursorAtual(db) : null,
+  };
 }
 
-export async function puxarEspelho(db, desde, limite) {
+export async function puxarEspelho(db, desde, limite, aparelho) {
   const n = limite == null ? MAX_PAGINA : Number(limite);
   if (!Number.isInteger(n) || n < 1 || n > MAX_PAGINA) return { status: 400, corpo: { erro: `limite deve ser de 1 a ${MAX_PAGINA}` } };
   const c = desde ? CURSOR.exec(desde) : null;
   if (desde && !c) return { status: 400, corpo: { erro: "desde inválido (use server_at|tabela|pk)" } };
-  if (!(await semeado(db))) return { status: 200, corpo: { linhas: [], cursor: desde || null, mais: false, semeado: false } };
+  if (!(await semeado(db))) return { status: 200, corpo: { linhas: [], cursor: desde || null, mais: false, semeado: false, aparelho } };
   const { results } = await db
     .prepare("SELECT tabela, pk, dados, updated_at, deleted_at, server_at, aparelho FROM espelho WHERE ?1 IS NULL OR (server_at, tabela, pk) > (?1, ?2, ?3) ORDER BY server_at, tabela, pk LIMIT ?4")
     .bind(c?.[1] ?? null, c?.[2] ?? null, c?.[3] ?? null, n + 1)
@@ -85,27 +113,35 @@ export async function puxarEspelho(db, desde, limite) {
   const mais = results.length > n;
   const linhas = results.slice(0, n).map((r) => ({ ...r, dados: r.dados == null ? null : JSON.parse(r.dados) }));
   const ultima = linhas.at(-1);
-  return { status: 200, corpo: { linhas, cursor: ultima ? `${ultima.server_at}|${ultima.tabela}|${ultima.pk}` : desde || null, mais, semeado: true } };
+  return { status: 200, corpo: { linhas, cursor: ultima ? `${ultima.server_at}|${ultima.tabela}|${ultima.pk}` : desde || null, mais, semeado: true, aparelho } };
 }
 
-// Semeio em lotes, só pelo celular. O lote 0 limpa o espelho e abre o semeio ("semeando"); o `fim` grava "semeado".
-// Falhou no meio: recomeçar pelo lote 0 (o semeado só existe depois do fim).
-export async function semear(db, corpo, agoraIso) {
-  const aparelho = textoAparelho(corpo?.aparelho);
-  if (!aparelho || !Number.isInteger(corpo.lote) || corpo.lote < 0) return { status: 400, corpo: { erro: "aparelho e lote inválidos" } };
+// Semeio em lotes, só pelo celular (aparelho = id do token). O lote 0 abre o semeio ("semeando") sem apagar nada; o `fim` grava
+// "semeado" e marca como apagadas (tombstone, com server_at novo) as linhas vivas que o novo semeio não trouxe, para os outros
+// aparelhos saberem. Falhou no meio: recomeçar pelo lote 0 (o semeado só existe depois do fim).
+export async function semear(db, corpo, agoraIso, aparelho) {
+  if (!Number.isInteger(corpo?.lote) || corpo.lote < 0) return { status: 400, corpo: { erro: "lote inválido" } };
   const lote = validarLinhasEspelho(corpo.linhas, agoraIso);
   if ("erro" in lote) return { status: 400, corpo: { erro: lote.erro } };
   const meta = await metaDo(db);
   const primeiro = corpo.lote === 0;
   if (primeiro && meta.semeado === "1" && corpo.substituir !== true) return { status: 409, corpo: { erro: "ja_semeado" } };
   if (!primeiro && meta.semeando !== aparelho) return { status: 409, corpo: { erro: "semeio_nao_iniciado" } };
+  const serverAt = agoraBd(); // colado no batch (ver enviarEspelho)
   const comandos = [];
-  if (primeiro) comandos.push(db.prepare("DELETE FROM espelho"), db.prepare("DELETE FROM espelho_meta WHERE chave = 'semeado'"), defMeta(db, "semeando", aparelho));
-  for (const l of emLotes(lote.linhas)) comandos.push(db.prepare(SQL_SEMEAR).bind(JSON.stringify(l), agoraIso, aparelho));
+  if (primeiro) comandos.push(db.prepare("DELETE FROM espelho_meta WHERE chave = 'semeado'"), defMeta(db, "semeando", aparelho), defMeta(db, "semeando_desde", serverAt));
+  for (const l of emLotes(lote.linhas.map(comDadosTexto))) comandos.push(db.prepare(SQL_SEMEAR).bind(JSON.stringify(l), serverAt, aparelho));
   const fim = corpo.fim === true;
-  if (fim) comandos.push(defMeta(db, "semeado", "1"), defMeta(db, "semeado_por", aparelho), defMeta(db, "semeado_em", agoraIso), db.prepare("DELETE FROM espelho_meta WHERE chave = 'semeando'"));
+  if (fim) {
+    const desde = primeiro ? serverAt : meta.semeando_desde;
+    comandos.push(
+      db.prepare("UPDATE espelho SET dados = NULL, deleted_at = ?1, updated_at = ?1, server_at = ?1, aparelho = ?2 WHERE deleted_at IS NULL AND server_at < ?3").bind(serverAt, aparelho, desde),
+      defMeta(db, "semeado", "1"), defMeta(db, "semeado_por", aparelho), defMeta(db, "semeado_em", serverAt),
+      db.prepare("DELETE FROM espelho_meta WHERE chave IN ('semeando', 'semeando_desde')"),
+    );
+  }
   await db.batch(comandos);
-  return { status: 200, corpo: { aceitos: lote.linhas.length, rejeitados: lote.rejeitados, lote: corpo.lote, fim, cursor: await cursorAtual(db) }, fim, aparelho };
+  return { status: 200, corpo: { aceitos: lote.linhas.length, rejeitados: lote.rejeitados, lote: corpo.lote, fim, cursor: await cursorAtual(db), aparelho }, fim, aparelho };
 }
 
 // ---------- Leitura pelo servidor (ciclo, alertas, revisões: usada na F4) ----------
@@ -164,6 +200,10 @@ export async function registrosDoEspelho(db) {
   for (const { pk, d } of daTabela("mb_revisoes")) novo("revisoes", pk, d);
 
   const escolhas = Map.groupBy(daTabela("mb_orcamento_tx"), (r) => r.d.tx_pk);
+  const idsMb = results.filter((x) => x.tabela === "transactions" && x.pk.startsWith("mb:")).map((x) => x.pk.slice(3));
+  // O espelho não guarda date_time_modified: texto "editado" = o que difere da descrição que veio do banco.
+  const descricoes = new Map((await db.prepare("SELECT t.id, t.description FROM transactions t JOIN json_each(?1) j ON t.id = j.value").bind(JSON.stringify(idsMb)).all()).results.map((x) => [x.id, x.description]));
+  const texto = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null);
   for (const r of results.filter((x) => x.tabela === "transactions" && x.pk.startsWith("mb:"))) {
     const id = r.pk.slice(3);
     if (r.deleted_at != null) { novo("ajustes", id, { gasto: 0 }); continue; }
@@ -172,6 +212,9 @@ export async function registrosDoEspelho(db) {
     const ajuste = {
       ...(categorias.has(d.category_fk) ? { categoria_id: ID(d.category_fk), category: categorias.get(d.category_fk) } : {}),
       ...(escolhas.has(r.pk) ? { orcamento_ids: ids } : {}),
+      ...(d.objective_loan_fk ? { divida_id: ID(d.objective_loan_fk) } : {}),
+      ...(texto(d.name) && texto(d.name) !== descricoes.get(id)?.trim() ? { nome: texto(d.name) } : {}),
+      ...(texto(d.note) && d.note !== "Pendente" ? { nota: texto(d.note) } : {}),
     };
     if (Object.keys(ajuste).length) novo("ajustes", id, ajuste);
   }

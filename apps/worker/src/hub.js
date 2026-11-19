@@ -8,7 +8,7 @@ export class EspelhoHub {
   }
 
   async fetch(request) {
-    if (request.headers.get("upgrade") === "websocket") {
+    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const [cliente, servidor] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(servidor);
       return new Response(null, { status: 101, webSocket: cliente });

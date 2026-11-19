@@ -22,7 +22,7 @@ function hubFalso() {
     get: () => ({
       fetch: async (req, init) => {
         const r = typeof req === "string" ? new Request(req, init) : req;
-        if (r.headers.get("upgrade") === "websocket") { pedidos.push(r); return new Response("ws"); }
+        if (r.headers.get("upgrade")?.toLowerCase() === "websocket") { pedidos.push(r); return new Response("ws"); }
         avisos.push(JSON.parse(await r.text()));
         return new Response(null, { status: 204 });
       },
@@ -35,12 +35,18 @@ const lin = (pk, dados, updated_at = T1, over = {}) => ({ tabela: "transactions"
 async function preparar({ semeado = true, env = {} } = {}) {
   const hub = hubFalso();
   const amb = criarAmbiente({ ESPELHO: "1", ESPELHO_HUB: hub, ...env });
-  const token = await criarAparelho(amb.env);
-  const auth = { authorization: "Bearer " + token, "content-type": "application/json" };
+  // O aparelho do LWW é o id do token (não vem do corpo): cada `quem` é um aparelho.
+  const novo = async (nome = "Celular") => {
+    const t = await criarAparelho(amb.env, nome);
+    const id = await amb.env.DB.prepare("SELECT id FROM app_tokens ORDER BY rowid DESC LIMIT 1").first("id");
+    return { id, token: t, auth: { authorization: "Bearer " + t, "content-type": "application/json" } };
+  };
+  const { id: aparelhoId, token, auth } = await novo();
+  const principal = { id: aparelhoId, auth };
   const post = (caminho, corpo, headers = auth) => amb.pedir(caminho, { method: "POST", headers, body: JSON.stringify(corpo) });
-  const semear = (corpo, headers) => post("/api/espelho/semear", { aparelho: "celular", lote: 0, fim: true, linhas: [], ...corpo }, headers);
-  const enviar = async (linhas, aparelho = "A") => {
-    const r = await post("/api/espelho", { aparelho, linhas });
+  const semear = (corpo, headers) => post("/api/espelho/semear", { lote: 0, fim: true, linhas: [], ...corpo }, headers);
+  const enviar = async (linhas, quem = principal) => {
+    const r = await post("/api/espelho", { linhas }, quem.auth);
     return { status: r.status, ...(await r.json()) };
   };
   const puxar = async (query = "") => (await amb.pedir("/api/espelho" + query, { headers: auth })).json();
@@ -50,7 +56,7 @@ async function preparar({ semeado = true, env = {} } = {}) {
   };
   if (semeado) assert.equal((await semear({})).status, 200);
   await amb.esperar();
-  return { ...amb, hub, token, auth, post, semear, enviar, puxar, dados };
+  return { ...amb, hub, token, auth, aparelhoId, novo, post, semear, enviar, puxar, dados };
 }
 
 test("flag desligada: as rotas novas respondem 404, com ou sem credenciais", async () => {
@@ -73,17 +79,16 @@ test("flag desligada: o painel antigo continua editando ajustes; ligada, a ediç
 });
 
 test("antes do semeio: POST responde 409 e GET devolve semeado:false sem linhas", async () => {
-  const { enviar, puxar } = await preparar({ semeado: false });
+  const { enviar, puxar, aparelhoId } = await preparar({ semeado: false });
   const r = await enviar([lin("1", { a: 1 })]);
   assert.equal(r.status, 409);
   assert.equal(r.erro, "nao_semeado");
-  assert.deepEqual(await puxar(), { linhas: [], cursor: null, mais: false, semeado: false });
+  assert.deepEqual(await puxar(), { linhas: [], cursor: null, mais: false, semeado: false, aparelho: aparelhoId });
 });
 
-test("sem credenciais: 401; sem aparelho ou lista de linhas: 400", async () => {
+test("sem credenciais: 401; sem lista de linhas: 400", async () => {
   const { pedir, post } = await preparar();
   assert.equal((await pedir("/api/espelho")).status, 401);
-  assert.equal((await post("/api/espelho", { linhas: [] })).status, 400);
   assert.equal((await post("/api/espelho", { aparelho: "A" })).status, 400);
 });
 
@@ -96,12 +101,12 @@ test("/semear com cookie da web é 403 (só o celular semeia)", async () => {
 });
 
 test("semeio em lotes: o semeado só existe no fim; segundo semeio dá 409 sem substituir", async () => {
-  const { semear, enviar, puxar, auth, post, hub } = await preparar({ semeado: false });
+  const { semear, enviar, puxar, auth, post, hub, novo } = await preparar({ semeado: false });
   let r = await semear({ lote: 0, fim: false, linhas: [lin("1", { a: 1 }), lin("2", { a: 2 })] });
   assert.equal(r.status, 200);
   assert.equal((await puxar()).semeado, false, "meio do semeio");
   assert.equal((await enviar([lin("9", { a: 9 })])).status, 409);
-  assert.equal((await semear({ aparelho: "outro", lote: 1, linhas: [] })).status, 409, "outro aparelho não continua o semeio");
+  assert.equal((await semear({ lote: 1, linhas: [] }, (await novo("Outro")).auth)).status, 409, "outro aparelho não continua o semeio");
   r = await semear({ lote: 1, fim: true, linhas: [lin("3", { a: 3 })] });
   assert.deepEqual([r.status, (await r.json()).aceitos], [200, 1]);
   const lido = await puxar();
@@ -114,33 +119,54 @@ test("semeio em lotes: o semeado só existe no fim; segundo semeio dá 409 sem s
   assert.equal((await r.json()).erro, "ja_semeado");
   assert.equal((await puxar()).linhas.length, 3, "nada mudou");
 
+  const antes = (await puxar()).cursor;
   r = await semear({ lote: 0, substituir: true, linhas: [lin("7", { z: 1 })] });
   assert.equal(r.status, 200);
-  assert.deepEqual((await puxar()).linhas.map((l) => l.pk), ["7"]);
-  assert.equal((await post("/api/espelho/semear", { aparelho: "x", lote: -1, linhas: [] }, auth)).status, 400);
+  const depois = (await puxar()).linhas;
+  assert.deepEqual(depois.filter((l) => l.dados).map((l) => l.pk), ["7"]);
+  assert.deepEqual(depois.filter((l) => !l.dados).map((l) => [l.pk, l.deleted_at != null]).sort(), [["1", true], ["2", true], ["3", true]], "as linhas que não vieram no novo semeio viram tombstone");
+  assert.ok((await puxar(`?desde=${encodeURIComponent(antes)}`)).linhas.length >= 4, "os outros aparelhos recebem os tombstones pelo cursor");
+  assert.equal((await post("/api/espelho/semear", { lote: -1, linhas: [] }, auth)).status, 400);
 });
 
-test("LWW: o mais novo vence, o mais velho é rejeitado, igual não muda nada", async () => {
-  const { enviar, dados } = await preparar();
+test("LWW: o mais novo vence, o mais velho é rejeitado com a versão vencedora, reenvio idêntico é aceito", async () => {
+  const { enviar, dados, aparelhoId } = await preparar();
   await enviar([lin("1", { v: "meio" }, T1)]);
   let r = await enviar([lin("1", { v: "velho" }, T0)]);
-  assert.deepEqual([r.aceitos, r.rejeitados], [0, [{ tabela: "transactions", pk: "1", motivo: "mais_antiga" }]]);
+  assert.equal(r.aceitos, 0);
+  assert.deepEqual(r.rejeitados, [{ tabela: "transactions", pk: "1", motivo: "mais_antiga", atual: { dados: { v: "meio" }, updated_at: T1, deleted_at: null, aparelho: aparelhoId } }]);
   assert.equal((await dados("1")).dados.v, "meio");
-  r = await enviar([lin("1", { v: "igual" }, T1)]);
-  assert.equal(r.aceitos, 0, "mesmo updated_at e mesmo aparelho");
+  r = await enviar([lin("1", { v: "meio" }, T1)]);
+  assert.deepEqual([r.aceitos, r.rejeitados], [1, []], "mesmo updated_at e mesmo aparelho: idempotente");
   r = await enviar([lin("1", { v: "novo" }, T2)]);
   assert.equal(r.aceitos, 1);
   assert.equal((await dados("1")).dados.v, "novo");
+  assert.equal(r.aparelho, aparelhoId);
+  assert.equal("cursor" in r, false, "o POST não devolve cursor global");
+});
+
+test("o aparelho vem da autenticação: o do corpo é ignorado e a sessão do painel é \"web\"", async () => {
+  const { enviar, dados, post, pedir, hub, esperar, aparelhoId, auth } = await preparar();
+  hub.avisos.length = 0;
+  await post("/api/espelho", { aparelho: "forjado", linhas: [lin("1", { v: 1 })] }, auth);
+  assert.equal((await dados("1")).aparelho, aparelhoId);
+  await esperar();
+  assert.equal(hub.avisos[0].aparelho, aparelhoId);
+  const cookie = await entrarComSenha(pedir);
+  const r = await pedir("/api/espelho", { method: "POST", headers: { cookie, origin: ORIGEM, "content-type": "application/json" }, body: JSON.stringify({ linhas: [lin("2", { v: 1 })] }) });
+  assert.equal((await r.json()).aparelho, "web");
+  assert.equal((await dados("2")).aparelho, "web");
 });
 
 test("empate de updated_at: o maior aparelho vence, nos dois sentidos", async () => {
-  const { enviar, dados } = await preparar();
-  await enviar([lin("1", { v: "A" })], "aparelho-b");
-  assert.equal((await enviar([lin("1", { v: "menor" })], "aparelho-a")).aceitos, 0);
+  const { enviar, dados, novo } = await preparar();
+  const [menor, meio, maior] = (await Promise.all([novo("a"), novo("b"), novo("c")])).sort((x, y) => (x.id < y.id ? -1 : 1));
+  await enviar([lin("1", { v: "A" })], meio);
+  assert.equal((await enviar([lin("1", { v: "menor" })], menor)).aceitos, 0);
   assert.equal((await dados("1")).dados.v, "A");
-  assert.equal((await enviar([lin("1", { v: "maior" })], "aparelho-c")).aceitos, 1);
+  assert.equal((await enviar([lin("1", { v: "maior" })], maior)).aceitos, 1);
   const x = await dados("1");
-  assert.deepEqual([x.dados.v, x.aparelho], ["maior", "aparelho-c"]);
+  assert.deepEqual([x.dados.v, x.aparelho], ["maior", maior.id]);
 });
 
 test("updated_at do futuro vira agora (não vence para sempre)", async () => {
@@ -171,6 +197,19 @@ test("merge: aparelho com schema antigo não apaga coluna nova; null explícito,
   await enviar([lin("1", { a: 1, nova: "x", nulo: 5, lista: [1, true, null], obj: { k: "v" }, ligado: true, preco: 1.5 }, T0)]);
   await enviar([lin("1", { a: 2, nulo: null, extra: false }, T1)]);
   assert.deepEqual((await dados("1")).dados, { a: 2, nova: "x", nulo: null, lista: [1, true, null], obj: { k: "v" }, ligado: true, preco: 1.5, extra: false });
+});
+
+test("merge: objeto vazio nunca vira NULL e o texto dos números reais não é arredondado", async () => {
+  const { enviar, dados, puxar, pedir, auth } = await preparar();
+  await enviar([lin("vazio", {}, T0)]);
+  await enviar([lin("vazio", {}, T1)]);
+  assert.deepEqual((await dados("vazio")).dados, {});
+  await enviar([lin("real", { preco: 0.30000000000000004, outro: 1 }, T0)]);
+  await enviar([lin("real", { outro: 2 }, T1)]);
+  const bruto = await (await pedir("/api/espelho?limite=2000", { headers: auth })).text();
+  assert.match(bruto, /"preco":0\.30000000000000004/);
+  assert.equal((await dados("real")).dados.outro, 2);
+  assert.equal((await puxar()).linhas.find((l) => l.pk === "vazio").dados != null, true);
 });
 
 test("paginação estável com vários server_at iguais e `mais`", async () => {
@@ -213,19 +252,22 @@ test("casos de borda: lote vazio, 501 linhas, linha de 16 KB, tabela fora da all
     lin("ok", { v: 1 }),
     lin("1", {}, T1, { tabela: "app_settings" }),
     lin("sem-dados", null),
+    lin("acentos", { texto: "é".repeat(9000) }), // 9000 caracteres, 18 KB em UTF-8
+    lin("emoji", { texto: "😀".repeat(4200) }), // 4200 caracteres (8400 em UTF-16), 16,8 KB em UTF-8
   ]);
   assert.equal(r.aceitos, 1);
-  assert.deepEqual(r.rejeitados.map((x) => [x.pk, x.motivo]), [["grande", "linha acima de 16 KB"], ["1", "tabela fora da allowlist"], ["sem-dados", "dados ausentes sem deleted_at"]]);
+  assert.deepEqual(r.rejeitados.map((x) => [x.pk, x.motivo]), [["grande", "linha acima de 16 KB"], ["1", "tabela fora da allowlist"], ["sem-dados", "dados ausentes sem deleted_at"], ["acentos", "linha acima de 16 KB"], ["emoji", "linha acima de 16 KB"]]);
   assert.equal((await puxar("?limite=2000")).linhas.some((l) => l.pk === "grande"), false);
 });
 
 test("POST avisa o hub com cursor e aparelho; sem nada gravado, não avisa", async () => {
   const { enviar, hub, esperar } = await preparar();
   hub.avisos.length = 0;
-  const r = await enviar([lin("1", { v: 1 })], "celular-1");
+  const r = await enviar([lin("1", { v: 1 })]);
   await esperar();
-  assert.deepEqual(hub.avisos, [{ tipo: "mudou", cursor: r.cursor, aparelho: "celular-1" }]);
-  assert.match(r.cursor, /^\d{4}-.*Z\|transactions\|1$/);
+  assert.equal(hub.avisos.length, 1);
+  assert.deepEqual([hub.avisos[0].tipo, hub.avisos[0].aparelho], ["mudou", r.aparelho]);
+  assert.match(hub.avisos[0].cursor, /^\d{4}-.*Z\|transactions\|1$/, "o cursor do aviso é só uma dica");
   await enviar([lin("1", { v: 0 }, T0)]);
   await esperar();
   assert.equal(hub.avisos.length, 1, "linha rejeitada por LWW não avisa");
@@ -241,7 +283,8 @@ test("WebSocket: cookie exige Origin igual (sem Origin ou de fora → 403); toke
   assert.equal((await pedir("/api/espelho/ws", { headers: { cookie, origin: ORIGEM } })).status, 426);
   assert.equal((await pedir("/api/espelho/ws", { headers: { cookie, origin: ORIGEM, ...ws } })).status, 200);
   assert.equal((await pedir("/api/espelho/ws", { headers: { authorization: "Bearer " + token, ...ws } })).status, 200, "Android: Bearer, sem Origin");
-  assert.equal(hub.pedidos.length, 2);
+  assert.equal((await pedir("/api/espelho/ws", { headers: { authorization: "Bearer " + token, upgrade: "WebSocket" } })).status, 200, "Upgrade sem diferenciar maiúsculas");
+  assert.equal(hub.pedidos.length, 3);
   assert.equal((await pedir("/api/espelho/ws", { headers: ws })).status, 401);
 });
 
@@ -315,7 +358,9 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("mb_meta_aplicacao", "ap1", { aplicacao_pk: "ap1", meta_pk: "m1" }),
     esp("mb_meta_aplicacao", "ap2", { aplicacao_pk: "ap2", meta_pk: "m1" }),
     esp("mb_orcamento_tx", '["mb:g1","o1"]', { tx_pk: "mb:g1", orcamento_pk: "o1" }),
-    esp("transactions", "mb:g1", { transaction_pk: "mb:g1", category_fk: "c1" }),
+    esp("transactions", "mb:g1", { transaction_pk: "mb:g1", category_fk: "c1", name: "IFOOD", note: "Pendente" }),
+    esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp" }),
+    db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, updated_at) VALUES ('g1', 'inter', '2026-11-10', 'IFOOD', -120, ''), ('g2', 'inter', '2026-11-11', 'RESTAURANTE X', -80, '')"),
     esp("transactions", "mb:gone", null, { deleted_at: T1 }),
     esp("transactions", "s1", { type: 1, name: "Netflix", amount: -40, date_created: dia("2026-11-05T15:00:00Z"), category_fk: "c1" }),
     esp("transactions", "comum", { type: null, name: "Almoço", category_fk: "c1" }),
@@ -337,6 +382,7 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     ["revisoes", "tx:p1", revDecisao],
     ["revisoes", "dest:JOAO", revDestino],
     ["ajustes", "g1", { categoria_id: "cashew:c1", category: "Mercado", orcamento_ids: ["cashew:o1"] }],
+    ["ajustes", "g2", { divida_id: "cashew:emp", nome: "Almoço com cliente", nota: "reembolsável" }],
     ["ajustes", "gone", { gasto: 0 }],
   ].map(([tabela, id, dados]) => ({ tabela, id, dados, deleted_at: null }));
 
