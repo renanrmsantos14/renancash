@@ -2,6 +2,7 @@ import 'dart:ffi';
 
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
@@ -18,11 +19,12 @@ import 'espelho_servidor_falso.dart';
 class ClienteBanco extends MbCliente {
   ClienteBanco() : super(base: 'https://teste');
   double valor = -10.0;
+  List<Map<String, dynamic>> registros = [];
 
   @override
   Future<Map<String, dynamic>> puxar(String? desde) async => {
         'agora': DateTime.now().toUtc().toIso8601String(),
-        'registros': <Map<String, dynamic>>[],
+        'registros': registros,
         'contas': [
           {'id': 'a1', 'type': 'BANK', 'name': 'Conta'}
         ],
@@ -131,5 +133,84 @@ void main() {
         .customSelect('SELECT COUNT(*) AS n FROM mb_apagados')
         .getSingle();
     expect(n.read<int>('n'), 0);
+  });
+
+  test('o sync do banco atualiza só o que vem do banco: pago e origem editados ficam', () async {
+    await bancoSync();
+    await database.customStatement(
+        "UPDATE transactions SET paid = 0, skip_paid = 1, method_added = 3 WHERE transaction_pk = 'mb:55'");
+    cliente.valor = -12.0;
+    await bancoSync();
+    final t = (await tx())!;
+    expect(t.amount, -12.0);
+    expect(t.paid, false);
+    expect(t.skipPaid, true);
+    expect(t.methodAdded?.index, 3);
+  });
+
+  test('revisões ficam em mb_revisoes (migradas de mb_registros) e saem de mb_registros', () async {
+    await mbCriarTabelas();
+    await database.customStatement(
+        "INSERT INTO mb_registros (tabela, id, dados, updated_at, deleted_at, pendente) VALUES "
+        "('revisoes', 'tx:9', '{\"tipo\":\"decisao\",\"resposta\":\"ok\"}', '2026-01-01T00:00:00.000Z', NULL, 0), "
+        "('revisoes', 'tx:8', NULL, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z', 0)");
+    await mbMigrarRevisoes(database);
+    var l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:9'], reason: 'só a viva migra');
+    expect(l['revisoes/tx:9']!.registro.dados!['resposta'], 'ok');
+    // Nova decisão com o espelho ligado vai para mb_revisoes, não para mb_registros.
+    await mbGravarEspelho([
+      Espelho(Registro('revisoes', 'tx:10', {'tipo': 'decisao', 'resposta': 'nao'}, '2026-02-01T00:00:00.000Z', null),
+          null, true, null)
+    ]);
+    final cru = await database.customSelect("SELECT pk FROM mb_revisoes ORDER BY pk").get();
+    expect([for (final x in cru) x.read<String>('pk')], ['tx:10', 'tx:9']);
+    final antigas = await database.customSelect("SELECT id FROM mb_registros WHERE id = 'tx:10'").get();
+    expect(antigas, isEmpty);
+    // Desfazer a decisão (tombstone) remove a linha.
+    await mbGravarEspelho([
+      Espelho(Registro('revisoes', 'tx:10', null, '2026-02-02T00:00:00.000Z', '2026-02-02T00:00:00.000Z'),
+          null, true, null)
+    ]);
+    l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:9']);
+  });
+
+  test('espelho pronto: o sync antigo carrega o estado antes de rodar e não grava revisoes do Worker em mb_revisoes', () async {
+    await mbCriarTabelas();
+    appStateSettings = {}; // sem forçar: só o `espelho_pronto` guardado liga o espelho
+    await database.customStatement("INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES ('espelho_pronto', '1')");
+    mbEspelhoPronto.value = false; // boot: o notifier ainda não foi carregado
+    mbEspelhoDescarregarEstado();
+    cliente.registros = [
+      {
+        'tabela': 'revisoes',
+        'id': 'tx:55',
+        'dados': {'tipo': 'decisao', 'resposta': 'ok'},
+        'updated_at': '2025-01-01T00:00:00.000Z',
+        'deleted_at': null,
+      }
+    ];
+    await bancoSync();
+    expect(mbEspelhoLigado(), true, reason: 'o sync carregou o estado');
+    final n = await database.customSelect('SELECT COUNT(*) n FROM mb_revisoes').getSingle();
+    expect(n.read<int>('n'), 0, reason: 'revisoes velhas do Worker não entram na tabela espelhada');
+  });
+
+  test('com o espelho ligado, ler só as revisões não consulta mb_registros', () async {
+    await database.customStatement('DROP TABLE IF EXISTS mb_registros');
+    await database.customStatement("INSERT INTO mb_revisoes (pk, dados) VALUES ('tx:1', '{\"resposta\":\"ok\"}')");
+    final l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:1']);
+  });
+
+  test('mbEspelhoPermitido: só mbEspelho=false desliga', () {
+    appStateSettings = {};
+    expect(mbEspelhoPermitido(), true);
+    appStateSettings = {'mbEspelho': false};
+    expect(mbEspelhoPermitido(), false);
+    expect(mbEspelhoLigado(), false);
+    appStateSettings = {'mbEspelho': true};
+    expect(mbEspelhoLigado(), true);
   });
 }

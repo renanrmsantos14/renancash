@@ -7,7 +7,7 @@ import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
 import 'package:budget/struct/mbSync/espelhoWs.dart';
 import 'package:budget/struct/meuBancoSync.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:drift/drift.dart' show TableUpdateQuery;
 
 /// Decide quando sincronizar sozinho. A escrita local continua imediata (feedback otimista); aqui só se agenda o envio.
@@ -135,11 +135,87 @@ final MbAgendador mbAgendador = MbAgendador(
   emRodada: () => meuBancoSincronizando.value,
 );
 
-/// Espelho completo (atrás da flag `mbEspelho`): mesmo debounce, intervalo e backoff do sync atual.
+/// Espelho completo: mesmo debounce, intervalo e backoff do sync atual. Roda mesmo antes de o aparelho estar pronto
+/// (é a rodada que descobre se o servidor tem espelho e semeia ou troca); só `mbEspelho = false` o impede.
 final MbAgendador mbEspelhoAgendador = MbAgendador(
-  rodar: mbEspelhoSincronizar,
-  pareado: () => mbEspelhoLigado() && meuBancoPareado.value,
+  rodar: _rodarEspelho,
+  pareado: () => mbEspelhoPermitido() && meuBancoPareado.value,
 );
+
+/// O Android semeia (ou troca pela nuvem) só depois de o usuário confirmar o cartão da tela.
+bool _confirmado = false;
+
+/// "Agora não": até o próximo boot o espelho não semeia nem troca (o sync antigo segue funcionando).
+bool _adiado = false;
+
+/// Quando o servidor respondeu 404 (Worker sem ESPELHO). Dentro de [_reverificar] não se pergunta de novo; abrir o
+/// app (`mbEspelhoVoltouAoApp`) zera, então o custo é um GET por abertura e não um a cada 60 s.
+DateTime? _indisponivelDesde;
+const Duration _reverificar = Duration(hours: 6);
+
+/// Para os testes: cliente no lugar do pareamento e estado da sessão limpo.
+@visibleForTesting
+MbCliente? mbClienteEspelhoParaTeste;
+
+@visibleForTesting
+void mbEspelhoReiniciarSessao() {
+  _confirmado = _adiado = false;
+  _indisponivelDesde = null;
+}
+
+@visibleForTesting
+Future<bool> mbEspelhoRodarUmaVez() => _rodarEspelho();
+
+void mbEspelhoConfirmarSemeio() {
+  _confirmado = true;
+  _adiado = false;
+  mbEspelhoAgendador.pedirAgora();
+}
+
+void mbEspelhoAdiar() {
+  _adiado = true;
+  mbFaseEspelho.value = MbFaseEspelho.desconhecida;
+}
+
+String _mensagemErro(Object e) => e is MbErroHttp
+    ? 'O servidor respondeu: ${e.mensagem}.'
+    : 'Sem conexão com o servidor. Confira a internet e tente de novo.';
+
+Future<bool> _rodarEspelho() async {
+  if (mbEspelhoPronto.value) return mbEspelhoSincronizar();
+  if (_adiado) return true;
+  final ate = _indisponivelDesde;
+  if (ate != null && DateTime.now().difference(ate) < _reverificar) return true;
+  final cliente = mbClienteEspelhoParaTeste ?? await mbClienteConfigurado();
+  if (cliente == null) return false;
+  try {
+    final fase = await mbEspelhoDoApp(cliente).avaliar(
+      podeSemear: !kIsWeb,
+      confirmado: _confirmado,
+      aoFase: (f) => mbFaseEspelho.value = f,
+      protegido: (acao) => mbEmRodada(acao),
+    );
+    _indisponivelDesde = fase == MbFaseEspelho.indisponivel ? DateTime.now() : null;
+    mbErroEspelho.value = '';
+    if (fase == MbFaseEspelho.pronto) {
+      await mbEspelhoReavaliar();
+    } else if (fase != MbFaseEspelho.indisponivel) {
+      // Web esperando o semeio: o aviso `mudou` do servidor no fim dele dispara a troca.
+      await _abrirWs();
+    }
+    return true;
+  } catch (e) {
+    // Só o semeio e a troca viram erro na tela; sem rede na simples consulta a fase não muda.
+    final f = mbFaseEspelho.value;
+    if (f == MbFaseEspelho.semeando || f == MbFaseEspelho.trocando) {
+      mbErroEspelho.value = _mensagemErro(e);
+      mbFaseEspelho.value = MbFaseEspelho.erro;
+    }
+    return false;
+  } finally {
+    mbProgressoEspelho.value = '';
+  }
+}
 
 MbEspelhoWs? _ws;
 
@@ -157,29 +233,45 @@ Future<void> _abrirWs() async {
 }
 
 void mbEspelhoVoltouAoApp() {
-  if (!mbEspelhoLigado()) return;
+  if (!mbEspelhoPermitido()) return;
+  _indisponivelDesde = null;
   mbEspelhoAgendador.voltouAoApp();
-  _abrirWs();
+  // Só abre o WebSocket onde o servidor tem espelho (pronto ou já descoberto); com 404 ele nem existe.
+  if (mbEspelhoLigado() || _fasesComServidor.contains(mbFaseEspelho.value)) _abrirWs();
 }
+
+const _fasesComServidor = {
+  MbFaseEspelho.aguardando,
+  MbFaseEspelho.confirmar,
+  MbFaseEspelho.confirmarTroca,
+  MbFaseEspelho.semeando,
+  MbFaseEspelho.trocando,
+  MbFaseEspelho.erro,
+};
 
 void mbEspelhoSegundoPlano() {
   mbEspelhoAgendador.foiParaSegundoPlano();
   if (!kIsWeb) _ws?.parar();
 }
 
-/// Põe fila, agendador e WebSocket de acordo com a flag `mbEspelho`; chamada na abertura e quando a flag muda.
+/// Põe fila, agendador e WebSocket em ordem: na abertura, quando `mbEspelho` muda e quando o aparelho fica pronto.
+/// A fila só cresce com o espelho ligado (aparelho pronto e sem o desligamento de emergência).
 Future<void> mbEspelhoReavaliar() async {
+  await mbEspelhoCarregarEstado(forcar: true);
+  if (mbEspelhoPronto.value) mbFaseEspelho.value = MbFaseEspelho.pronto;
   final ligado = mbEspelhoLigado();
-  // A fila só cresce com o espelho ativo; desligado, ela é esvaziada.
-  await mbEspelhoDefinirAtivo(database, ligado);
-  if (!ligado) {
+  // Semeio interrompido: a fila continua ligada para as edições feitas até a retomada não se perderem.
+  final semeando = mbEspelhoPermitido() && await mbLerEstado(mbChaveSemeioEspelho) != null;
+  await mbEspelhoDefinirAtivo(database, ligado || semeando);
+  if (!mbEspelhoPermitido()) {
     mbEspelhoAgendador.parar();
     _ws?.parar();
     return;
   }
   mbEspelhoAgendador.iniciar();
   mbEspelhoAgendador.voltouAoApp();
-  await _abrirWs();
+  // Antes de saber que o servidor tem espelho (404 = Worker sem ESPELHO) o WebSocket não abre.
+  if (ligado) await _abrirWs();
 }
 
 bool _automaticoIniciado = false;
@@ -191,6 +283,10 @@ void mbIniciarSyncAutomatico() {
   meuBancoVerificarPareado();
   mbAgendador.iniciar();
   unawaited(mbEspelhoReavaliar());
+  // Pareou depois da abertura: o espelho descobre sozinho o que fazer (semear, trocar ou esperar).
+  meuBancoPareado.addListener(() {
+    if (meuBancoPareado.value) mbEspelhoAgendador.voltouAoApp();
+  });
   meuBancoSincronizando.addListener(() {
     if (!meuBancoSincronizando.value) mbAgendador.fimDeRodada();
   });

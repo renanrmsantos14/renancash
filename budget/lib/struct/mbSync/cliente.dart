@@ -117,6 +117,11 @@ class MbCliente {
       _chamar('GET', '/api/espelho',
           query: {if (desde != null && desde.isNotEmpty) 'desde': desde, 'limite': '$limite'});
 
+  /// Espelho completo: semeio pelo Android, em lotes de 0 a n. `fim` no último; o servidor marca `semeado` aí.
+  Future<Map<String, dynamic>> espelhoSemear(int lote, List<Map<String, dynamic>> linhas, {required bool fim}) =>
+      _chamar('POST', '/api/espelho/semear',
+          corpo: {'lote': lote, 'linhas': linhas, 'fim': fim}, limite: const Duration(seconds: 90));
+
   // Marca a entrada que é o salário (usado pela fila "Para revisar" quando o salário não foi detectado).
   Future<void> definirSalario(String txId) async {
     await _chamar('PUT', '/api/config', corpo: {'salario_id': txId});

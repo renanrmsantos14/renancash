@@ -199,15 +199,15 @@ void main() {
     expect(await mbLerEstado(mbChaveAparelhoServidor, a.db), 'id-autenticado');
   });
 
-  test('C4: a primeira página recua 30 s sem o sufixo e o cursor guardado não volta', () async {
+  test('C4: a primeira página recua 30 s só no server_at (cursor completo, como o Worker exige) e o guardado não volta', () async {
     await categoria(a.db, 'c1', 'Original');
     await a.sincronizar();
     await b.sincronizar();
     await b.sincronizar();
     final guardado = (await mbLerEstado('espelho_cursor', b.db))!;
     final pedido = b.cliente.cursoresPedidos.last!;
-    expect(pedido.contains('|'), isFalse);
-    expect(DateTime.parse(pedido).isBefore(DateTime.parse(guardado.split('|').first)), isTrue);
+    expect(pedido.substring(pedido.indexOf('|')), guardado.substring(guardado.indexOf('|')), reason: 'tabela|pk intactos');
+    expect(DateTime.parse(pedido.split('|').first).isBefore(DateTime.parse(guardado.split('|').first)), isTrue);
     expect(await mbLerEstado('espelho_cursor', b.db), guardado);
   });
 }

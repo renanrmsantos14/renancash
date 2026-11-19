@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoEstadoMudou;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoEstadoMudou, mbEspelhoLigado;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:drift/drift.dart';
 
@@ -41,7 +41,38 @@ Espelho _espelho(Map<String, dynamic> l) => Espelho(
       l['motivo'] as String?,
     );
 
+/// Hora de quem não guarda `updated_at` (mb_revisoes): o espelho do servidor é quem decide a versão.
+const String _semHora = '1970-01-01T00:00:00.000Z';
+
+/// Copia as decisões de revisão vivas de `mb_registros` para `mb_revisoes` (o que o espelho completo sincroniza).
+/// Não sobrescreve o que já está em `mb_revisoes`.
+Future<void> mbMigrarRevisoes(GeneratedDatabase db) async {
+  final existe = await db
+      .customSelect("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mb_registros'")
+      .get();
+  if (existe.isEmpty) return;
+  await db.customStatement(
+      'INSERT OR IGNORE INTO mb_revisoes (pk, dados) SELECT id, dados FROM mb_registros '
+      "WHERE tabela = 'revisoes' AND deleted_at IS NULL AND dados IS NOT NULL");
+}
+
+/// Com o espelho ligado, as revisões vivem em `mb_revisoes` e substituem as de `mb_registros`.
 Future<Map<String, Espelho>> mbLerEspelho({String? tabela}) async {
+  final ligado = mbEspelhoLigado();
+  // Com o espelho ligado as revisões vivem só em mb_revisoes: pedir só elas dispensa ler mb_registros.
+  final out = ligado && tabela == 'revisoes' ? <String, Espelho>{} : await _lerRegistros(tabela: tabela);
+  if (!ligado || (tabela != null && tabela != 'revisoes')) return out;
+  out.removeWhere((_, e) => e.registro.tabela == 'revisoes');
+  for (final l in await database.customSelect('SELECT pk, dados FROM mb_revisoes').get()) {
+    final d = l.readNullable<String>('dados');
+    if (d == null) continue;
+    final r = Registro('revisoes', l.read<String>('pk'), _json(d), _semHora, null);
+    out[r.chave] = Espelho(r, null, false, null);
+  }
+  return out;
+}
+
+Future<Map<String, Espelho>> _lerRegistros({String? tabela}) async {
   final linhas = await database
       .customSelect('SELECT * FROM mb_registros WHERE ?1 IS NULL OR tabela = ?1',
           variables: [Variable<String>(tabela)])
@@ -55,8 +86,19 @@ Future<Map<String, Espelho>> mbLerEspelho({String? tabela}) async {
 }
 
 Future<void> _gravar(Iterable<Espelho> itens) async {
+  final revisoesNoEspelho = mbEspelhoLigado();
   for (final e in itens) {
     final r = e.registro;
+    if (revisoesNoEspelho && r.tabela == 'revisoes') {
+      if (r.deletedAt != null || r.dados == null) {
+        await database.customStatement('DELETE FROM mb_revisoes WHERE pk = ?', [r.id]);
+      } else {
+        await database.customStatement(
+            'INSERT INTO mb_revisoes (pk, dados) VALUES (?, ?) ON CONFLICT (pk) DO UPDATE SET dados = excluded.dados',
+            [r.id, jsonCanonico(r.dados)]);
+      }
+      continue;
+    }
     await database.customStatement(
         'INSERT OR REPLACE INTO mb_registros (tabela, id, dados, updated_at, deleted_at, projecao, pendente, motivo) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
