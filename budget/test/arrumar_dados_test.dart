@@ -292,7 +292,7 @@ void main() {
           ],
         };
 
-    MbResultado mapear(String? categoria, [MbContextoCategoria ctx = const MbContextoCategoria({}, [], {}, {})]) =>
+    MbResultado mapear(String? categoria, [MbContextoCategoria ctx = const MbContextoCategoria({}, [], {})]) =>
         mbMapearPull(json(categoria), ctx,
             destinos: destinos,
             pkCategoria: (id, nome, receita) => id == null ? mbPkCategoria(nome, receita) : id.replaceFirst('cashew:', ''));
@@ -317,7 +317,7 @@ void main() {
     test('escolha do usuário (ajuste) vale mais que o mapa', () {
       final ctx = MbContextoCategoria({
         't1': {'categoria_id': 'cashew:minha'}
-      }, const [], const {}, const {});
+      }, const [], const {});
       final t = mapear('Taxi and ride-hailing', ctx).transacoes.single;
       expect([t.categoriaPk, t.subcategoriaPk], ['minha', null]);
     });

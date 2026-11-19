@@ -1,4 +1,3 @@
-import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 
 String _escapar(String s) => RegExp.escape(s);
@@ -26,35 +25,13 @@ class MbRegraCtx {
       this.id, this.padrao, this.categoriaId, this.contaId, this.prioridade);
 }
 
+/// Contexto da categoria efetiva de uma transação do banco: ajustes (o que o usuário editou na própria linha `mb:`),
+/// regras (`associated_titles`) e categorias por nome. Montado do banco local por `mbContextoLocal`.
 class MbContextoCategoria {
   final Map<String, Map<String, dynamic>> ajustes;
   final List<MbRegraCtx> regras;
-  final Map<String, String> pluggy;
   final Map<String, String> porNome;
-  const MbContextoCategoria(this.ajustes, this.regras, this.pluggy, this.porNome);
-
-  factory MbContextoCategoria.deRegistros(Iterable<Registro> regs) {
-    final ajustes = <String, Map<String, dynamic>>{};
-    final regras = <MbRegraCtx>[];
-    final pluggy = <String, String>{};
-    final nomes = <String, String>{};
-    for (final r in regs) {
-      final d = r.dados;
-      if (r.deletedAt != null || d == null) continue;
-      if (r.tabela == 'ajustes') {
-        ajustes[r.id] = d;
-      } else if (r.tabela == 'regras') {
-        regras.add(MbRegraCtx(r.id, '${d['padrao']}', '${d['categoria_id']}',
-            d['conta_id'] as String?, (d['prioridade'] as num?) ?? 0));
-      } else if (r.tabela == 'categorias') {
-        for (final p in d['pluggy'] is List ? d['pluggy'] as List : const []) {
-          pluggy[p as String] = r.id;
-        }
-        nomes['${d['tipo']}:${'${d['nome']}'.toLowerCase()}'] = r.id;
-      }
-    }
-    return MbContextoCategoria(ajustes, regras, pluggy, nomes);
-  }
+  const MbContextoCategoria(this.ajustes, this.regras, this.porNome);
 
   String? _porNome(String nome, bool receita) =>
       porNome['${receita ? 'receita' : 'despesa'}:${nome.toLowerCase()}'];
@@ -86,8 +63,7 @@ MbEfetiva mbCategoriaEfetiva({
   if (aNome != null) {
     return MbEfetiva(
         'ajuste',
-        ctx.pluggy[aNome] ?? ctx._porNome(mbTraduzirCategoria(aNome), receita),
-        aNome);
+        ctx._porNome(mbTraduzirCategoria(aNome), receita), aNome);
   }
   for (final r in mbOrdenarRegras(ctx.regras)) {
     if ((r.contaId == null || r.contaId == contaId) &&
@@ -95,8 +71,6 @@ MbEfetiva mbCategoriaEfetiva({
       return MbEfetiva('regra', r.categoriaId, null);
     }
   }
-  final m = categoriaPluggy == null ? null : ctx.pluggy[categoriaPluggy];
-  if (m != null) return MbEfetiva('pluggy', m, null);
   final n = ctx._porNome(mbTraduzirCategoria(categoriaPluggy), receita);
   return n != null
       ? MbEfetiva('nome', n, null)

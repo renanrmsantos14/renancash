@@ -58,15 +58,3 @@ class Registro {
 
 bool vence(Registro novo, String? atualUpdatedAt) =>
     atualUpdatedAt == null || novo.updatedAt.compareTo(atualUpdatedAt) > 0;
-
-class Espelho {
-  final Registro registro;
-  final Map<String, dynamic>? projecao;
-  final bool pendente;
-  final String? motivo;
-  const Espelho(this.registro, this.projecao, this.pendente, this.motivo);
-}
-
-List<Registro> remotosVencedores(
-        Map<String, Espelho> espelho, Iterable<Registro> remotos) =>
-    remotos.where((r) => vence(r, espelho[r.chave]?.registro.updatedAt)).toList();

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoEstadoMudou, mbEspelhoLigado;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoEstadoMudou;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:drift/drift.dart';
 
@@ -33,14 +33,6 @@ Map<String, dynamic>? _json(Object? texto) => texto == null
     ? null
     : (jsonDecode(texto as String) as Map).cast<String, dynamic>();
 
-Espelho _espelho(Map<String, dynamic> l) => Espelho(
-      Registro(l['tabela'] as String, l['id'] as String, _json(l['dados']),
-          l['updated_at'] as String, l['deleted_at'] as String?),
-      _json(l['projecao']),
-      (l['pendente'] as int) == 1,
-      l['motivo'] as String?,
-    );
-
 /// Hora de quem não guarda `updated_at` (mb_revisoes): o espelho do servidor é quem decide a versão.
 const String _semHora = '1970-01-01T00:00:00.000Z';
 
@@ -56,85 +48,29 @@ Future<void> mbMigrarRevisoes(GeneratedDatabase db) async {
       "WHERE tabela = 'revisoes' AND deleted_at IS NULL AND dados IS NOT NULL");
 }
 
-/// Com o espelho ligado, as revisões vivem em `mb_revisoes` e substituem as de `mb_registros`.
-Future<Map<String, Espelho>> mbLerEspelho({String? tabela}) async {
-  final ligado = mbEspelhoLigado();
-  // Com o espelho ligado as revisões vivem só em mb_revisoes: pedir só elas dispensa ler mb_registros.
-  final out = ligado && tabela == 'revisoes' ? <String, Espelho>{} : await _lerRegistros(tabela: tabela);
-  if (!ligado || (tabela != null && tabela != 'revisoes')) return out;
-  out.removeWhere((_, e) => e.registro.tabela == 'revisoes');
+/// As decisões da fila "Para revisar" vivem em `mb_revisoes` (espelhada pelo servidor).
+Future<List<Registro>> mbLerRevisoes() async {
+  final out = <Registro>[];
   for (final l in await database.customSelect('SELECT pk, dados FROM mb_revisoes').get()) {
     final d = l.readNullable<String>('dados');
     if (d == null) continue;
-    final r = Registro('revisoes', l.read<String>('pk'), _json(d), _semHora, null);
-    out[r.chave] = Espelho(r, null, false, null);
+    out.add(Registro('revisoes', l.read<String>('pk'), _json(d), _semHora, null));
   }
   return out;
 }
 
-Future<Map<String, Espelho>> _lerRegistros({String? tabela}) async {
-  final linhas = await database
-      .customSelect('SELECT * FROM mb_registros WHERE ?1 IS NULL OR tabela = ?1',
-          variables: [Variable<String>(tabela)])
-      .get();
-  final out = <String, Espelho>{};
-  for (final l in linhas) {
-    final e = _espelho(l.data);
-    out[e.registro.chave] = e;
-  }
-  return out;
-}
-
-Future<void> _gravar(Iterable<Espelho> itens) async {
-  final revisoesNoEspelho = mbEspelhoLigado();
-  for (final e in itens) {
-    final r = e.registro;
-    if (revisoesNoEspelho && r.tabela == 'revisoes') {
-      if (r.deletedAt != null || r.dados == null) {
-        await database.customStatement('DELETE FROM mb_revisoes WHERE pk = ?', [r.id]);
-      } else {
-        await database.customStatement(
-            'INSERT INTO mb_revisoes (pk, dados) VALUES (?, ?) ON CONFLICT (pk) DO UPDATE SET dados = excluded.dados',
-            [r.id, jsonCanonico(r.dados)]);
+/// Grava (ou apaga, quando `deletedAt`/`dados` vazios) decisões em `mb_revisoes`; os triggers do espelho enfileiram o envio.
+Future<void> mbGravarRevisoes(Iterable<Registro> itens) => database.transaction(() async {
+      for (final r in itens) {
+        if (r.deletedAt != null || r.dados == null) {
+          await database.customStatement('DELETE FROM mb_revisoes WHERE pk = ?', [r.id]);
+        } else {
+          await database.customStatement(
+              'INSERT INTO mb_revisoes (pk, dados) VALUES (?, ?) ON CONFLICT (pk) DO UPDATE SET dados = excluded.dados',
+              [r.id, jsonCanonico(r.dados)]);
+        }
       }
-      continue;
-    }
-    await database.customStatement(
-        'INSERT OR REPLACE INTO mb_registros (tabela, id, dados, updated_at, deleted_at, projecao, pendente, motivo) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          r.tabela,
-          r.id,
-          r.deletedAt != null || r.dados == null ? null : jsonCanonico(r.dados),
-          r.updatedAt,
-          r.deletedAt,
-          e.projecao == null ? null : jsonCanonico(e.projecao),
-          e.pendente ? 1 : 0,
-          e.motivo,
-        ]);
-  }
-}
-
-Future<void> mbGravarEspelho(Iterable<Espelho> itens) =>
-    database.transaction(() => _gravar(itens));
-
-Future<List<Espelho>> mbPendentes({int limite = 500}) async {
-  final linhas = await database
-      .customSelect(
-          'SELECT * FROM mb_registros WHERE pendente = 1 ORDER BY updated_at, tabela, id LIMIT ?',
-          variables: [Variable.withInt(limite)])
-      .get();
-  return [for (final l in linhas) _espelho(l.data)];
-}
-
-// Os itens do lote deixam de ser pendentes; os rejeitados (índice no lote) guardam o motivo.
-Future<void> mbMarcarEnviados(
-    List<Espelho> lote, Map<int, String> rejeitados) {
-  return database.transaction(() => _gravar([
-        for (var i = 0; i < lote.length; i++)
-          Espelho(lote[i].registro, lote[i].projecao, false, rejeitados[i])
-      ]));
-}
+    });
 
 Future<String?> mbLerEstado(String chave, [GeneratedDatabase? db]) async {
   final l = await (db ?? database).customSelect('SELECT valor FROM mb_estado WHERE chave = ?',
@@ -155,71 +91,3 @@ Future<void> mbGravarEstado(Map<String, String> valores) async {
 
 Future<void> mbRemoverEstado(String chave) =>
     database.customStatement('DELETE FROM mb_estado WHERE chave = ?', [chave]);
-
-Future<Map<String, String>> mbLerAplicado() async {
-  final linhas =
-      await database.customSelect('SELECT tx_pk, categoria_pk FROM mb_aplicado').get();
-  return {
-    for (final l in linhas)
-      l.read<String>('tx_pk'): l.read<String>('categoria_pk')
-  };
-}
-
-Future<void> mbGravarAplicado(
-        Map<String, String> novos, Iterable<String> removidos) =>
-    database.transaction(() async {
-      for (final e in novos.entries) {
-        await database.customStatement(
-            'INSERT OR REPLACE INTO mb_aplicado (tx_pk, categoria_pk) VALUES (?, ?)',
-            [e.key, e.value]);
-      }
-      for (final pk in removidos) {
-        await database
-            .customStatement('DELETE FROM mb_aplicado WHERE tx_pk = ?', [pk]);
-      }
-    });
-
-class MbFila {
-  final int pendentes;
-  final List<String> rejeitados;
-  const MbFila(this.pendentes, this.rejeitados);
-}
-
-Future<MbFila> mbLerFila() async {
-  final n = await database
-      .customSelect('SELECT COUNT(*) AS n FROM mb_registros WHERE pendente = 1')
-      .getSingle();
-  final rej = await database
-      .customSelect(
-          'SELECT tabela, dados, motivo FROM mb_registros WHERE motivo IS NOT NULL ORDER BY updated_at DESC LIMIT 500')
-      .get();
-  return MbFila(
-      n.read<int>('n'),
-      mbRotulosRejeitados([
-        for (final l in rej)
-          (
-            tabela: l.read<String>('tabela'),
-            dados: _json(l.data['dados']),
-            motivo: l.read<String>('motivo')
-          )
-      ]).take(20).toList());
-}
-
-// "tabela · nome: motivo"; sem nome legível vira "tabela: motivo". Linhas iguais se juntam com "(n)".
-List<String> mbRotulosRejeitados(
-    Iterable<({String tabela, Map<String, dynamic>? dados, String motivo})> itens) {
-  final contagem = <String, int>{};
-  for (final r in itens) {
-    final d = r.dados;
-    final nome = [d?['nome'], d?['descricao'], d?['padrao']].firstWhere(
-        (v) => v is String && v.replaceAll('*', '').trim().isNotEmpty,
-        orElse: () => null);
-    final rotulo = nome == null
-        ? '${r.tabela}: ${r.motivo}'
-        : '${r.tabela} · $nome: ${r.motivo}';
-    contagem.update(rotulo, (n) => n + 1, ifAbsent: () => 1);
-  }
-  return [
-    for (final e in contagem.entries) e.value > 1 ? '${e.key} (${e.value})' : e.key
-  ];
-}

@@ -33,8 +33,10 @@ async function ambiente(transacoes, espelho = false) {
       assert.deepEqual(corpo.rejeitados ?? [], [], JSON.stringify(corpo));
       return corpo;
     }
-    const r = await amb.pedir("/api/sync", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ registros }) });
-    const corpo = await r.json();
+    // F5: o app só escreve pelo espelho; o modo legado grava direto no histórico `registros` (setup).
+    await amb.env.DB.batch(registros.map((r) => amb.env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES (?1, ?2, ?3, ?4, ?5, ?4) ON CONFLICT(tabela, id) DO UPDATE SET dados = excluded.dados, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at")
+      .bind(r.tabela, r.id, r.dados ? JSON.stringify(r.dados) : null, r.updated_at, r.deleted_at ?? null)));
+    const corpo = { ok: true, rejeitados: [] };
     assert.deepEqual(corpo.rejeitados ?? [], [], JSON.stringify(corpo));
     return corpo;
   };
@@ -150,12 +152,4 @@ for (const espelho of MODOS) test(`PUT /api/config exige token ou sessão ${nome
   const { amb } = await ambiente([], espelho);
   const r = await amb.pedir("/api/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ limite: 100 }) });
   assert.equal(r.status, 401);
-});
-
-test("registros de revisões inválidos são rejeitados sem derrubar o lote", async () => {
-  const { A, amb } = await ambiente([]);
-  const ruim = { ...decisao("x", "voar") };
-  const r = await amb.pedir("/api/sync", { method: "POST", headers: { ...A, "content-type": "application/json" }, body: JSON.stringify({ registros: [ruim, decisao("y", "ajuda")] }) });
-  const corpo = await r.json();
-  assert.equal(corpo.rejeitados.length, 1);
 });

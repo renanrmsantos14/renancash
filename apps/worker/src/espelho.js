@@ -178,16 +178,15 @@ export function configDe(linhas) {
 // Só leitura. Ajustes vêm das linhas `mb:` de transactions: a categoria atual vira `categoria_id` (o espelho não guarda a "aplicada
 // pelo banco", então a categoria do próprio mapeador também vira ajuste: o efeito no ciclo é o mesmo); excluída vira {gasto: 0}.
 // Nome e nota só entram se a linha foi editada (date_time_modified depois de 2000, como `mbEditadoEm` do app); sem edição o texto
-// é o do banco. O `pluggy` das categorias não existe no espelho (o Cashew não tem a coluna): vem do `registros` antigo, só leitura.
+// é o do banco. As categorias não têm `pluggy` (o Cashew não tem a coluna e o vínculo foi aposentado na F5): a do Pluggy resolve pelo nome traduzido.
 const editada = (v) => { const ms = msDe(v); return ms != null && new Date(ms).getUTCFullYear() >= 2001; };
 export async function registrosDoEspelho(db) {
-  // Três leituras independentes num batch só. `_config` vem com as exclusões: o tombstone tem de apagar o valor antigo da tabela `config`.
-  const [{ results }, { results: pluggyRows }, { results: antiga }] = await db.batch([
+  // Duas leituras independentes num batch só. `_config` vem com as exclusões: o tombstone tem de apagar o valor antigo da tabela `config`.
+  const [{ results }, { results: antiga }] = await db.batch([
     db.prepare(
       "SELECT tabela, pk, dados, deleted_at FROM espelho WHERE tabela IN ('categories', 'associated_titles', 'budgets', 'objectives', 'mb_orcamento_tx', 'mb_meta_aplicacao', 'mb_revisoes', '_config') " +
         "OR (tabela = 'transactions' AND (pk LIKE 'mb:%' OR (deleted_at IS NULL AND json_extract(dados, '$.type') = 1)))"
     ),
-    db.prepare("SELECT id, json_extract(dados, '$.pluggy') AS p FROM registros WHERE tabela = 'categorias' AND deleted_at IS NULL AND json_type(dados, '$.pluggy') = 'array'"),
     db.prepare("SELECT chave, valor FROM config"),
   ]);
   const vivas = results.filter((r) => r.deleted_at == null && r.dados != null).map((r) => ({ ...r, d: JSON.parse(r.dados) }));
@@ -196,11 +195,9 @@ export async function registrosDoEspelho(db) {
   const novo = (tabela, id, dados) => registros.push({ tabela, id, dados, deleted_at: null });
 
   const categorias = new Map();
-  const pluggy = new Map();
-  for (const r of pluggyRows) { const l = comoLista(r.p); if (l.length) pluggy.set(r.id, l); }
   for (const { pk, d } of daTabela("categories")) {
     categorias.set(pk, d.name);
-    novo("categorias", ID(pk), { ...(pluggy.has(ID(pk)) ? { pluggy: pluggy.get(ID(pk)) } : {}), nome: d.name, tipo: d.income ? "receita" : "despesa", cor: d.colour ?? null, icone: d.icon_name ?? null, pai_id: d.main_category_pk ? ID(d.main_category_pk) : null, ordem: d.order });
+    novo("categorias", ID(pk), { nome: d.name, tipo: d.income ? "receita" : "despesa", cor: d.colour ?? null, icone: d.icon_name ?? null, pai_id: d.main_category_pk ? ID(d.main_category_pk) : null, ordem: d.order });
   }
   for (const { pk, d } of daTabela("associated_titles")) {
     if (!d.title?.trim() || d.title.includes("*")) continue; // não projetável como padrão (mesma regra do app)

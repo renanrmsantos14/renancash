@@ -1,6 +1,5 @@
-import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador, mbEspelhoReavaliar;
+import 'package:budget/struct/mbSync/agendador.dart' show mbEspelhoReavaliar;
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoConfigMudou;
-import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigsSincronizadas;
 import 'package:budget/struct/mbSync/inicioOrdem.dart' show mbMigrarOrdemInicio;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
@@ -191,8 +190,7 @@ Future<bool> updateSettings(
   appStateSettings[setting] = value;
   await sharedPreferences.setString(
       'userSettings', json.encode(appStateSettings));
-  // Configuração que sincroniza: agenda o envio (o agendador ignora o que a própria rodada de sync grava).
-  if (isChanged && mbConfigsSincronizadas.contains(setting)) mbAgendador.aoEditar();
+  // Configuração que sincroniza: entra na fila do espelho.
   if (isChanged && sincronizar) await mbEspelhoConfigMudou(setting);
   // Liga ou desliga fila, agendador e WebSocket sem reiniciar o app.
   if (isChanged && setting == 'mbEspelho') await mbEspelhoReavaliar();

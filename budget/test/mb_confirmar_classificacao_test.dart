@@ -108,9 +108,9 @@ void main() {
                 txId: id, data: '2026-11-10', descricao: 'Pix enviado: Pai', valor: 50, destinatario: 'PAI'))
     ];
     await mbConfirmarVarios(itens, escolha('', vinculo: 'A'));
-    final espelho = await mbLerEspelho();
+    final espelho = {for (final r in await mbLerRevisoes()) 'revisoes/${r.id}': r};
     for (final id in ['p1', 'p2', 'p3']) {
-      expect(espelho['revisoes/tx:$id']?.registro.dados?['categoria_id'], 'cashew:c1', reason: id);
+      expect(espelho['revisoes/tx:$id']?.dados?['categoria_id'], 'cashew:c1', reason: id);
       expect((await ler('mb:$id')).objectiveLoanFk, 'A', reason: id);
     }
   });

@@ -231,10 +231,10 @@ Future<Set<String>> _categoriasUsadas() async {
   for (final a in await database.select(database.associatedTitles).get()) {
     usadas.add(a.categoryFk);
   }
-  for (final e in (await mbLerEspelho()).values) {
-    final d = e.registro.dados;
-    if (e.registro.deletedAt != null || d == null) continue;
-    for (final v in [d['categoria_id'], ...?(d['categoria_ids'] as List?)]) {
+  for (final r in await mbLerRevisoes()) {
+    final d = r.dados;
+    if (r.deletedAt != null || d == null) continue;
+    for (final v in [d['categoria_id']]) {
       if (v is String) usadas.add(pkDoId(v));
     }
   }

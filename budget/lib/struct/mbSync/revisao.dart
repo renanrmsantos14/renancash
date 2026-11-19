@@ -86,7 +86,7 @@ class MbRevisoes {
   final Map<String, String> destinos;
   const MbRevisoes([this.decisoes = const {}, this.destinos = const {}]);
 
-  factory MbRevisoes.deRegistros(Iterable<Registro> regs) {
+  factory MbRevisoes.deLinhas(Iterable<Registro> regs) {
     final decisoes = <String, Map<String, dynamic>>{};
     final destinos = <String, String>{};
     for (final r in regs) {
@@ -211,8 +211,7 @@ Future<void> mbAtualizarRevisar() async {
     try {
       ciclo = texto == null ? null : jsonDecode(texto);
     } catch (_) {}
-    final espelho = await mbLerEspelho(tabela: 'revisoes');
-    final revisoes = MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]);
+    final revisoes = MbRevisoes.deLinhas(await mbLerRevisoes());
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
     meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values);
     meuBancoReembolsos.value = mbVinculosReembolso(revisoes.decisoes.values);

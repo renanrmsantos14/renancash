@@ -49,6 +49,19 @@ void main() {
     expect(find.text('Espelho: desconhecida · HTTP 401: token inválido'), findsOneWidget);
   });
 
+  testWidgets('"Enviar dados para a nuvem" some com a fase pronto e volta se o espelho não está semeado', (t) async {
+    mbEspelhoPronto.value = false;
+    mbFaseEspelho.value = MbFaseEspelho.pronto;
+    mbDiagnosticoEspelho.value = 'em dia';
+    await t.pumpWidget(_app(Column(children: [EspelhoEnviarItem(enviar: () async => 'ok'), const EspelhoDiagnostico()])));
+    expect(find.text('Enviar dados para a nuvem'), findsNothing);
+    expect(find.text('Espelho: pronto · em dia'), findsOneWidget, reason: 'o diagnóstico fica');
+
+    mbFaseEspelho.value = MbFaseEspelho.desconhecida;
+    await t.pump();
+    expect(find.text('Enviar dados para a nuvem'), findsOneWidget);
+  });
+
   // Capturas: só com ESPELHO_PRINTS=<pasta>.
   final pasta = Platform.environment['ESPELHO_PRINTS'];
   testWidgets('capturas', skip: pasta == null, (t) async {
@@ -67,7 +80,7 @@ void main() {
         child: _app(Container(
             color: Colors.white,
             padding: const EdgeInsets.all(20),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               EspelhoEnviarItem(enviar: () async => 'O servidor respondeu (HTTP 401): token inválido.'),
               const SizedBox(height: 8),
               const EspelhoDiagnostico(),
@@ -80,6 +93,14 @@ void main() {
       });
     }
 
+    await t.pump();
+    await tirar('espelho-f5-nao-semeado');
+    mbFaseEspelho.value = MbFaseEspelho.pronto;
+    mbDiagnosticoEspelho.value = 'em dia';
+    await t.pump();
+    await tirar('espelho-f5-pronto');
+    mbFaseEspelho.value = MbFaseEspelho.desconhecida;
+    mbDiagnosticoEspelho.value = 'HTTP 401: token inválido';
     await t.pump();
     await tirar('espelho-config-item');
     await t.tap(find.text('Enviar dados para a nuvem'));

@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
-import 'package:budget/struct/mbSync/detectar.dart';
-import 'package:budget/struct/mbSync/mapeamento.dart';
+import 'package:budget/struct/mbSync/mapeamento.dart' show pkDoId;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/mbSync/revisao.dart' show mbTipoDeRevisao;
 import 'package:budget/struct/meuBancoMapping.dart';
@@ -12,8 +11,29 @@ import 'package:flutter_test/flutter_test.dart';
 Registro _reg(String tabela, String id, Map<String, dynamic> d) =>
     Registro(tabela, id, d, '2026-11-01T00:00:00.000Z', null);
 
+/// Monta o contexto no formato do app (ajustes, regras, categorias por nome) a partir de linhas no formato dos
+/// casos compartilhados com o core. O vínculo `pluggy` das categorias não existe mais no app.
+MbContextoCategoria _ctx(Iterable<Registro> regs) {
+  final ajustes = <String, Map<String, dynamic>>{};
+  final regras = <MbRegraCtx>[];
+  final nomes = <String, String>{};
+  for (final r in regs) {
+    final d = r.dados;
+    if (r.deletedAt != null || d == null) continue;
+    if (r.tabela == 'ajustes') {
+      ajustes[r.id] = d;
+    } else if (r.tabela == 'regras') {
+      regras.add(MbRegraCtx(r.id, '${d['padrao']}', '${d['categoria_id']}', d['conta_id'] as String?,
+          (d['prioridade'] as num?) ?? 0));
+    } else if (r.tabela == 'categorias') {
+      nomes['${d['tipo']}:${'${d['nome']}'.toLowerCase()}'] = r.id;
+    }
+  }
+  return MbContextoCategoria(ajustes, regras, nomes);
+}
+
 MbResultado _pull(Map<String, dynamic> j, Iterable<Registro> regs) =>
-    mbMapearPull(j, MbContextoCategoria.deRegistros(regs),
+    mbMapearPull(j, _ctx(regs),
         pkCategoria: (id, nome, receita) =>
             id != null ? pkDoId(id) : mbPkCategoria(nome, receita));
 
@@ -46,135 +66,11 @@ Map<String, dynamic> _json(Map<String, dynamic> tx) => {
     };
 
 void main() {
-  test('ida e volta: categoria', () {
-    final c = CatLocal(
-        pk: 'c1', nome: 'Mercado', receita: false, cor: '#fff', icone: 'a.png', paiPk: 'p', ordem: 3);
-    final d = projetarCategoria(c);
-    expect(d['pai_id'], 'cashew:p');
-    expect(projetarCategoria(categoriaDeDados('cashew:c1', d)), d);
-  });
-
-  test('ida e volta: orçamento (ids ordenados, período = ciclo)', () {
-    final d = projetarOrcamento(
-        OrcLocal(pk: 'o1', nome: 'Casa', valor: 900.5, categoriaPks: ['b', 'a']));
-    expect(d['categoria_ids'], ['cashew:a', 'cashew:b']);
-    expect(d['periodo'], 'ciclo');
-    expect(projetarOrcamento(orcamentoDeDados('cashew:o1', d)), d);
-  });
-
-  test('ida e volta: meta e dívida', () {
-    final m = projetarObjetivo(ObjLocal(
-        pk: 'm1', nome: 'Viagem', divida: false, valor: 3000, prazo: DateTime(2027, 3, 5, 12)));
-    expect(m, {
-      'nome': 'Viagem',
-      'valor_alvo': 3000.0,
-      'prazo': '2027-03-05',
-      'aplicacao_ids': <String>[]
-    });
-    expect(projetarObjetivo(objetivoDeDados('cashew:m1', m, divida: false)), m);
-    final dv = projetarObjetivo(ObjLocal(
-        pk: 'd1', nome: 'João', divida: true, receita: true, valor: 200));
-    expect(dv['sentido'], 'me_devem');
-    expect(dv['tipo'], 'emprestimo');
-    expect(projetarObjetivo(objetivoDeDados('d1', dv, divida: true)), dv);
-  });
-
-  test('ida e volta: lançamento', () {
-    final d = projetarLancamento(LancLocal(
-        pk: 'l1',
-        nome: '  ',
-        nota: ' obs ',
-        valor: -12.5,
-        categoriaPk: 'c1',
-        carteiraNome: 'Carteira',
-        data: DateTime(2026, 11, 9, 12),
-        metaPk: 'm1'));
-    expect(d['descricao'], 'Sem descrição');
-    expect(d['nota'], 'obs');
-    expect(d['divida_id'], null);
-    expect(
-        projetarLancamento(
-            lancamentoDeDados('cashew:l1', d, categoriaPadrao: 'x')),
-        d);
-  });
-
-  test('lançamento: texto cortado em 200 caracteres', () {
-    final d = projetarLancamento(LancLocal(
-        pk: 'l', nome: 'a' * 300, valor: 1, categoriaPk: 'c', carteiraNome: 'w', data: DateTime(2026, 1, 1)));
-    expect((d['descricao'] as String).length, 200);
-  });
-
-  test('ida e volta: assinatura e ignorada vira null', () {
-    final d = projetarAssinatura(
-        AssinLocal(pk: 's1', nome: 'Netflix', valor: -39.9, dia: 5, categoriaPk: 'c1'));
-    expect(d['valor'], 39.9);
-    expect(projetarAssinatura(assinaturaDeDados('cashew:s1', d, categoriaPadrao: 'x')!), d);
-    expect(assinaturaDeDados('s1', {...d, 'status': 'ignorada'}, categoriaPadrao: 'x'), null);
-  });
-
-  test('assinatura sem título vai com nome e padrão aceitos pelo Worker', () {
-    // O Worker rejeita texto vazio ou acima de 200 caracteres ("dados inválidos").
-    bool textoValido(Object? v) => v is String && v.isNotEmpty && v.length <= 200;
-    for (final nome in ['', '   ', 'a' * 300]) {
-      final d = completarNovo(
-          'assinaturas',
-          projetarAssinatura(AssinLocal(
-              pk: 's', nome: nome, valor: -10, dia: 1, categoriaPk: 'c')));
-      expect(textoValido(d['nome']), isTrue, reason: 'nome de "$nome"');
-      expect(textoValido(d['padrao']), isTrue, reason: 'padrao de "$nome"');
-    }
-    expect(
-        projetarAssinatura(AssinLocal(
-            pk: 's', nome: '', valor: 1, dia: 1, categoriaPk: 'c'))['nome'],
-        'Sem nome');
-  });
-
-  test('ida e volta: regra e preservação de DROGASIL*', () {
-    final r = regraDeDados('cashew:r1', {'padrao': '*uber*', 'categoria_id': 'cashew:c1'})!;
-    expect((r.titulo, r.exato), ('uber', false));
-    final d = projetarRegra(r, null)!;
-    expect(d, {'padrao': '*uber*', 'categoria_id': 'cashew:c1'});
-    expect(projetarRegra(regraDeDados('r1', d)!, null), d);
-    final dro = regraDeDados('r2', {'padrao': 'DROGASIL*', 'categoria_id': 'c'})!;
-    expect(projetarRegra(dro, {'padrao': 'DROGASIL*'})!['padrao'], 'DROGASIL*');
-    expect(projetarRegra(dro, null)!['padrao'], '*DROGASIL*');
-    final ex = RegraLocal(pk: 'r', titulo: 'PIX', categoriaPk: 'c', exato: true);
-    expect(projetarRegra(ex, {'padrao': '*PIX*'})!['padrao'], 'PIX');
-  });
-
-  test('regra com curinga no meio não vira RegraLocal', () {
-    expect(regraDeDados('r', {'padrao': 'DRO*SIL', 'categoria_id': 'c'}), null);
-  });
-
-  test('projetarAjuste: os três casos', () {
-    final apagada = projetarAjuste(
-        txPk: 'mb:t1', categoriaPkAtual: null, categoriaPkAplicada: 'mb:cat:d:X',
-        existeLocal: false, nomeCategoria: 'X', editadoEm: null)!;
-    expect([apagada.tabela, apagada.id], ['ajustes', 't1']);
-    expect(apagada.dados, {'gasto': 0});
-    final mudou = projetarAjuste(
-        txPk: 'mb:t1', categoriaPkAtual: 'c2', categoriaPkAplicada: 'c1',
-        existeLocal: true, nomeCategoria: 'Mercado', editadoEm: '2026-11-09T10:00:00.000Z')!;
-    expect(mudou.dados, {'categoria_id': 'cashew:c2', 'category': 'Mercado'});
-    expect(mudou.editadoEm, '2026-11-09T10:00:00.000Z');
-    expect(
-        projetarAjuste(
-            txPk: 'mb:t1', categoriaPkAtual: 'c1', categoriaPkAplicada: 'c1',
-            existeLocal: true, nomeCategoria: 'X', editadoEm: null),
-        null);
-  });
-
-  test('dataLocal e dataDeTexto', () {
-    expect(dataLocal(DateTime(2026, 1, 5, 23, 59)), '2026-01-05');
-    expect(dataDeTexto('2026-01-05'), DateTime(2026, 1, 5, 12));
-    expect(pkDoId('cashew:abc'), 'abc');
-    expect(pkDoId('abc'), 'abc');
-  });
-
   group('categoria efetiva: casos compartilhados com o core', () {
     final casos = jsonDecode(
         File('test/fixtures/categoria-casos.json').readAsStringSync()) as List;
-    for (final c in casos) {
+    // Os casos com vínculo `pluggy` na categoria valem só para o core: o app não tem mais esse vínculo.
+    for (final c in casos.where((c) => !jsonEncode(c['registros']).contains('"pluggy"'))) {
       test(c['nome'] as String, () {
         final tx = c['tx'] as Map<String, dynamic>;
         final regs = [
@@ -188,7 +84,7 @@ void main() {
             descricao: tx['description'],
             categoriaPluggy: tx['category'],
             receita: c['receita'] as bool,
-            ctx: MbContextoCategoria.deRegistros(regs));
+            ctx: _ctx(regs));
         expect(r.fonte, c['esperado']['fonte']);
         expect(r.categoriaId, c['esperado']['categoria_id']);
       });

@@ -50,3 +50,4 @@ description: "Verifica Configurações e telas do 'resto' (Etapa 5 da revisão d
 
 ## Evidência
 - Checks do PR verdes no GitHub Actions e artefato `prints` com os PNGs `config_*` inspecionados.
+- Configurações sincronizadas (F5): a lista branca de chaves é só `mbConfigLocal` (`mbSync/configuracoes.dart`); `mbConfigsSincronizadas` e o envio por `registros` não existem mais, as chaves viajam pelo espelho. Meu Banco: sem "Enviar tudo como oficial"; "Enviar dados para a nuvem" some em `pronto` (`test/espelho_enviar_test.dart`).

@@ -7,7 +7,7 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/reembolso.dart';
-import 'package:budget/struct/mbSync/registro.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerRevisoes;
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:drift/drift.dart' show Value;
@@ -172,17 +172,15 @@ void main() {
       await sync();
       final cat = await doGasto('mb:g1');
       expect([await geral(), await gasto(cat), await receitas()], [120, 120, 60]);
-      cliente.enviados.clear();
 
       await ligar('r1', 'PIX RECEBIDO JUNIOR SILVA', 60, 'g1');
       final r1 = await tx('mb:r1');
       expect([r1.income, r1.amount, r1.categoryFk], [false, 60, (await tx('mb:g1')).categoryFk]);
       expect([await geral(), await gasto(cat), await receitas()], [60, 60, 0]);
-      expect(cliente.enviados.where((r) => r.tabela == 'ajustes'), isEmpty); // vínculo não é ajuste de categoria
       expect([for (final v in meuBancoReembolsos.value) v.gastoPk], ['mb:g1']);
 
       await mbDesfazerRevisao('r1', clienteParaTeste: cliente);
-      expect(cliente.enviados.lastWhere((r) => r.id == 'tx:r1').deletedAt, isNotNull);
+      expect(await mbLerRevisoes(), isEmpty);
       expect((await tx('mb:r1')).income, true);
       expect([await geral(), await gasto(cat), await receitas()], [120, 120, 60]);
       expect(meuBancoReembolsos.value, isEmpty);
@@ -226,7 +224,6 @@ void main() {
 
 class _Cliente extends MbCliente {
   _Cliente() : super(base: 'https://teste');
-  final List<Registro> enviados = [];
   List<Map<String, dynamic>> transacoes = [];
   // Sem ciclo no Worker, o histórico guarda as categorias de sempre (no ciclo atual tudo espera validação).
   bool semCiclo = false;
@@ -236,7 +233,6 @@ class _Cliente extends MbCliente {
     final hoje = DateTime.now();
     return {
       'agora': hoje.toUtc().toIso8601String(),
-      'registros': [],
       'contas': [{'id': 'cc', 'type': 'BANK', 'name': 'Conta Inter'}],
       'transacoes': desde == null ? transacoes : [], // como o Worker: o incremental não repete as antigas
       'pendentes': [],
@@ -247,11 +243,5 @@ class _Cliente extends MbCliente {
               'fim': _dia(hoje.add(const Duration(days: 25))),
             },
     };
-  }
-
-  @override
-  Future<({int aceitos, List<({int indice, String motivo})> rejeitados})> enviar(List<Registro> lote) async {
-    enviados.addAll(lote);
-    return (aceitos: lote.length, rejeitados: <({int indice, String motivo})>[]);
   }
 }
