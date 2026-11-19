@@ -147,3 +147,13 @@ CREATE TABLE IF NOT EXISTS espelho_meta (
   chave TEXT PRIMARY KEY,
   valor TEXT
 );
+
+-- Ajustes das transações `mb:` no formato antigo (category/gasto) lidos do espelho: é o que /api/dados, /api/historico e
+-- /api/fatura juntam no lugar de v_ajustes quando ESPELHO = 1. category = nome da categoria atual; excluída = gasto 0.
+DROP VIEW IF EXISTS v_ajustes_espelho;
+CREATE VIEW v_ajustes_espelho AS
+  SELECT substr(e.pk, 4) AS transaction_id,
+         CASE WHEN e.deleted_at IS NULL THEN (SELECT json_extract(c.dados, '$.name') FROM espelho c WHERE c.tabela = 'categories' AND c.pk = json_extract(e.dados, '$.category_fk') AND c.deleted_at IS NULL) END AS category,
+         CASE WHEN e.deleted_at IS NOT NULL THEN 0 END AS gasto,
+         e.server_at AS updated_at
+  FROM espelho e WHERE e.tabela = 'transactions' AND e.pk LIKE 'mb:%' AND e.pk NOT LIKE 'mb:inv:%';

@@ -359,7 +359,9 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("mb_meta_aplicacao", "ap2", { aplicacao_pk: "ap2", meta_pk: "m1" }),
     esp("mb_orcamento_tx", '["mb:g1","o1"]', { tx_pk: "mb:g1", orcamento_pk: "o1" }),
     esp("transactions", "mb:g1", { transaction_pk: "mb:g1", category_fk: "c1", name: "IFOOD", note: "Pendente" }),
-    esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp" }),
+    esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp", date_time_modified: dia("2026-11-12T12:00:00Z") }),
+    esp("transactions", "mb:g3", { transaction_pk: "mb:g3", category_fk: "c9", name: "Texto do banco", note: "Nota do banco", date_time_modified: dia("2000-01-01T00:00:00Z") }), // não editada: texto não vira ajuste
+    esp("transactions", "mb:inv:x1", { transaction_pk: "mb:inv:x1", category_fk: "c1", name: "CDB" }), // investimento do banco: fora
     db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, updated_at) VALUES ('g1', 'inter', '2026-11-10', 'IFOOD', -120, ''), ('g2', 'inter', '2026-11-11', 'RESTAURANTE X', -80, '')"),
     esp("transactions", "mb:gone", null, { deleted_at: T1 }),
     esp("transactions", "s1", { type: 1, name: "Netflix", amount: -40, date_created: dia("2026-11-05T15:00:00Z"), category_fk: "c1" }),
@@ -369,14 +371,16 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("_config", "limite", { v: 2000 }),
     esp("_config", "salario", { v: "SALARIO EMPRESA" }),
     db.prepare("INSERT INTO config (chave, valor) VALUES ('salario_valor', '7500'), ('limite', '999')"), // limite do espelho vence
+    db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('categorias', 'cashew:c1', ?1, ?2, ?2)").bind(JSON.stringify({ nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] }), T1), // o pluggy só existe aqui
   ]);
 
   const registros = [
-    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1 }],
+    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1, pluggy: ["Groceries"] }],
     ["categorias", "cashew:c2", { nome: "Salário", tipo: "receita", cor: null, icone: null, pai_id: "cashew:c1", ordem: 2 }],
     ["regras", "cashew:r1", { padrao: "*IFOOD*", categoria_id: "cashew:c1" }],
     ["regras", "cashew:r2", { padrao: "ENEL", categoria_id: "cashew:c1" }],
     ["orcamentos", "cashew:o1", { nome: "Mercado", valor: 800, categoria_ids: ["cashew:c1"], periodo: "ciclo", arquivado: 1 }],
+    ["dividas", "cashew:emp", { tipo: "emprestimo", nome: "Empréstimo", sentido: "devo", valor_total: 100 }],
     ["metas", "cashew:m1", { nome: "Viagem", valor_alvo: 5000, prazo: "2027-06-30", aplicacao_ids: ["ap1", "ap2"] }],
     ["assinaturas", "cashew:s1", { nome: "Netflix", valor: 40, dia: 5, categoria_id: "cashew:c1" }],
     ["revisoes", "tx:p1", revDecisao],
@@ -410,4 +414,37 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
   };
   assert.deepEqual(calcular(projetado.registros, projetado.config), calcular(registros, config));
   assert.equal(calcular(registros, config).resumo.gasto, 120 + 900 + 50, "a decisão 'ajuda' conta o envio ao Santander como gasto");
+});
+
+// ---------- F4: ciclo, painel antigo e alertas leem o espelho ----------
+
+test("com a flag ligada, ciclo, /api/dados, histórico e fatura leem os ajustes do espelho e ignoram `registros`", async () => {
+  const hoje = new Date().toLocaleDateString("sv", { timeZone: "America/Sao_Paulo" });
+  const dia = (n) => new Date(Date.parse(hoje + "T12:00:00Z") - n * 86_400_000).toISOString().slice(0, 10);
+  const { pedir, env, auth, enviar, esperar } = await preparar();
+  const ts = new Date().toISOString();
+  const tx = (id, d, desc, valor) => env.DB.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, 'inter', ?2, ?3, ?4, ?5, 'POSTED', 0, ?6)").bind(id, d, desc, valor, valor > 0 ? "CREDIT" : "DEBIT", ts);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, updated_at) VALUES ('inter', 'BANK', 'CHECKING_ACCOUNT', 'Conta', 'Inter', ?1)").bind(ts),
+    tx("s1", dia(5), "SALARIO EMPRESA", 7500), tx("g1", dia(2), "MERCADO", -100), tx("g2", dia(1), "FARMACIA", -50), tx("g3", dia(1), "PADARIA", -30),
+    // o painel antigo zerou o g2 em `registros`: com a flag ligada isso não vale mais
+    env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('ajustes', 'g2', '{\"gasto\":0}', ?1, ?1)").bind(ts),
+  ]);
+  const gasto = async () => (await (await pedir("/api/sync", { headers: auth })).json()).ciclo.gasto;
+  assert.equal(await gasto(), 180, "sem nada no espelho: tudo conta");
+  // o app exclui o g1 (tombstone `mb:g1`) e recategoriza o g3
+  const novas = [
+    { tabela: "categories", pk: "c1", dados: { name: "Padaria", income: 0 }, updated_at: ts, deleted_at: null },
+    { tabela: "transactions", pk: "mb:g1", dados: null, updated_at: ts, deleted_at: ts },
+    { tabela: "transactions", pk: "mb:g3", dados: { category_fk: "c1" }, updated_at: ts, deleted_at: null },
+  ];
+  assert.equal((await enviar(novas)).aceitos, 3);
+  await esperar();
+  assert.equal(await gasto(), 80, "g1 zerado pelo espelho; g2 continua contando");
+  const cookie = await entrarComSenha(pedir);
+  const lista = async (caminho, chave = "transacoes") => Object.fromEntries((await (await pedir(caminho, { headers: { cookie } })).json())[chave].map((t) => [t.id, [t.ajuste_gasto, t.ajuste_categoria]]));
+  const esperado = { g1: [0, null], g2: [null, null], g3: [null, "Padaria"], s1: [null, null] };
+  assert.deepEqual(await lista("/api/dados?mes=" + hoje.slice(0, 7)), esperado);
+  assert.deepEqual(await lista("/api/historico"), esperado);
+  assert.deepEqual(await lista(`/api/fatura?conta=inter&de=${dia(10)}&ate=${hoje}`), esperado);
 });

@@ -43,3 +43,17 @@ export function simularPluggy(rotas) {
   return { chamadas };
 }
 export const restaurarFetch = () => { globalThis.fetch = fetchOriginal; };
+
+// Durable Object do espelho que só engole os avisos (testes que não olham o WebSocket).
+export const hubMudo = () => ({ idFromName: (n) => n, get: () => ({ fetch: async () => new Response(null, { status: 204 }) }) });
+
+// Os testes de ciclo, revisões e notificações rodam com a flag desligada (lê `registros`) e ligada (lê o espelho).
+export const MODOS = [false, true];
+export const extraDoModo = (espelho) => (espelho ? { ESPELHO: "1", ESPELHO_HUB: hubMudo() } : {});
+export const nomeDoModo = (espelho) => (espelho ? "[espelho]" : "[registros]");
+
+// Com a flag ligada o espelho precisa estar semeado para aceitar linhas (POST /api/espelho).
+export async function semearVazio(pedir, token) {
+  const r = await pedir("/api/espelho/semear", { method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify({ lote: 0, fim: true, linhas: [] }) });
+  if (r.status !== 200) throw new Error("semeio falhou: " + r.status);
+}

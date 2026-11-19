@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { criarAmbiente, criarAparelho, entrarComSenha, ORIGEM } from "./ambiente.mjs";
+import { criarAmbiente, criarAparelho, entrarComSenha, ORIGEM, MODOS, extraDoModo, nomeDoModo, semearVazio } from "./ambiente.mjs";
 import { somarDias } from "../src/ciclo.js";
 
 const hoje = new Date().toLocaleDateString("sv", { timeZone: "America/Sao_Paulo" });
 
-async function sincronizarCiclo(dias) {
-  const amb = criarAmbiente();
+async function sincronizarCiclo(espelho) {
+  const amb = criarAmbiente(extraDoModo(espelho));
   const token = await criarAparelho(amb.env);
   const agora = new Date().toISOString();
   const conta = (id, type, subtype, name, bank) =>
@@ -24,8 +24,10 @@ async function sincronizarCiclo(dias) {
   return (await r.json()).ciclo;
 }
 
-test("GET /api/sync: ciclo vira no salário por valor, ignora 13º e Santander", async () => {
-  const c = await sincronizarCiclo();
+for (const espelho of MODOS) {
+
+test(`GET /api/sync: ciclo vira no salário por valor, ignora 13º e Santander ${nomeDoModo(espelho)}`, async () => {
+  const c = await sincronizarCiclo(espelho);
   assert.equal(c.inicio, somarDias(hoje, -10));
   assert.equal(c.semSalario, false);
   assert.equal(c.ultimoSalario, somarDias(hoje, -10));
@@ -33,9 +35,10 @@ test("GET /api/sync: ciclo vira no salário por valor, ignora 13º e Santander",
   assert.equal(c.gasto, 100);
 });
 
-test("PUT /api/config com salario_id guarda também o valor do salário", async () => {
-  const amb = criarAmbiente();
+test(`PUT /api/config com salario_id guarda também o valor do salário ${nomeDoModo(espelho)}`, async () => {
+  const amb = criarAmbiente(extraDoModo(espelho));
   const cookie = await entrarComSenha(amb.pedir);
+  if (espelho) await semearVazio(amb.pedir, await criarAparelho(amb.env));
   const agora = new Date().toISOString();
   await amb.env.DB.batch([
     amb.env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, updated_at) VALUES ('inter', 'BANK', 'CHECKING_ACCOUNT', 'Conta', 'Inter', ?1)").bind(agora),
@@ -45,10 +48,15 @@ test("PUT /api/config com salario_id guarda também o valor do salário", async 
   assert.equal(r.status, 200);
   const cfg = Object.fromEntries((await amb.env.DB.prepare("SELECT chave, valor FROM config").all()).results.map((x) => [x.chave, x.valor]));
   assert.deepEqual(cfg, { salario: "PAGAMENTO", salario_valor: "7500" });
+  if (espelho) { // com a flag ligada o salário também vai para o espelho (_config vence a tabela config) e a web é avisada
+    await amb.esperar();
+    const linhas = (await amb.env.DB.prepare("SELECT pk, dados FROM espelho WHERE tabela = '_config' ORDER BY pk").all()).results.map((x) => [x.pk, JSON.parse(x.dados).v]);
+    assert.deepEqual(linhas, [["salario", "PAGAMENTO"], ["salario_valor", 7500]]);
+  }
 });
 
-test("alertas, resumo semanal e disponível não contam conta nem cartão do Santander", async () => {
-  const amb = criarAmbiente();
+test(`alertas, resumo semanal e disponível não contam conta nem cartão do Santander ${nomeDoModo(espelho)}`, async () => {
+  const amb = criarAmbiente(extraDoModo(espelho));
   const token = await criarAparelho(amb.env);
   const agora = new Date().toISOString();
   const conta = (id, type, subtype, bank, saldo) =>
@@ -67,3 +75,5 @@ test("alertas, resumo semanal e disponível não contam conta nem cartão do San
   assert.equal(r.resumo.disponivel, 100);
   assert.equal(r.resumo.consumido, 100);
 });
+
+}

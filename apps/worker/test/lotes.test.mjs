@@ -2,7 +2,7 @@
 // Relógio fixo: terça 10/11/2026 12h BRT, fora do silêncio.
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { criarAmbiente, criarAparelho, entrarComSenha, simularPluggy, restaurarFetch, ORIGEM } from "./ambiente.mjs";
+import { criarAmbiente, criarAparelho, entrarComSenha, simularPluggy, restaurarFetch, ORIGEM, MODOS, extraDoModo, nomeDoModo } from "./ambiente.mjs";
 import { registrarItem } from "../src/pluggy.js";
 
 const ID = "33333333-3333-4333-8333-333333333333";
@@ -13,10 +13,11 @@ const sp = (s) => s.replace(/ /g, " ");
 const relogio = (iso) => { mock.timers.reset(); mock.timers.enable({ apis: ["Date"], now: Date.parse(iso) }); };
 afterEach(() => { restaurarFetch(); mock.timers.reset(); });
 
-async function preparar({ geral = 1000, statusItem = () => "UPDATED", extra = {} } = {}) {
+// espelho = true: ESPELHO ligado e os orçamentos vêm das linhas `budgets` do espelho (não de `registros`).
+async function preparar({ geral = 1000, statusItem = () => "UPDATED", extra = {}, espelho = false } = {}) {
   mock.timers.reset();
   mock.timers.enable({ apis: ["Date"], now: T0 });
-  const amb = criarAmbiente({ ...ENV, ...extra });
+  const amb = criarAmbiente({ ...ENV, ...extraDoModo(espelho), ...extra });
   const db = amb.env.DB;
   await registrarItem(db, ID, "2026-11-01T00:00:00.000Z");
   const auth = { authorization: "Bearer " + (await criarAparelho(amb.env)) };
@@ -27,8 +28,12 @@ async function preparar({ geral = 1000, statusItem = () => "UPDATED", extra = {}
     if (u.host === "push.test") return new Response(null, { status: 201 });
     return { results: [] };
   });
+  const orcamento = (pk, nome, valor) => espelho
+    ? db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('budgets', ?1, ?2, ?3, NULL, ?3, 'celular')").bind(pk, JSON.stringify({ name: nome, amount: valor, category_fks: "[]" }), ts)
+    : db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('orcamentos', ?1, ?2, ?3, ?3)").bind("cashew:" + pk, JSON.stringify({ nome, valor, categoria_ids: [], periodo: "ciclo" }), ts);
   const stmts = [
-    db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('orcamentos', 'cashew:mb:orc:geral', ?1, ?2, ?2)").bind(JSON.stringify({ nome: "Geral", valor: geral, categoria_ids: [], periodo: "ciclo" }), ts),
+    orcamento("mb:orc:geral", "Geral", geral),
+    ...(espelho ? [db.prepare("INSERT INTO espelho_meta (chave, valor) VALUES ('semeado', '1')")] : []),
     ...[["s1", "2026-09-01"], ["s2", "2026-10-05"], ["s3", "2026-11-05"]].map(([id, d]) =>
       db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, 'cc', ?2, 'SALARIO EMPRESA', 7500, 'CREDIT', 'POSTED', 0, ?3)").bind(id, d, ts)),
   ];
@@ -42,11 +47,11 @@ async function preparar({ geral = 1000, statusItem = () => "UPDATED", extra = {}
   };
   const alertas = async (like = "%") => (await db.prepare("SELECT chave, titulo, corpo FROM notificacoes WHERE chave LIKE ?1 ORDER BY criada").bind(like).all()).results.map((a) => ({ ...a, titulo: sp(a.titulo), corpo: sp(a.corpo) }));
   const celular = async (desde) => (await (await amb.pedir("/api/notificacoes?desde=" + encodeURIComponent(desde), { headers: auth })).json());
-  return { ...amb, db, auth, pluggy, gasto, sincronizar, alertas, celular };
+  return { ...amb, db, auth, pluggy, gasto, sincronizar, alertas, celular, orcamento };
 }
 
-test("lote: várias compras entre dois ticks viram uma notificação com quanto falta no Geral", async () => {
-  const t = await preparar();
+for (const espelho of MODOS) test(`lote: várias compras entre dois ticks viram uma notificação com quanto falta no Geral ${nomeDoModo(espelho)}`, async () => {
+  const t = await preparar({ espelho });
   await t.sincronizar(); // 1ª avaliação: só registra o que já existe
   assert.deepEqual(await t.alertas("compras:%"), []);
   await t.gasto("c1", 50); await t.gasto("c2", 30, "PADARIA"); await t.gasto("c3", 40, "FARMACIA");
@@ -63,8 +68,8 @@ test("lote: várias compras entre dois ticks viram uma notificação com quanto 
   assert.equal((await t.alertas("compras:%")).at(-1).titulo, "1 compra, R$ 25,50");
 });
 
-test("80% e 100% do Geral: uma vez por ciclo cada, sem repetir a cada sincronização", async () => {
-  const t = await preparar({ geral: 300 });
+for (const espelho of MODOS) test(`80% e 100% do Geral: uma vez por ciclo cada, sem repetir a cada sincronização ${nomeDoModo(espelho)}`, async () => {
+  const t = await preparar({ geral: 300, espelho });
   await t.sincronizar();
   await t.gasto("a", 250); // 83%
   await t.sincronizar(); await t.sincronizar();
@@ -75,9 +80,9 @@ test("80% e 100% do Geral: uma vez por ciclo cada, sem repetir a cada sincroniza
   assert.match((await t.alertas("orc100%"))[0].corpo, /R\$ 50,00 acima/);
 });
 
-test("outro orçamento estourado não gera aviso (só o Geral)", async () => {
-  const t = await preparar();
-  await t.db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('orcamentos', 'o1', ?1, 'x', 'x')").bind(JSON.stringify({ nome: "Mercado", valor: 10, categoria_ids: [], periodo: "ciclo" })).run();
+for (const espelho of MODOS) test(`outro orçamento estourado não gera aviso (só o Geral) ${nomeDoModo(espelho)}`, async () => {
+  const t = await preparar({ espelho });
+  await t.orcamento("o1", "Mercado", 10).run();
   await t.sincronizar();
   await t.gasto("a", 200);
   await t.sincronizar();
