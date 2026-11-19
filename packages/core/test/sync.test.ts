@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validarLote, vence, mesclar, inicioDaJanela, chave, dadosValidos, MAX_LOTE, type Registro } from "../src/index.ts";
+import { validarLote, validarLinhasEspelho, vence, mesclar, inicioDaJanela, chave, dadosValidos, MAX_LOTE, type Registro } from "../src/index.ts";
 
 const AGORA = "2026-11-09T12:00:00.000Z";
 const cat = (over: Partial<Registro> = {}): Registro => ({
@@ -145,4 +145,26 @@ test("configuração guarda o valor serializado em JSON", () => {
   assert.ok(!dadosValidos("configuracoes", { valor: true }));
   assert.ok(!dadosValidos("configuracoes", { valor: "" }));
   assert.ok(!dadosValidos("configuracoes", { valor: "x".repeat(4001) }));
+});
+
+test("espelho: valida allowlist, pk, tamanho, dados nulos e normaliza datas", () => {
+  const ok = { tabela: "transactions", pk: "mb:abc", dados: { name: "x" }, updated_at: "2026-11-09T08:00:00-03:00", deleted_at: null };
+  const r = validarLinhasEspelho([
+    ok,
+    { ...ok, tabela: "app_settings" },
+    { ...ok, pk: "" },
+    { ...ok, dados: null },
+    { ...ok, dados: { x: "a".repeat(16 * 1024) } },
+    { ...ok, pk: "m1", dados: { a: 1 }, deleted_at: "2026-11-09T12:00:00.000Z" },
+    { ...ok, pk: "m2", updated_at: "2099-01-01T00:00:00.000Z" },
+  ], AGORA);
+  assert.ok("linhas" in r);
+  assert.deepEqual(r.linhas.map((l) => l.pk), ["mb:abc", "m1", "m2"]);
+  assert.equal(r.linhas[0].updated_at, "2026-11-09T11:00:00.000Z");
+  assert.equal(r.linhas[1].dados, null, "exclusão não leva dados");
+  assert.equal(r.linhas[2].updated_at, AGORA, "futuro vira agora");
+  assert.deepEqual(r.rejeitados.map((x) => x.motivo), ["tabela fora da allowlist", "pk inválida", "dados ausentes sem deleted_at", "linha acima de 16 KB"]);
+  assert.ok("erro" in validarLinhasEspelho(Array.from({ length: MAX_LOTE + 1 }, () => ok), AGORA));
+  assert.ok("erro" in validarLinhasEspelho({}, AGORA));
+  assert.deepEqual(validarLinhasEspelho([], AGORA), { linhas: [], rejeitados: [] });
 });

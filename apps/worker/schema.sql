@@ -128,3 +128,22 @@ CREATE TABLE IF NOT EXISTS app_tokens (
   ultimo_uso TEXT,
   revogado  TEXT
 );
+
+-- Espelho completo do app: a linha inteira de cada tabela em JSON. Conflito por linha (LWW): vence o updated_at mais novo,
+-- empate para o maior `aparelho`. Excluída = dados NULL + deleted_at (tombstone). server_at é o cursor de leitura.
+CREATE TABLE IF NOT EXISTS espelho (
+  tabela     TEXT NOT NULL,
+  pk         TEXT NOT NULL,
+  dados      TEXT,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  server_at  TEXT NOT NULL,
+  aparelho   TEXT,
+  PRIMARY KEY (tabela, pk)
+);
+CREATE INDEX IF NOT EXISTS idx_espelho_server ON espelho(server_at, tabela, pk);
+-- Estado do espelho: semeado, semeado_por, semeado_em (e semeando, durante o semeio em lotes).
+CREATE TABLE IF NOT EXISTS espelho_meta (
+  chave TEXT PRIMARY KEY,
+  valor TEXT
+);

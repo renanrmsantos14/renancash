@@ -113,3 +113,15 @@ Verificação: uma semana de uso real antes de apagar; grep por `mbTornarOficial
 
 ## 4. Não confirmado no planejamento
 Limites atuais de D1/DO grátis; `connect-src 'self'` e `wss:`; JSON1/`json_patch` com null no node:sqlite; `aplicarLocal.dart`, `classificarDados.dart`, `arrumarDados.dart`, `backup.js`, `app.js`; índices de `transactions` no D1; isolate do workmanager com o mesmo `beforeOpen`.
+
+## 5. Mudanças de contrato na F1
+
+- Flag `ESPELHO="1"` (var do Worker; desligada por padrão, rotas novas respondem 404). O app pode checar a flag por 404 em `/api/espelho`.
+- `aparelho` é obrigatório no POST `/api/espelho` e no `/semear` (desempate do LWW e origem do aviso).
+- `/semear` usa `lote` 0-based, `fim` e `substituir`. Respostas: 409 `ja_semeado` (já semeado, sem `substituir`), 409 `semeio_nao_iniciado` (lote > 0 sem o lote 0 antes), 403 com cookie. O espelho só vira `semeado` no lote com `fim: true`; antes disso o POST responde 409 `nao_semeado`.
+- `rejeitados` do POST inclui `{motivo:"mais_antiga"}` quando o LWW recusa a linha.
+- O aviso `{"tipo":"mudou","cursor","aparelho"}` também sai no `fim` do semeio; `{"tipo":"banco"}` sai quando a sincronização do Pluggy dá certo.
+- `PUT /api/ajustes/:id` responde 410 com a flag ligada (o painel antigo perde a edição; F4).
+- Ticket HMAC do WebSocket (plano B) não foi implementado: Android usa Bearer no cabeçalho e a web usa cookie com checagem de Origin.
+- Limite prático: o D1 aceita cerca de 1 MB por comando SQL; o Worker divide o POST em lotes de 1 MB.
+- `registrosDoEspelho` projeta categorias, regras, orçamentos, metas, assinaturas, revisões e ajustes (`mb:`). Limitações: o ajuste não leva a categoria aplicada, nome/nota/divida_id, nem `pluggy` das categorias; dívidas não são projetadas.
