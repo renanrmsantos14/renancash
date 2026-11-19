@@ -8,6 +8,7 @@ import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoCarregarEstado;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/contextoLocal.dart';
+import 'package:budget/struct/mbSync/categoriaEfetiva.dart' show MbContextoCategoria;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/extrasTransacao.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
@@ -32,6 +33,7 @@ const String _chaveUrl = "meu_banco_url";
 const String _chaveDesde = "meuBancoDesde";
 // Marca a conversão do histórico para as categorias próprias: uma única carga completa refaz as categorias.
 const String _chaveConversao = "conv_categorias_v1";
+const String _chaveRevisoesMigradas = "revisoes_migradas_v1";
 // Uma decisão da fila "Para revisar" deste aparelho muda como transações antigas são mapeadas: o pull incremental não
 // as traz de volta, então a próxima sincronização refaz a carga completa. Decisões de outros aparelhos chegam pelo espelho.
 const String _chaveRepuxar = "repuxar_revisoes";
@@ -190,6 +192,11 @@ Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
     final cliente = clienteParaTeste ?? await mbClienteConfigurado();
     if (cliente == null) return false; // não configurado: silencioso
     await mbCriarTabelas();
+    // Decisões de revisão anteriores à F5 vivem em `mb_registros`: copiadas uma vez para `mb_revisoes`.
+    if (await mbLerEstado(_chaveRevisoesMigradas) == null) {
+      await mbMigrarRevisoes(database);
+      await mbGravarEstado({_chaveRevisoesMigradas: '1'});
+    }
     // O estado do espelho precisa estar carregado antes de qualquer leitura de `mbEspelhoApagadas`.
     await mbEspelhoCarregarEstado();
     await _migrarCursorAntigo();
@@ -206,27 +213,30 @@ Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
     final porNome = {
       for (final c in categorias) '${c.income}:${c.name.toLowerCase()}': c.categoryPk
     };
-    final ctx = await mbContextoLocal();
     final historico = await _comprasLocais();
-    final resultado = mbMapearPull(json, ctx,
-        revisoes: MbRevisoes.deLinhas(await mbLerRevisoes()),
+    final revisoes = MbRevisoes.deLinhas(await mbLerRevisoes());
+    final destinos = mbResolverDestinos([
+      for (final c in categorias)
+        CatLocal(pk: c.categoryPk, nome: c.name, receita: c.income, paiPk: c.mainCategoryPk)
+    ]);
+    MbResultado mapear(MbContextoCategoria ctx) => mbMapearPull(json, ctx,
+        revisoes: revisoes,
         compras: historico.compras,
         abatimentos: historico.abatimentos,
-        destinos: mbResolverDestinos([
-          for (final c in categorias)
-            CatLocal(
-                pk: c.categoryPk,
-                nome: c.name,
-                receita: c.income,
-                paiPk: c.mainCategoryPk)
-        ]),
+        destinos: destinos,
         pkCategoria: (id, nome, receita) =>
             id != null && locais.contains(pkDoId(id))
                 ? pkDoId(id)
                 : porNome['$receita:${nome.toLowerCase()}'] ??
                     mbPkCategoria(nome, receita));
+    // Editar só título ou nota não congela a categoria: ela só fica fixa se difere da que o mapeador escolheria.
+    final ctxCompleto = await mbContextoLocal();
+    final semCategoria = mapear(mbSemCategoriaEditada(ctxCompleto));
+    final resultado = mapear(mbSoCategoriaDivergente(ctxCompleto, {
+      for (final t in semCategoria.transacoes) t.pk.substring(mbPrefixo.length): t.categoriaPk
+    }));
     // Uma transação só: 1 commit em vez de N e 1 notificação aos streams (as telas recarregavam a cada insert).
-    await database.transaction(() => _aplicar(resultado));
+    await database.transaction(() => _aplicar(resultado, {for (final id in ctxCompleto.ajustes.keys) '$mbPrefixo$id'}));
 
     final extras = mbMesclarExtras(
         mbExtrasDeTexto(await mbLerEstado(chaveExtrasTransacao)),
@@ -300,7 +310,7 @@ Future<void> _criarCarteiraSeFaltar(String pk, String nome) async {
   ));
 }
 
-Future<void> _aplicar(MbResultado r) async {
+Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
   final apagadas = await mbEspelhoApagadas('transactions');
   final transacoes = [for (final t in r.transacoes) if (!apagadas.contains(t.pk)) t];
   // Carteiras: criadas se faltarem; as existentes não são tocadas (preserva ordem e edições).
@@ -335,16 +345,8 @@ Future<void> _aplicar(MbResultado r) async {
     // Estorno e cashback entram como despesa (valor positivo), então a categoria é de despesa.
     await criarCategoriaSeFaltar(t.categoriaPk, t.categoriaNome, t.receita);
   }
-  // Título e nota editados no app (dateTimeModified depois de 2000, como em mbEditadoEm) não voltam ao texto do
-  // banco; pendente volta, porque a nota "Pendente" decide a limpeza abaixo.
-  final editadas = {
-    for (final t in await (database.select(database.transactions)
-          ..where((t) =>
-              t.transactionPk.like('mb:%') &
-              t.dateTimeModified.isBiggerOrEqualValue(DateTime.utc(2001))))
-        .get())
-      t.transactionPk
-  };
+  // `editadas`: título e nota editados no app (dateTimeModified depois de 2000, como em mbEditadoEm) não voltam ao
+  // texto do banco; pendente volta, porque a nota "Pendente" decide a limpeza abaixo.
   // Upsert idempotente pelo pk "mb:<id>", direto no Drift (createOrUpdateTransaction marcaria a categoria como editada).
   // A subcategoria do mapa só entra na primeira importação: depois é escolha do usuário.
   for (final t in transacoes) {

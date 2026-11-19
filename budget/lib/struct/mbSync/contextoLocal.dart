@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
-import 'package:budget/struct/mbSync/mapeamento.dart' show idDoPk;
+import 'package:budget/struct/mbSync/mapeamento.dart' show idDoPk, pkDoId;
 import 'package:budget/struct/meuBancoMapping.dart' show mbPrefixo;
 
 /// Monta o contexto de categoria só com o que já está no banco local (que o espelho sincroniza):
@@ -36,3 +36,21 @@ Future<MbContextoCategoria> mbContextoLocal() async {
   }
   return MbContextoCategoria(ajustes, regras, porNome);
 }
+
+MbContextoCategoria _comAjustes(MbContextoCategoria c, Map<String, dynamic>? Function(String id, Map<String, dynamic> a) f) =>
+    MbContextoCategoria({
+      for (final e in c.ajustes.entries) e.key: f(e.key, e.value) ?? e.value
+    }, c.regras, c.porNome);
+
+/// Mesmo contexto sem a categoria das transações editadas (só título e nota ficam).
+MbContextoCategoria mbSemCategoriaEditada(MbContextoCategoria c) =>
+    _comAjustes(c, (_, a) => {...a}..remove('categoria_id'));
+
+/// A categoria de uma transação editada só fica fixa quando difere da que o mapeador escolheria sem ela
+/// ([padraoPorId]: id da transação sem o prefixo `mb:` para a categoria escolhida).
+MbContextoCategoria mbSoCategoriaDivergente(MbContextoCategoria c, Map<String, String> padraoPorId) =>
+    _comAjustes(c, (id, a) {
+      final atual = a['categoria_id'] as String?;
+      if (atual == null || padraoPorId[id] != pkDoId(atual)) return null;
+      return {...a}..remove('categoria_id');
+    });

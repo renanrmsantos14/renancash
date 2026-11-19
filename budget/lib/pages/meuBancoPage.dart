@@ -6,7 +6,7 @@ import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/meuBancoSync.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoDoApp, mbEspelhoLigado;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoDoApp, mbEspelhoLigado, mbEspelhoPermitido;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/editorial/espelhoEnviar.dart';
 import 'package:budget/widgets/framework/pageFramework.dart';
@@ -207,7 +207,9 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
         await mbEmRodada(mbEspelhoDoApp(cliente).substituirPelaNuvem);
         return "Pronto: este aparelho agora tem os dados da nuvem.";
       }
-      return 'A nuvem ainda não tem os dados do RenanCash. Use "Enviar dados para a nuvem" no celular antes.';
+      return mbEspelhoPermitido()
+          ? 'Este aparelho ainda não está ligado à nuvem. Use "Enviar dados para a nuvem" no celular antes.'
+          : 'O espelho está desligado neste aparelho. Ligue-o antes de recomeçar pela nuvem.';
     });
   }
 
@@ -295,34 +297,6 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ValueListenableBuilder<String?>(
-            valueListenable: meuBancoUltimoErro,
-            builder: (context, erro, _) => Row(children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: erro == null ? e.pos : e.warn),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text("Pareado · $host",
-                    overflow: TextOverflow.ellipsis,
-                    style: EdTexto.corpo(context)
-                        .copyWith(fontWeight: FontWeight.w600)),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 4),
-          ValueListenableBuilder<DateTime?>(
-            valueListenable: meuBancoUltimaSync,
-            builder: (context, ultima, _) => Text(
-                ultima == null
-                    ? "Ainda não sincronizado nesta sessão"
-                    : "Sincronizado ${haQuanto(ultima, DateTime.now())}",
-                style: EdTexto.rotulo(context)),
-          ),
           ValueListenableBuilder<String?>(
             valueListenable: meuBancoUltimoErro,
             builder: (context, erro, _) => Row(children: [

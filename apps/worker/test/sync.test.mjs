@@ -44,11 +44,11 @@ test("pull completo devolve o histórico de registros e o incremental traz só o
   assert.equal((await (await puxar(depois)).json()).registros.length, 0, "fora da sobreposição de 2 min");
 });
 
-test("POST /api/sync com registros responde 410 e não grava nada", async () => {
+test("POST /api/sync com registros não grava nada e responde 200 para o app antigo seguir puxando", async () => {
   const { enviar, env } = await preparar();
   const r = await enviar([reg()]);
-  assert.equal(r.status, 410);
-  assert.match((await r.json()).erro, /descontinuada/);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { ok: true, aceitos: 0, rejeitados: [], descontinuado: true });
   assert.equal(await env.DB.prepare("SELECT COUNT(*) AS n FROM registros").first("n"), 0);
 });
 
@@ -56,7 +56,7 @@ test("sessão do painel também sincroniza (pull); POST com cookie de outra orig
   const { enviar, puxar, pedir } = await preparar();
   const cookie = await entrarComSenha(pedir);
   assert.equal((await puxar(null, { cookie })).status, 200);
-  assert.equal((await enviar([reg()], { cookie, origin: ORIGEM })).status, 410);
+  assert.equal((await enviar([reg()], { cookie, origin: ORIGEM })).status, 200);
   assert.equal((await enviar([reg()], { cookie, origin: "https://outro.site" })).status, 403);
 });
 

@@ -508,8 +508,9 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json(await notificacoesAparelho(env, desde, ts));
   }
   if (rota === "POST /api/sync") {
-    // F5: o app só usa o espelho (POST /api/espelho); a tabela `registros` ficou como histórico, sem escrita pelo app.
-    return json({ erro: "Sincronização por registros descontinuada: use /api/espelho" }, 410);
+    // F5: o app só usa o espelho; `registros` ficou como histórico. Responde 200 sem gravar porque o app antigo
+    // aborta o pull do banco em qualquer erro do envio; assim ele esvazia a fila e segue puxando até ser atualizado.
+    return json({ ok: true, aceitos: 0, rejeitados: [], descontinuado: true });
   }
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
   if (rota === "POST /api/ia/sugerir" || rota === "POST /api/ia/entender") {
