@@ -1,6 +1,7 @@
 import 'dart:ffi';
 
 import 'package:budget/database/tables.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -139,9 +140,10 @@ void main() {
         .read<String>('valor');
     expect(cursor, contains('categories|c1'));
     await db.customStatement("UPDATE categories SET name = 'Editada'");
-    await db.customStatement('DELETE FROM mb_saida');
-    await espelho.puxar(); // o servidor não tem nada novo: o que foi editado localmente não é sobrescrito
+    // A primeira página recua 30 s e traz c1 de novo: a edição local pendente, mais nova, não é sobrescrita.
+    await espelho.puxar();
     expect((await linhaDe(db, 'categories', 'category_pk', 'c1'))!['name'], 'Editada');
+    expect(await fila(db), ['categories|c1']);
   });
 
   test('servidor sem semeio: nada é aplicado e o cursor não anda', () async {
@@ -191,7 +193,8 @@ void main() {
     final l = servidor.linhas['categories|c1']!;
     expect(l.deletedAt, isNull);
     expect(l.dados!['name'], 'Depois');
-    expect(l.dados!.containsKey('date_time_modified'), false);
+    expect(l.dados!.containsKey('method_added'), false);
+    expect(l.dados!.containsKey('date_time_modified'), true);
   });
 
   test('envio: linha apagada sobe como tombstone com a hora da fila', () async {
@@ -200,5 +203,30 @@ void main() {
     await espelho.enviar();
     final l = servidor.linhas['categories|c1']!;
     expect([l.dados, l.deletedAt, l.deletedAt == l.updatedAt], [isNull, isNotNull, true]);
+  });
+
+  test('linha que falha ao aplicar vai para mb_espelho_falhas e o cursor segue; uma boa depois limpa', () async {
+    // Linha nova sem as colunas NOT NULL: o INSERT falha.
+    servidor.linhas['categories|x1'] = LinhaServidor(
+        {'category_pk': 'x1', 'name': 'Sem ordem'}, '2026-11-18T10:00:00.000Z', null, '2026-11-18T00:00:00.000001Z', 'z');
+    servidor.linhas['categories|ok'] = LinhaServidor(
+        {'category_pk': 'ok', 'name': 'Boa', 'order': 0, 'date_created': 1700000000},
+        '2026-11-18T10:00:00.000Z', null, '2026-11-18T00:00:00.000002Z', 'z');
+    await espelho.puxar();
+    expect((await linhaDe(db, 'categories', 'category_pk', 'ok'))!['name'], 'Boa');
+    expect(await linhaDe(db, 'categories', 'category_pk', 'x1'), isNull);
+    final f = await db.customSelect('SELECT tabela, pk, dados FROM mb_espelho_falhas').get();
+    expect([for (final l in f) '${l.read<String>('tabela')}|${l.read<String>('pk')}'], ['categories|x1']);
+    expect(await mbLerEstado('espelho_falhas', db), '1');
+    // O cursor andou: a próxima puxada não repete a linha boa, mas repete a falha (sem sucesso ainda).
+    await espelho.puxar();
+    expect(await mbLerEstado('espelho_falhas', db), '1');
+    // O servidor passa a ter a linha completa: aplica e limpa a falha.
+    remota('categories', 'x1', {'category_pk': 'x1', 'name': 'Completa'}, '2026-11-18T11:00:00.000Z');
+    await espelho.puxar();
+    expect((await linhaDe(db, 'categories', 'category_pk', 'x1'))!['name'], 'Completa');
+    expect(await mbLerEstado('espelho_falhas', db), '0');
+    final n = await db.customSelect('SELECT COUNT(*) n FROM mb_espelho_falhas').getSingle();
+    expect(n.read<int>('n'), 0);
   });
 }

@@ -142,4 +142,26 @@ void main() {
         categoryPk: const Value('c9'), name: 'X', order: 0, dateTimeModified: Value(DateTime.now())));
     expect(await _fila(d), ['categories|c9']);
   });
+
+  Future<List<String>> apagados() async => [
+        for (final l in await db.customSelect('SELECT tabela, pk FROM mb_apagados ORDER BY pk').get())
+          '${l.read<String>('tabela')}|${l.read<String>('pk')}'
+      ];
+
+  test('delete registra em mb_apagados e recriar a linha limpa o registro', () async {
+    await _categoria(db, 'c1');
+    expect(await apagados(), isEmpty);
+    await (db.delete(db.categories)..where((c) => c.categoryPk.equals('c1'))).go();
+    expect(await apagados(), ['categories|c1']);
+    await _categoria(db, 'c1');
+    expect(await apagados(), isEmpty);
+  });
+
+  test('troca de pk enfileira a antiga e a nova e registra a antiga como apagada', () async {
+    await _categoria(db, 'c1');
+    await _limpar(db);
+    await db.customStatement("UPDATE categories SET category_pk = 'c2' WHERE category_pk = 'c1'");
+    expect(await _fila(db), ['categories|c1', 'categories|c2']);
+    expect(await apagados(), ['categories|c1']);
+  });
 }

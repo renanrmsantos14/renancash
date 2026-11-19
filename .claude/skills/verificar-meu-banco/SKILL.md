@@ -60,3 +60,7 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 
 ## Limites
 - Pareamento com câmera, Pluggy Connect, workmanager e widget só em aparelho; nada de produção (`wrangler`, `pnpm push`).
+
+## Espelho: checagens adicionais (correção do code-review)
+- `flutter test test/mb_espelho_*_test.dart` cobre: `mb_apagados` pelos triggers e pelo mapeador (`mb_espelho_mapeador_test.dart`), `date_time_modified` espelhado, `mb_espelho_falhas`, contrato C1-C4 (`atual`, `espelho_aparelho_servidor`, recuo de 30 s) e a URI do WebSocket.
+- Com a flag `mbEspelho` desligada nada deve entrar em `mb_apagados` nem em `mb_saida`.

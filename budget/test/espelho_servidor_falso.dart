@@ -1,5 +1,6 @@
 import 'package:budget/database/tables.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
+import 'package:budget/struct/mbSync/espelhoTriggers.dart' show mbTabelasEspelhadas;
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:http/http.dart' as http;
 
@@ -18,6 +19,7 @@ class ServidorEspelho {
   int _relogio = 0;
   int paginaMax = 2000;
   final List<int> tamanhosDeLote = [];
+  final Set<String> tabelasConhecidas = {...mbTabelasEspelhadas};
 
   String _serverAt() => '2026-11-18T00:00:00.${(++_relogio).toString().padLeft(6, '0')}Z';
 
@@ -30,11 +32,26 @@ class ServidorEspelho {
       final chave = '${l['tabela']}|${l['pk']}';
       final atual = linhas[chave];
       final novo = l['updated_at'] as String;
+      if (!tabelasConhecidas.contains(l['tabela']) && l['tabela'] != '_config') {
+        rejeitados.add({'tabela': l['tabela'], 'pk': l['pk'], 'motivo': 'tabela_desconhecida'});
+        continue;
+      }
+      // Reenvio idêntico (mesmo aparelho, mesma hora) conta como aceito.
       final vence = atual == null ||
           novo.compareTo(atual.updatedAt) > 0 ||
-          (novo == atual.updatedAt && aparelho.compareTo(atual.aparelho) > 0);
+          (novo == atual.updatedAt && aparelho.compareTo(atual.aparelho) >= 0);
       if (!vence) {
-        rejeitados.add({'tabela': l['tabela'], 'pk': l['pk'], 'motivo': 'mais_antiga'});
+        rejeitados.add({
+          'tabela': l['tabela'],
+          'pk': l['pk'],
+          'motivo': 'mais_antiga',
+          'atual': {
+            'dados': atual.dados,
+            'updated_at': atual.updatedAt,
+            'deleted_at': atual.deletedAt,
+            'aparelho': atual.aparelho,
+          },
+        });
         continue;
       }
       final dados = l['dados'] == null
@@ -43,7 +60,7 @@ class ServidorEspelho {
       linhas[chave] = LinhaServidor(dados, novo, l['deleted_at'] as String?, _serverAt(), aparelho);
       aceitos++;
     }
-    return {'aceitos': aceitos, 'rejeitados': rejeitados, 'cursor': null};
+    return {'aceitos': aceitos, 'rejeitados': rejeitados};
   }
 
   Map<String, dynamic> puxar(String? desde, int limite) {
@@ -79,6 +96,12 @@ class ClienteEspelhoFalso extends MbCliente {
   final ServidorEspelho servidor;
   bool semRede = false;
 
+  /// Id com que o servidor diz ter autenticado este aparelho (vai em `aparelho` do POST e do GET).
+  String idServidor = 'servidor-a';
+
+  /// Cursores recebidos nos GETs, para os testes conferirem o recuo de 30 s na primeira página.
+  final List<String?> cursoresPedidos = [];
+
   /// Roda no meio do envio, depois de o servidor aceitar e antes de a fila ser limpa.
   Future<void> Function()? duranteEnvio;
 
@@ -87,13 +110,14 @@ class ClienteEspelhoFalso extends MbCliente {
     if (semRede) throw http.ClientException('sem rede');
     final r = servidor.enviar(aparelho, linhas);
     await duranteEnvio?.call();
-    return r;
+    return {...r, 'aparelho': idServidor};
   }
 
   @override
   Future<Map<String, dynamic>> espelhoPuxar(String? desde, {int limite = 2000}) async {
     if (semRede) throw http.ClientException('sem rede');
-    return servidor.puxar(desde, limite);
+    cursoresPedidos.add(desde);
+    return {...servidor.puxar(desde, limite), 'aparelho': idServidor};
   }
 }
 

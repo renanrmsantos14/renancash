@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
@@ -148,7 +149,7 @@ Future<void> _abrirWs() async {
   if (cliente == null) return;
   (_ws ??= MbEspelhoWs(
     abrir: () => mbCanalWsDoApp(cliente.base, cliente.token),
-    aparelho: () => mbEspelhoAparelhoId(database),
+    aparelho: () async => await mbLerEstado(mbChaveAparelhoServidor) ?? await mbEspelhoAparelhoId(database),
     aoMudou: mbEspelhoAgendador.pedirAgora,
     aoBanco: mbAgendador.pedirAgora,
   ))
@@ -166,10 +167,16 @@ void mbEspelhoSegundoPlano() {
   if (!kIsWeb) _ws?.parar();
 }
 
-Future<void> _iniciarEspelho() async {
+/// Põe fila, agendador e WebSocket de acordo com a flag `mbEspelho`; chamada na abertura e quando a flag muda.
+Future<void> mbEspelhoReavaliar() async {
+  final ligado = mbEspelhoLigado();
   // A fila só cresce com o espelho ativo; desligado, ela é esvaziada.
-  await mbEspelhoDefinirAtivo(database, mbEspelhoLigado());
-  if (!mbEspelhoLigado()) return;
+  await mbEspelhoDefinirAtivo(database, ligado);
+  if (!ligado) {
+    mbEspelhoAgendador.parar();
+    _ws?.parar();
+    return;
+  }
   mbEspelhoAgendador.iniciar();
   mbEspelhoAgendador.voltouAoApp();
   await _abrirWs();
@@ -183,7 +190,7 @@ void mbIniciarSyncAutomatico() {
   _automaticoIniciado = true;
   meuBancoVerificarPareado();
   mbAgendador.iniciar();
-  unawaited(_iniciarEspelho());
+  unawaited(mbEspelhoReavaliar());
   meuBancoSincronizando.addListener(() {
     if (!meuBancoSincronizando.value) mbAgendador.fimDeRodada();
   });
@@ -197,8 +204,8 @@ void mbIniciarSyncAutomatico() {
         database.transactions,
         database.associatedTitles,
       ]))
-      .listen((_) {
-    mbAgendador.aoEditar();
-    mbEspelhoAgendador.aoEditar();
-  });
+      .listen((_) => mbAgendador.aoEditar());
+  // Qualquer tabela (inclusive `mb_saida`, avisada ao enfileirar configurações): o espelho cobre mais tabelas que o
+  // sync antigo. O que o próprio pull grava não reagenda (`aoNotificar` e `_rodando`).
+  database.tableUpdates(const TableUpdateQuery.any()).listen((_) => mbEspelhoAgendador.aoEditar());
 }

@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:budget/database/tables.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/espelho.dart';
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
 import 'package:drift/native.dart';
@@ -164,5 +166,48 @@ void main() {
     await a.sincronizar();
     await b.sincronizar();
     expect((await b.db.customSelect('SELECT COUNT(*) n FROM categories').getSingle()).read<int>('n'), 30);
+  });
+
+  test('C2: edição mais antiga rejeitada traz a versão do servidor para B logo após o envio', () async {
+    await categoria(a.db, 'c1', 'Original');
+    await a.sincronizar();
+    await b.sincronizar();
+    await b.db.customStatement("UPDATE categories SET name = 'Do B' WHERE category_pk = 'c1'");
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await a.db.customStatement("UPDATE categories SET name = 'Do A' WHERE category_pk = 'c1'");
+    await a.espelho.enviar();
+    await b.espelho.enviar(); // só o envio: a versão vencedora vem em `atual`
+    expect(await b.nome('c1'), 'Do A');
+    expect(await fila(b.db), isEmpty);
+  });
+
+  test('C2: tabela desconhecida sai da fila e fica registrada em espelho_rejeitados', () async {
+    servidor.tabelasConhecidas.remove('categories');
+    await categoria(a.db, 'c1', 'Original');
+    await a.espelho.enviar();
+    expect(await fila(a.db), isEmpty);
+    final r = json.decode(await mbLerEstado('espelho_rejeitados', a.db) ?? '[]') as List;
+    expect(r.single['tabela'], 'categories');
+    expect(r.single['pk'], 'c1');
+    expect(r.single['motivo'], 'tabela_desconhecida');
+  });
+
+  test('C3: guarda o id do aparelho autenticado pelo servidor', () async {
+    a.cliente.idServidor = 'id-autenticado';
+    await categoria(a.db, 'c1', 'Original');
+    await a.sincronizar();
+    expect(await mbLerEstado(mbChaveAparelhoServidor, a.db), 'id-autenticado');
+  });
+
+  test('C4: a primeira página recua 30 s sem o sufixo e o cursor guardado não volta', () async {
+    await categoria(a.db, 'c1', 'Original');
+    await a.sincronizar();
+    await b.sincronizar();
+    await b.sincronizar();
+    final guardado = (await mbLerEstado('espelho_cursor', b.db))!;
+    final pedido = b.cliente.cursoresPedidos.last!;
+    expect(pedido.contains('|'), isFalse);
+    expect(DateTime.parse(pedido).isBefore(DateTime.parse(guardado.split('|').first)), isTrue);
+    expect(await mbLerEstado('espelho_cursor', b.db), guardado);
   });
 }

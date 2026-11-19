@@ -1197,7 +1197,16 @@ class FinanceDatabase extends _$FinanceDatabase {
           // The column already existed
         }
         // Depois do addColumn acima: o hash dos triggers vem da lista de colunas.
-        await mbEspelhoPrepararBanco(this);
+        // Falha aqui não pode impedir o app de abrir (com a flag ligada ou não): o espelho fica sem triggers.
+        try {
+          await mbEspelhoPrepararBanco(this);
+        } catch (e) {
+          print("Espelho: falha ao preparar o banco: $e");
+          try {
+            await customStatement(
+                'INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES (?, ?)', ['espelho_erro_banco', '$e']);
+          } catch (_) {}
+        }
 
         if (details.hadUpgrade && details.versionBefore != null) {
           print(
