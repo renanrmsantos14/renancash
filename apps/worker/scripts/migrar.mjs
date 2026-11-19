@@ -30,6 +30,9 @@ export const COLUNAS = {
 export const TABELAS = [
   "CREATE TABLE IF NOT EXISTS transacoes_removidas (id TEXT PRIMARY KEY, removida_em TEXT NOT NULL);",
   "CREATE INDEX IF NOT EXISTS idx_tx_removidas ON transacoes_removidas(removida_em);",
+  "CREATE TABLE IF NOT EXISTS espelho (tabela TEXT NOT NULL, pk TEXT NOT NULL, dados TEXT, updated_at TEXT NOT NULL, deleted_at TEXT, server_at TEXT NOT NULL, aparelho TEXT, PRIMARY KEY (tabela, pk));",
+  "CREATE INDEX IF NOT EXISTS idx_espelho_server ON espelho(server_at, tabela, pk);",
+  "CREATE TABLE IF NOT EXISTS espelho_meta (chave TEXT PRIMARY KEY, valor TEXT);",
 ];
 
 // Comandos ALTER TABLE para o que falta, dado { tabela: [colunas existentes] }. Tabela ausente fica de fora.
