@@ -22,6 +22,7 @@ class ServidorEspelho {
   String _serverAt() => '2026-11-18T00:00:00.${(++_relogio).toString().padLeft(6, '0')}Z';
 
   Map<String, dynamic> enviar(String aparelho, List<Map<String, dynamic>> lote) {
+    if (!semeado) throw MbErroHttp(409, 'nao_semeado');
     tamanhosDeLote.add(lote.length);
     var aceitos = 0;
     final rejeitados = <Map<String, dynamic>>[];

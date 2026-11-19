@@ -33,8 +33,6 @@ class MbEspelhoWs {
   bool _ativo = false;
   Duration _espera = const Duration(seconds: 1);
 
-  bool get ativo => _ativo;
-
   void iniciar() {
     if (_ativo) return;
     _ativo = true;
@@ -44,10 +42,15 @@ class MbEspelhoWs {
   void parar() {
     _ativo = false;
     _tReconectar?.cancel();
+    _tReconectar = null;
+    _fechar();
+  }
+
+  void _fechar() {
     _tPing?.cancel();
     _sub?.cancel();
     _canal?.sink.close();
-    _canal = _sub = _tReconectar = _tPing = null;
+    _canal = _sub = _tPing = null;
   }
 
   void _conectar() {
@@ -75,10 +78,7 @@ class MbEspelhoWs {
   }
 
   void _cair() {
-    _tPing?.cancel();
-    _sub?.cancel();
-    _canal?.sink.close();
-    _canal = _sub = _tPing = null;
+    _fechar();
     if (!_ativo || _tReconectar != null) return;
     final espera = _espera;
     _espera = _espera * 2 > reconexaoMax ? reconexaoMax : _espera * 2;

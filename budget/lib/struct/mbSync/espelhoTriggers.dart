@@ -39,8 +39,8 @@ const String mbDdlApagados = 'CREATE TABLE IF NOT EXISTS mb_apagados ('
 const String mbDdlRevisoes = 'CREATE TABLE IF NOT EXISTS mb_revisoes ('
     'pk TEXT PRIMARY KEY, dados TEXT)';
 
-const String _agoraSql = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
-const String _ligado = '(SELECT aplicando = 0 AND ativo = 1 FROM mb_espelho_ctl WHERE id = 0)';
+const String mbAgoraSql = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
+const String mbEspelhoLigadoSql = '(SELECT aplicando = 0 AND ativo = 1 FROM mb_espelho_ctl WHERE id = 0)';
 
 /// Colunas que não viajam, com o nome do SQLite (`dateTimeModified` -> `date_time_modified`).
 final Set<String> mbColunasSemEspelho = {
@@ -95,7 +95,7 @@ String _hash(String texto) {
 }
 
 String _enfileirar(String tabela, String pkExpr) =>
-    "INSERT INTO mb_saida (tabela, pk, em) VALUES ('$tabela', $pkExpr, $_agoraSql) "
+    "INSERT INTO mb_saida (tabela, pk, em) VALUES ('$tabela', $pkExpr, $mbAgoraSql) "
     'ON CONFLICT (tabela, pk) DO UPDATE SET em = excluded.em;';
 
 /// Os três triggers (nome -> SQL) de uma tabela. O hash das colunas e da pk vai no nome: coluna nova gera outro nome,
@@ -106,15 +106,15 @@ Map<String, String> mbTriggersDaTabela(MbEstruturaTabela t) {
   final mudou = [for (final c in t.enviadas) 'OLD.${mbAspas(c)} IS NOT NEW.${mbAspas(c)}'].join(' OR ');
   return {
     '${nome}_ins_$h': 'CREATE TRIGGER IF NOT EXISTS ${nome}_ins_$h AFTER INSERT ON ${t.nome} '
-        'WHEN $_ligado BEGIN ${_enfileirar(t.nome, t.pkSql('NEW'))} END',
+        'WHEN $mbEspelhoLigadoSql BEGIN ${_enfileirar(t.nome, t.pkSql('NEW'))} END',
     // Mudar a pk apaga a linha antiga no servidor: enfileira as duas.
     '${nome}_upd_$h': 'CREATE TRIGGER IF NOT EXISTS ${nome}_upd_$h AFTER UPDATE ON ${t.nome} '
-        'WHEN $_ligado AND ($mudou) BEGIN ${_enfileirar(t.nome, t.pkSql('NEW'))} '
-        "INSERT INTO mb_saida (tabela, pk, em) SELECT '${t.nome}', ${t.pkSql('OLD')}, $_agoraSql "
+        'WHEN $mbEspelhoLigadoSql AND ($mudou) BEGIN ${_enfileirar(t.nome, t.pkSql('NEW'))} '
+        "INSERT INTO mb_saida (tabela, pk, em) SELECT '${t.nome}', ${t.pkSql('OLD')}, $mbAgoraSql "
         'WHERE ${t.pkSql('OLD')} IS NOT ${t.pkSql('NEW')} '
         'ON CONFLICT (tabela, pk) DO UPDATE SET em = excluded.em; END',
     '${nome}_del_$h': 'CREATE TRIGGER IF NOT EXISTS ${nome}_del_$h AFTER DELETE ON ${t.nome} '
-        'WHEN $_ligado BEGIN ${_enfileirar(t.nome, t.pkSql('OLD'))} END',
+        'WHEN $mbEspelhoLigadoSql BEGIN ${_enfileirar(t.nome, t.pkSql('OLD'))} END',
   };
 }
 
@@ -169,8 +169,6 @@ Future<void> mbEspelhoDerrubarTriggers(GeneratedDatabase db) async {
 /// Liga ou desliga a fila (o que o trigger consulta). Desligar também esvazia a fila: sem o espelho ativo ela
 /// ficaria velha, e quem ligar de novo semeia ou baixa tudo.
 Future<void> mbEspelhoDefinirAtivo(GeneratedDatabase db, bool ativo) async {
-  final atual = await db.customSelect('SELECT ativo FROM mb_espelho_ctl WHERE id = 0').getSingleOrNull();
-  if (atual == null || (atual.read<int>('ativo') == 1) == ativo) return;
   await db.customStatement('UPDATE mb_espelho_ctl SET ativo = ? WHERE id = 0', [ativo ? 1 : 0]);
   if (!ativo) await db.customStatement('DELETE FROM mb_saida');
 }

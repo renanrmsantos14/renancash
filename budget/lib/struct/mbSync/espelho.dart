@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerEstado;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigLocal;
 import 'package:budget/struct/mbSync/espelhoTriggers.dart';
@@ -23,8 +24,7 @@ bool mbEspelhoLigado() => appStateSettings['mbEspelho'] == true;
 /// Enfileira uma entrada de `_config` (configuração ou marcação). Só entra se o espelho está ativo e o pull não está
 /// aplicando; é a mesma regra dos triggers.
 Future<void> mbEspelhoEnfileirarConfig(String pk) => database.customStatement(
-    "INSERT INTO mb_saida (tabela, pk, em) SELECT '$mbEntidadeConfig', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now') "
-    'WHERE (SELECT aplicando = 0 AND ativo = 1 FROM mb_espelho_ctl WHERE id = 0) '
+    "INSERT INTO mb_saida (tabela, pk, em) SELECT '$mbEntidadeConfig', ?, $mbAgoraSql WHERE $mbEspelhoLigadoSql "
     'ON CONFLICT (tabela, pk) DO UPDATE SET em = excluded.em',
     [pk]);
 
@@ -41,14 +41,9 @@ Future<void> mbEspelhoEstadoMudou(Iterable<String> chaves) async {
   }
 }
 
-Future<String?> _lerEstado(GeneratedDatabase db, String chave) async => (await db.customSelect(
-        'SELECT valor FROM mb_estado WHERE chave = ?',
-        variables: [Variable<String>(chave)]).getSingleOrNull())
-    ?.read<String>('valor');
-
 /// UUID deste aparelho no espelho; o servidor o usa no desempate e no aviso `mudou`.
 Future<String> mbEspelhoAparelhoId(GeneratedDatabase db) async {
-  var id = await _lerEstado(db, 'espelho_aparelho');
+  var id = await mbLerEstado('espelho_aparelho', db);
   if (id == null) {
     id = const Uuid().v4();
     await db.customStatement(
@@ -82,12 +77,8 @@ class MbEspelho {
       ? _estruturas[tabela]
       : _estruturas[tabela] = await mbEstruturaTabela(db, tabela);
 
-  Future<String?> _estado(String chave) => _lerEstado(db, chave);
-
   Future<void> _gravarEstado(String chave, String valor) => db.customStatement(
       'INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES (?, ?)', [chave, valor]);
-
-  Future<String> aparelho() => mbEspelhoAparelhoId(db);
 
   /// Envia e depois puxa. Nunca lança: falha vira `false` e o agendador tenta de novo.
   Future<bool> sincronizar() async {
@@ -104,7 +95,7 @@ class MbEspelho {
   // --- envio ---
 
   Future<void> enviar() async {
-    final id = await aparelho();
+    final id = await mbEspelhoAparelhoId(db);
     while (true) {
       final fila = await db
           .customSelect('SELECT tabela, pk, em FROM mb_saida ORDER BY em, tabela, pk LIMIT ?',
@@ -160,7 +151,7 @@ class MbEspelho {
 
   Future<Map<String, dynamic>?> _dadosConfig(String pk) async {
     if (pk.startsWith(_prefixoEstado)) {
-      final v = await _estado(pk.substring(_prefixoEstado.length));
+      final v = await mbLerEstado(pk.substring(_prefixoEstado.length), db);
       return v == null ? null : {'v': v};
     }
     final c = configuracoes();
@@ -170,7 +161,7 @@ class MbEspelho {
   // --- pull ---
 
   Future<void> puxar() async {
-    var cursor = await _estado('espelho_cursor');
+    var cursor = await mbLerEstado('espelho_cursor', db);
     while (true) {
       final r = await cliente.espelhoPuxar(cursor, limite: _lotePull);
       // Antes do semeio o servidor não tem dados: não há o que aplicar.
@@ -231,8 +222,8 @@ class MbEspelho {
   Future<bool> _upsert(MbEstruturaTabela t, Map<String, dynamic> dados) async {
     // Só colunas que este aparelho conhece: coluna de versão mais nova do app fica de fora.
     final cols = [
-      for (final c in t.colunas)
-        if (dados.containsKey(c) && !mbColunasSemEspelho.contains(c)) c
+      for (final c in t.enviadas)
+        if (dados.containsKey(c)) c
     ];
     if (!t.pk.every(cols.contains)) return false;
     final demais = [for (final c in cols) if (!t.pk.contains(c)) c];

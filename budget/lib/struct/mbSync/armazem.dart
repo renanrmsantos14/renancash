@@ -94,8 +94,8 @@ Future<void> mbMarcarEnviados(
       ]));
 }
 
-Future<String?> mbLerEstado(String chave) async {
-  final l = await database.customSelect('SELECT valor FROM mb_estado WHERE chave = ?',
+Future<String?> mbLerEstado(String chave, [GeneratedDatabase? db]) async {
+  final l = await (db ?? database).customSelect('SELECT valor FROM mb_estado WHERE chave = ?',
       variables: [Variable.withString(chave)]).getSingleOrNull();
   return l?.read<String>('valor');
 }

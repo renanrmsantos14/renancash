@@ -1,6 +1,6 @@
 import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador, mbEspelhoAgendador;
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoConfigMudou;
-import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigsSincronizadas;
+import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigLocal, mbConfigsSincronizadas;
 import 'package:budget/struct/mbSync/inicioOrdem.dart' show mbMigrarOrdemInicio;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
@@ -195,7 +195,7 @@ Future<bool> updateSettings(
   if (isChanged && mbConfigsSincronizadas.contains(setting)) mbAgendador.aoEditar();
   if (isChanged && sincronizar) {
     await mbEspelhoConfigMudou(setting);
-    mbEspelhoAgendador.aoEditar();
+    if (!mbConfigLocal(setting)) mbEspelhoAgendador.aoEditar();
   }
 
   if (updateGlobalState == true) {

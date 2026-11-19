@@ -151,6 +151,16 @@ void main() {
     expect(await linhaDe(db, 'categories', 'category_pk', 'c1'), isNull);
   });
 
+  test('servidor sem semeio responde 409 ao envio: a fila continua e o ciclo tenta de novo', () async {
+    servidor.semeado = false;
+    await categoria(db, 'c1', 'A');
+    expect(await espelho.sincronizar(), isFalse);
+    expect(await fila(db), ['categories|c1']);
+    servidor.semeado = true;
+    expect(await espelho.sincronizar(), isTrue);
+    expect(await fila(db), isEmpty);
+  });
+
   test('1.000 linhas remotas em páginas de 400', () async {
     servidor.paginaMax = 400;
     for (var i = 0; i < 1000; i++) {
