@@ -20,11 +20,15 @@ test("sem token e sem sessão: 401", async () => {
   assert.equal((await pedir("/api/sync", { headers: { authorization: "Bearer mb_" + "x".repeat(43) } })).status, 401);
 });
 
-test("push grava, pull completo devolve e pull incremental traz só o que mudou", async () => {
-  const { enviar, puxar } = await preparar();
-  const r1 = await (await enviar([reg(), reg({ id: "c2", dados: { nome: "Salário", tipo: "receita" } })])).json();
-  assert.equal(r1.aceitos, 2);
-  assert.deepEqual(r1.rejeitados, []);
+// `registros` virou histórico: o teste grava direto no D1 (o app não escreve mais ali).
+const gravar = (db, r, serverAt = "2026-11-01T11:00:00.000Z") =>
+  db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+    .bind(r.tabela, r.id, r.dados ? JSON.stringify(r.dados) : null, r.updated_at, r.deleted_at, serverAt).run();
+
+test("pull completo devolve o histórico de registros e o incremental traz só o que mudou", async () => {
+  const { env, puxar } = await preparar();
+  await gravar(env.DB, reg());
+  await gravar(env.DB, reg({ id: "c2", dados: { nome: "Salário", tipo: "receita" } }));
 
   const completo = await (await puxar()).json();
   assert.equal(completo.completo, true);
@@ -38,63 +42,21 @@ test("push grava, pull completo devolve e pull incremental traz só o que mudou"
 
   const depois = new Date(Date.parse(completo.agora) + 3 * 60_000).toISOString();
   assert.equal((await (await puxar(depois)).json()).registros.length, 0, "fora da sobreposição de 2 min");
-  assert.equal((await (await puxar(completo.agora)).json()).registros.length, 2, "dentro da sobreposição: reentrega idempotente");
 });
 
-test("last-write-wins no D1: antigo ou igual não sobrescreve; mais novo sim; exclusão propaga", async () => {
-  const { enviar, puxar, env } = await preparar();
-  const nome = async () => JSON.parse(await env.DB.prepare("SELECT dados FROM registros WHERE id = 'c1'").first("dados")).nome;
-  await enviar([reg()]);
-  await enviar([reg({ dados: { nome: "Antigo", tipo: "despesa" }, updated_at: "2026-11-01T10:00:00.000Z" })]);
-  await enviar([reg({ dados: { nome: "Igual", tipo: "despesa" } })]);
-  assert.equal(await nome(), "Mercado");
-  await enviar([reg({ dados: { nome: "Feira", tipo: "despesa" }, updated_at: "2026-11-01T11:30:00.000Z" })]);
-  assert.equal(await nome(), "Feira");
-
-  const { agora } = await (await puxar()).json();
-  await enviar([reg({ dados: null, deleted_at: "2026-11-01T11:40:00.000Z", updated_at: "2026-11-01T11:40:00.000Z" })]);
-  assert.equal((await (await puxar()).json()).registros.length, 0, "pull completo não traz exclusões");
-  const inc = await (await puxar(agora)).json();
-  assert.equal(inc.registros[0].deleted_at, "2026-11-01T11:40:00.000Z");
-  assert.equal(inc.registros[0].dados, null);
-});
-
-test("mesmo id duas vezes no lote: fica o updated_at mais novo; empate, o primeiro", async () => {
+test("POST /api/sync com registros responde 410 e não grava nada", async () => {
   const { enviar, env } = await preparar();
-  const nome = async () => JSON.parse(await env.DB.prepare("SELECT dados FROM registros WHERE id = 'c1'").first("dados")).nome;
-  const r = await (await enviar([
-    reg({ dados: { nome: "Velho", tipo: "despesa" }, updated_at: "2026-11-01T10:00:00.000Z" }),
-    reg({ dados: { nome: "Novo", tipo: "despesa" }, updated_at: "2026-11-01T11:00:00.000Z" }),
-  ])).json();
-  assert.equal(r.ok, true);
-  assert.equal(await nome(), "Novo", "mais novo vence mesmo vindo depois");
-  await enviar([
-    reg({ dados: { nome: "Novo-invertido", tipo: "despesa" }, updated_at: "2026-11-01T11:10:00.000Z" }),
-    reg({ dados: { nome: "Antigo-depois", tipo: "despesa" }, updated_at: "2026-11-01T10:30:00.000Z" }),
-  ]);
-  assert.equal(await nome(), "Novo-invertido", "mais novo vence mesmo vindo antes");
-  await enviar([
-    reg({ id: "c3", dados: { nome: "Primeiro", tipo: "despesa" } }),
-    reg({ id: "c3", dados: { nome: "Segundo", tipo: "despesa" } }),
-  ]);
-  const c3 = JSON.parse(await env.DB.prepare("SELECT dados FROM registros WHERE id = 'c3'").first("dados"));
-  assert.equal(c3.nome, "Primeiro", "empate: o primeiro vence");
+  const r = await enviar([reg()]);
+  assert.equal(r.status, 410);
+  assert.match((await r.json()).erro, /descontinuada/);
+  assert.equal(await env.DB.prepare("SELECT COUNT(*) AS n FROM registros").first("n"), 0);
 });
 
-test("inválidos voltam em rejeitados; lote malformado e desde inválido são 400", async () => {
-  const { enviar, pedir, auth } = await preparar();
-  const r = await (await enviar([reg(), reg({ id: "" })])).json();
-  assert.equal(r.aceitos, 1);
-  assert.deepEqual(r.rejeitados, [{ indice: 1, motivo: "id inválido" }]);
-  assert.equal((await pedir("/api/sync", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: "{}" })).status, 400);
-  assert.equal((await pedir("/api/sync?desde=ontem", { headers: auth })).status, 400);
-});
-
-test("sessão do painel também sincroniza; POST com cookie de outra origem é 403", async () => {
+test("sessão do painel também sincroniza (pull); POST com cookie de outra origem é 403", async () => {
   const { enviar, puxar, pedir } = await preparar();
   const cookie = await entrarComSenha(pedir);
   assert.equal((await puxar(null, { cookie })).status, 200);
-  assert.equal((await enviar([reg()], { cookie, origin: ORIGEM })).status, 200);
+  assert.equal((await enviar([reg()], { cookie, origin: ORIGEM })).status, 410);
   assert.equal((await enviar([reg()], { cookie, origin: "https://outro.site" })).status, 403);
 });
 

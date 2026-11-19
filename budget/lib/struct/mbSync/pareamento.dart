@@ -6,6 +6,7 @@ import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
+import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/navigationFramework.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:flutter/foundation.dart';
@@ -141,4 +142,25 @@ Future<bool> mbConfirmarEParear(BuildContext? context, MbPareamento p) async {
   if (!await mbConfirmarHost(context, p.base)) return false;
   await mbParear(p);
   return true;
+}
+
+/// Zera o que sincroniza (mbTrocarConta já limpa espelho, estado, aplicados e o que veio do banco).
+/// Ficam a carteira e a categoria '0', que existem em todo aparelho; o resto volta do servidor no pull.
+Future<void> mbLimparDadosLocais() async {
+  await mbTrocarConta();
+  await database.transaction(() async {
+    for (final sql in const [
+      'DELETE FROM mb_orcamento_tx',
+      'DELETE FROM transactions',
+      'DELETE FROM category_budget_limits',
+      'DELETE FROM budgets',
+      'DELETE FROM objectives',
+      'DELETE FROM associated_titles',
+      "DELETE FROM wallets WHERE wallet_pk <> '0'",
+      "DELETE FROM categories WHERE category_pk <> '0'",
+    ]) {
+      await database.customStatement(sql);
+    }
+  });
+  await updateSettings('selectedWalletPk', '0', updateGlobalState: true);
 }

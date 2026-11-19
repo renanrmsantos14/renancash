@@ -4,17 +4,14 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/pages/addWalletPage.dart'
     show initializeBalanceCorrectionCategory;
 import 'package:budget/struct/databaseGlobal.dart';
-import 'package:budget/struct/mbSync/aplicarLocal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoCarregarEstado, mbEspelhoLigado;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoCarregarEstado;
 import 'package:budget/struct/mbSync/orcamentos.dart';
-import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
+import 'package:budget/struct/mbSync/contextoLocal.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
-import 'package:budget/struct/mbSync/detectar.dart';
-import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/extrasTransacao.dart';
+import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
-import 'package:budget/struct/mbSync/projetarLocal.dart';
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/mbSync/revisao.dart';
 import 'package:budget/struct/mbSync/widget.dart';
@@ -35,8 +32,8 @@ const String _chaveUrl = "meu_banco_url";
 const String _chaveDesde = "meuBancoDesde";
 // Marca a conversão do histórico para as categorias próprias: uma única carga completa refaz as categorias.
 const String _chaveConversao = "conv_categorias_v1";
-// Uma decisão da fila "Para revisar" (daqui ou de outro aparelho) muda como transações antigas são mapeadas:
-// o pull incremental não as traz de volta, então a próxima sincronização refaz a carga completa.
+// Uma decisão da fila "Para revisar" deste aparelho muda como transações antigas são mapeadas: o pull incremental não
+// as traz de volta, então a próxima sincronização refaz a carga completa. Decisões de outros aparelhos chegam pelo espelho.
 const String _chaveRepuxar = "repuxar_revisoes";
 
 const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -45,7 +42,6 @@ const FlutterSecureStorage _storage = FlutterSecureStorage();
 final ValueNotifier<String?> meuBancoUltimoErro = ValueNotifier(null);
 final ValueNotifier<DateTime?> meuBancoUltimaSync = ValueNotifier(null);
 final ValueNotifier<bool> meuBancoSincronizando = ValueNotifier(false);
-final ValueNotifier<MbFila> meuBancoFila = ValueNotifier(const MbFila(0, []));
 // Verdadeiro quando o app está pareado (token guardado) ou na web, que usa o cookie da mesma origem.
 final ValueNotifier<bool> meuBancoPareado = ValueNotifier(kIsWeb);
 
@@ -103,18 +99,16 @@ Future<void> meuBancoDesconectar() async {
   meuBancoUltimaSync.value = null;
 }
 
-Future<void> meuBancoAtualizarFila() async {
+Future<void> meuBancoAtualizarRevisar() async {
   try {
     await mbCriarTabelas();
-    meuBancoFila.value = await mbLerFila();
     await mbAtualizarRevisar();
   } catch (e) {
-    if (kDebugMode) debugPrint("Meu Banco: falha ao ler a fila: $e");
+    if (kDebugMode) debugPrint("Meu Banco: falha ao atualizar a fila Para revisar: $e");
   }
 }
 
-// O cursor saiu dos settings (que vão para backups) e passou para mb_estado. Transações
-// `mb:` já importadas entram em mb_aplicado, para o usuário poder apagar/recategorizar.
+// O cursor saiu dos settings (que vão para backups) e passou para mb_estado.
 Future<void> _migrarCursorAntigo() async {
   final antigo = appStateSettings[_chaveDesde];
   if (antigo == null) return;
@@ -122,89 +116,9 @@ Future<void> _migrarCursorAntigo() async {
       antigo.isNotEmpty &&
       await mbLerEstado('cursor') == null) {
     await mbGravarEstado({'cursor': antigo});
-    await mbGravarAplicado({
-      for (final t in await database.select(database.transactions).get())
-        if (t.transactionPk.startsWith(mbPrefixo)) t.transactionPk: t.categoryFk
-    }, const []);
   }
   await updateSettings(_chaveDesde, null, updateGlobalState: false);
 }
-
-// Falha de rede no envio não impede o pull; a fila continua para a próxima rodada.
-Future<void> _enviarFila(MbCliente cliente) async {
-  try {
-    while (true) {
-      final lote = await mbPendentes();
-      if (lote.isEmpty) return;
-      final r = await cliente.enviar([for (final e in lote) e.registro]);
-      await mbMarcarEnviados(
-          lote, {for (final x in r.rejeitados) x.indice: x.motivo});
-    }
-  } on TimeoutException {
-    return;
-  } on http.ClientException {
-    return;
-  }
-}
-
-// Ajuste que muda como a transação é mapeada (categoria, "não é gasto"), agora ou antes.
-// Só a escolha de orçamentos não conta: ela é aplicada direto, sem remapear.
-bool _ajusteMudaMapeamento(Registro novo, Registro? antigo) {
-  bool tem(Registro? r) {
-    final d = r?.dados;
-    return r != null &&
-        r.deletedAt == null &&
-        d != null &&
-        (d['categoria_id'] != null || d['category'] != null || d['gasto'] != null);
-  }
-
-  return tem(novo) || tem(antigo);
-}
-
-// Puxa e grava no espelho o que venceu. `refazer` diz se chegou algo que muda o mapeamento de transações antigas
-// (decisão da fila "Para revisar" ou ajuste de categoria / "não é gasto"): o pull incremental não as traz de volta.
-// Ajuste remoto novo "não é gasto" vale também para a transação já importada: ela sai do app, sem gerar ajuste de volta.
-Future<({Map<String, dynamic> json, bool refazer})> _puxarEAplicar(
-    MbCliente cliente, String? desde) async {
-  final json = await cliente.puxar(desde);
-  // Com o espelho ligado as decisões (`revisoes`) chegam só pelo espelho: o Worker antigo ainda guarda versões velhas
-  // delas, e gravá-las em mb_revisoes (tabela espelhada) enviaria decisões desfeitas por cima das novas.
-  final semRevisoes = mbEspelhoLigado();
-  final registros = [
-    for (final r in (json['registros'] as List? ?? const []))
-      if (!semRevisoes || (r as Map)['tabela'] != 'revisoes') Registro.fromJson((r as Map).cast<String, dynamic>())
-  ];
-  final espelho = await mbLerEspelho();
-  final vencedores = remotosVencedores(espelho, registros);
-  await mbAplicarRegistros(vencedores, espelho);
-  final gastoZero = [
-    for (final r in vencedores)
-      if (r.tabela == 'ajustes' && r.deletedAt == null && r.dados?['gasto'] == 0)
-        mbPkTransacao(r.id)
-  ];
-  if (gastoZero.isNotEmpty) {
-    await (database.delete(database.transactions)
-          ..where((t) => t.transactionPk.isIn(gastoZero)))
-        .go();
-    await mbGravarAplicado(const {}, gastoZero);
-  }
-  return (
-    json: json,
-    refazer: vencedores.any((r) =>
-        r.tabela == 'revisoes' ||
-        (r.tabela == 'ajustes' &&
-            _ajusteMudaMapeamento(r, espelho[r.chave]?.registro))),
-  );
-}
-
-// Gastos que algum reembolso aponta (decisão `reembolso_de`): quando a categoria deles muda, o reembolso acompanha.
-Set<String> _gastosVinculados(Map<String, Espelho> espelho) => {
-      for (final e in espelho.values)
-        if (e.registro.tabela == 'revisoes' &&
-            e.registro.deletedAt == null &&
-            e.registro.dados?['reembolso_de'] is String)
-          e.registro.dados!['reembolso_de'] as String
-    };
 
 // Rodada em andamento e, no máximo, uma rodada extra à espera. Chamada que chega durante um sync (pull da Início
 // junto com "Atualizar", pull depois do Pluggy) não se perde nem forma fila: todas dividem a mesma rodada extra,
@@ -223,7 +137,7 @@ Future<bool> sincronizarMeuBanco({MbCliente? clienteParaTeste}) {
 }
 
 Future<bool> _rodar(MbCliente? clienteParaTeste) =>
-    _rodarCom(() => _sincronizarUmaVez(clienteParaTeste));
+    _rodarCom(() => _puxarUmaVez(clienteParaTeste));
 
 // Roda `acao` como a rodada em curso: o sync periódico e os pulls que chegarem no meio esperam a rodada extra.
 // Para operações que trocam o estado inteiro (enviar tudo como oficial, recomeçar pela nuvem).
@@ -249,7 +163,7 @@ Future<T> mbEmRodada<T>(Future<T> Function() acao) async {
 
 // Uma sincronização dentro de `mbEmRodada` (que já é a rodada em curso: sincronizarMeuBanco ficaria esperando por ela).
 Future<bool> mbSincronizarNaRodada(MbCliente? cliente) =>
-    _sincronizarUmaVez(cliente);
+    _puxarUmaVez(cliente);
 
 Future<bool> _rodarCom(Future<bool> Function() corpo) async {
   meuBancoSincronizando.value = true;
@@ -271,62 +185,20 @@ Future<bool> _rodarCom(Future<bool> Function() corpo) async {
   return ok;
 }
 
-Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
+Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
   try {
     final cliente = clienteParaTeste ?? await mbClienteConfigurado();
     if (cliente == null) return false; // não configurado: silencioso
     await mbCriarTabelas();
-    // Sem o estado do espelho carregado, `mbEspelhoLigado()` diria "desligado" no começo do boot.
+    // O estado do espelho precisa estar carregado antes de qualquer leitura de `mbEspelhoApagadas`.
     await mbEspelhoCarregarEstado();
     await _migrarCursorAntigo();
 
-    final agora = isoMs(DateTime.now());
-    var espelho = await mbLerEspelho();
-    final existentes = <String>{};
-    final atuais = await mbProjetarLocal(espelho, await mbLerAplicado(),
-        agora: agora, existentes: existentes);
-    final soLinha = <Espelho>[];
-    final mudancas = detectarMudancasLocais(
-        espelho: espelho,
-        atuais: atuais,
-        agora: agora,
-        existentes: existentes,
-        soLinha: soLinha);
-    if (soLinha.isNotEmpty) await mbGravarEspelho(soLinha);
-    // Ajustes não têm exclusão local, mas guardam a projeção para não serem reenviados a cada rodada.
-    await mbGravarEspelho([
-      for (final m in mudancas)
-        Espelho(m.registro, m.projecao ?? atuais[m.registro.chave]?.dados, true,
-            null)
-    ]);
-    await _enviarFila(cliente);
-
     final convertido = await mbLerEstado(_chaveConversao) != null;
-    final desde = convertido ? await mbLerEstado('cursor') : null;
-    var repuxar = await mbLerEstado(_chaveRepuxar);
-    // Trocar a categoria de um gasto com reembolso ligado: o reembolso (que não vem no pull incremental) acompanha.
-    final ajustesLocais = [
-      for (final m in mudancas)
-        if (m.registro.tabela == 'ajustes') m.registro.id
-    ];
-    if (repuxar == null &&
-        ajustesLocais.isNotEmpty &&
-        ajustesLocais.any(_gastosVinculados(espelho).contains)) {
-      repuxar = agora;
-      await mbGravarEstado({_chaveRepuxar: repuxar});
-    }
-    final puxado = await _puxarEAplicar(cliente, desde);
-    var json = puxado.json;
-    // A marca vai para o disco antes do pull completo: se ele falhar, a próxima rodada refaz (o ajuste remoto já
-    // está no espelho e não "venceria" de novo).
-    if (convertido && puxado.refazer && repuxar == null) {
-      repuxar = isoMs(DateTime.now());
-      await mbGravarEstado({_chaveRepuxar: repuxar});
-    }
-    if (convertido && repuxar != null) {
-      json = (await _puxarEAplicar(cliente, null)).json;
-    }
-    espelho = await mbLerEspelho();
+    final repuxar = await mbLerEstado(_chaveRepuxar);
+    // Pull completo na primeira vez, depois de converter as categorias e quando uma resposta da fila pede o remapeamento.
+    final json = await cliente.puxar(
+        convertido && repuxar == null ? await mbLerEstado('cursor') : null);
 
     final categorias = await database.select(database.categories).get();
     final locais = {for (final c in categorias) c.categoryPk};
@@ -334,11 +206,10 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     final porNome = {
       for (final c in categorias) '${c.income}:${c.name.toLowerCase()}': c.categoryPk
     };
-    final ctx = MbContextoCategoria.deRegistros(
-        [for (final e in espelho.values) e.registro]);
+    final ctx = await mbContextoLocal();
     final historico = await _comprasLocais();
     final resultado = mbMapearPull(json, ctx,
-        revisoes: MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]),
+        revisoes: MbRevisoes.deLinhas(await mbLerRevisoes()),
         compras: historico.compras,
         abatimentos: historico.abatimentos,
         destinos: mbResolverDestinos([
@@ -407,7 +278,7 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     if (kDebugMode) debugPrint("Meu Banco: falha na sincronização: $e");
     meuBancoUltimoErro.value = "Não foi possível sincronizar agora.";
   } finally {
-    await meuBancoAtualizarFila();
+    await meuBancoAtualizarRevisar();
   }
   return false;
 }
@@ -493,15 +364,13 @@ Future<void> _aplicar(MbResultado r) async {
       skipPaid: const Value(false),
       methodAdded: const Value(MethodAdded.csv),
     );
-    // Com o espelho ligado a linha é compartilhada: a atualização grava só o que vem do banco (e a categoria
-    // decidida nas revisões, até a revisão passar a editar a linha direto). Pago, "pular pagamento" e origem
-    // pertencem a quem editou, e reescrevê-los a cada pull brigaria com os outros aparelhos.
-    final atualizacao = mbEspelhoLigado()
-        ? dados.copyWith(
-            paid: const Value.absent(),
-            skipPaid: const Value.absent(),
-            methodAdded: const Value.absent())
-        : dados;
+    // A linha é compartilhada com os outros aparelhos pelo espelho: a atualização grava só o que vem do banco e a
+    // categoria decidida pelo mapeador. Pago, "pular pagamento" e origem pertencem a quem editou, e reescrevê-los
+    // a cada pull brigaria com os outros aparelhos.
+    final atualizacao = dados.copyWith(
+        paid: const Value.absent(),
+        skipPaid: const Value.absent(),
+        methodAdded: const Value.absent());
     await database.into(database.transactions).insert(
         dados.copyWith(
             name: Value(t.nome),
@@ -510,26 +379,17 @@ Future<void> _aplicar(MbResultado r) async {
             subCategoryFk: Value(t.subcategoriaPk)),
         onConflict: DoUpdate((_) => atualizacao));
   }
-  final removidos = <String>[];
   // Importada antes de virar "não é gasto" (transferência): sai do app, sem ajuste para o servidor.
   if (r.naoGastoPks.isNotEmpty) {
     final alvos = r.naoGastoPks.toList();
-    final existentes = await (database.select(database.transactions)
-          ..where((t) => t.transactionPk.isIn(alvos)))
-        .get();
-    removidos.addAll(existentes.map((t) => t.transactionPk));
     // Direto no Drift, como nas contas ignoradas: sem "apagados recentemente".
     await (database.delete(database.transactions)
           ..where((t) => t.transactionPk.isIn(alvos)))
         .go();
   }
   // Conta ignorada importada antes desta regra: apaga a carteira e os lançamentos dela.
-  // Os pks saem de mb_aplicado; senão a projeção os veria como apagados e mandaria "não é gasto" ao servidor.
   for (final pk in r.contasIgnoradasPks) {
     if (await database.getWalletInstanceOrNull(pk) == null) continue;
-    for (final t in await database.getAllTransactionsFromWallet(pk)) {
-      if (t.transactionPk.startsWith(mbPrefixo)) removidos.add(t.transactionPk);
-    }
     // Direto no Drift: deleteWallet mandaria os lançamentos para "apagados recentemente".
     await (database.delete(database.transactions)
           ..where((t) => t.walletFk.equals(pk)))
@@ -552,12 +412,9 @@ Future<void> _aplicar(MbResultado r) async {
           !r.pendentesPks.contains(t.transactionPk)) {
         await database.deleteTransaction(t.transactionPk,
             updateSharedEntry: false);
-        removidos.add(t.transactionPk);
       }
     }
   }
-  await mbGravarAplicado({for (final t in transacoes) t.pk: t.categoriaPk},
-      removidos);
 }
 
 // Despesas `mb:` já no app: um estorno novo pode abater uma compra de um pull anterior (valor negativo),
@@ -639,11 +496,8 @@ Future<void> mbResponderRevisao(MbItemRevisao item, String resposta,
   if (item.txId == null || !mbRespostasRevisao.contains(resposta)) return;
   if (resposta == 'categoria' && categoriaPk == null) return;
   await mbCriarTabelas();
-  await mbGravarEspelho([
-    for (final r in mbRegistrosDeResposta(item, resposta,
-        categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, agora: isoMs(DateTime.now())))
-      Espelho(r, null, true, null)
-  ]);
+  await mbGravarRevisoes(mbRegistrosDeResposta(item, resposta,
+      categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, agora: isoMs(DateTime.now())));
   await mbGravarEstado({_chaveRepuxar: isoMs(DateTime.now())});
   await mbAtualizarRevisar();
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
@@ -654,7 +508,7 @@ Future<void> mbResponderRevisao(MbItemRevisao item, String resposta,
 Future<void> mbDesfazerRevisao(String txId, {MbCliente? clienteParaTeste}) async {
   await mbCriarTabelas();
   final agora = isoMs(DateTime.now());
-  await mbGravarEspelho([Espelho(Registro('revisoes', 'tx:$txId', null, agora, agora), null, true, null)]);
+  await mbGravarRevisoes([Registro('revisoes', 'tx:$txId', null, agora, agora)]);
   await mbGravarEstado({_chaveRepuxar: agora});
   await mbAtualizarRevisar();
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);

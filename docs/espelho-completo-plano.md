@@ -113,6 +113,14 @@ Risco: projeção de ajustes divergir em estorno e investimento `mb:inv:`.
 Remover: `projetarLocal.dart`, `oficial.dart` (menos `mbLimparDadosLocais`), `detectar.dart`, a aplicação de `registros` em `aplicarLocal.dart`, envio em `meuBancoSync.dart` (`_sincronizarUmaVez`), repuxar, o botão, `POST /api/sync` com registros (410). Manter: pull do banco, Pluggy, IA, notificações, workmanager, `registros` no D1.
 Verificação: uma semana de uso real antes de apagar; grep por `mbTornarOficial|projetar|detectarMudancasLocais` vazio.
 
+#### F5 implementada
+- Removido no app: `projetarLocal.dart`, `oficial.dart` (o `mbLimparDadosLocais` foi para `pareamento.dart`), `detectar.dart`, `aplicarLocal.dart` (aplicação de `registros`), o envio e o "repuxar" de `registros` em `meuBancoSync.dart` (o pull ficou `_puxarUmaVez`), a fila (`MbFila`, `mbLerFila`, `mbPendentes`), `mbConfigsSincronizadas`, `mbLerAplicado`/`mbGravarAplicado`, o botão "Enviar tudo como oficial" e o vínculo `pluggy` das categorias.
+- Removido no Worker: `POST /api/sync` com registros responde 410 (`enviar` e `SQL_ENVIAR` saíram de `sync.js`); `registrosDoEspelho` não lê mais `pluggy` (nenhuma categoria de produção tinha). A tabela `registros` do D1 fica só como histórico, sem migração.
+- Contexto de categoria local (`mbSync/contextoLocal.dart`): regras = `associated_titles`; ajustes = as transações `mb:` editadas (`date_time_modified` >= 2001); revisões = `mb_revisoes` (`mbLerRevisoes`/`mbGravarRevisoes`); categorias = `categories`. Exclusão vem de `mb_apagados`.
+- `espelhoEnviar.dart`: "Enviar dados para a nuvem" some quando a fase é `pronto`; a linha "Espelho: ..." e "Recomeçar pela nuvem" ficam.
+- Desvios: (1) sobrou um "repuxar" mínimo, só para respostas locais da fila "Para revisar" (`mbResponderRevisao`/`mbDesfazerRevisao`): o pull incremental não traz transações antigas e o remapeamento local precisa delas; outros aparelhos recebem a linha já remapeada pelo espelho; (2) com `mbEspelho == false` só roda o pull do banco (sem sync de dados do usuário); as revisões sempre vivem em `mb_revisoes`; (3) `mb_registros` e `mb_aplicado` continuam sendo criadas por `mbCriarTabelas` (legado, sem migração do Drift; `mbTrocarConta` as limpa e `mbMigrarRevisoes` ainda lê as revisões antigas); (4) `salvarAjuste` do painel web ainda grava em `registros`, e um ajuste `gasto: 1` do painel não afeta mais o app (exclusão agora é `mb_apagados`); (5) `mapeamento.dart` ficou só com os ids (`pkDoId`/`idDoPk`) e `CatLocal`.
+- Testes: `mb_sync_drift_test.dart` foi reduzido ao que o pull do banco ainda cobre (trocar de conta, Santander, investimentos, categoria editada sobrevive a novo pull, regra `associated_titles`); os testes de fila, `oficial`, `detectar` e `projetar*` saíram com o código; Worker: POST 410 e `registrosDoEspelho` sem `pluggy`.
+
 ## 3. Riscos
 | Risco | Mitigação |
 |---|---|

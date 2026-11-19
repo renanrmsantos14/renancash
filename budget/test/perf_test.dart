@@ -11,7 +11,6 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
-import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -61,23 +60,16 @@ class ContadorQueries extends QueryInterceptor {
 
 class ClienteFalso extends MbCliente {
   ClienteFalso() : super(base: 'https://teste');
-  final List<Registro> servidor = [];
   Map<String, dynamic> extra = {};
 
   @override
   Future<Map<String, dynamic>> puxar(String? desde) async => {
         'agora': DateTime.now().toUtc().toIso8601String(),
-        'registros': [for (final r in servidor) r.toJson()],
         'contas': [],
         'transacoes': [],
         'pendentes': [],
         ...extra,
       };
-
-  @override
-  Future<({int aceitos, List<({int indice, String motivo})> rejeitados})> enviar(
-          List<Registro> lote) async =>
-      (aceitos: lote.length, rejeitados: <({int indice, String motivo})>[]);
 }
 
 final _ciclo = {
@@ -112,25 +104,6 @@ Map<String, dynamic> _banco(int n, {int offset = 0}) => {
           }
       ],
     };
-
-List<Registro> _lancamentos(int n, String t) => [
-      Registro('categorias', 'c9', {'nome': 'Lazer', 'tipo': 'despesa'}, t, null),
-      for (var i = 0; i < n; i++)
-        Registro(
-            'lancamentos',
-            'l$i',
-            {
-              'data': '2026-10-${(i % 28 + 1).toString().padLeft(2, '0')}',
-              'descricao': 'Lanc $i',
-              'valor': -(i % 97 + 1),
-              'categoria_id': 'c9',
-            },
-            t,
-            null),
-    ];
-
-String _futuro() =>
-    DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String();
 
 void main() {
   setUpAll(() {
@@ -181,16 +154,6 @@ void main() {
       linhas.forEach(print);
       expect((await database.select(database.transactions).get()).length, n);
     });
-
-    test('sync registros (lancamentos) N=$n', () async {
-      await novoBanco();
-      cliente.servidor.addAll(_lancamentos(n, _futuro()));
-      final linhas = <String>[await medir('registros 1a sync', n)];
-      cliente.servidor.clear();
-      linhas.add(await medir('registros 2a sync (sem novidade)', n));
-      linhas.forEach(print);
-      expect((await database.select(database.transactions).get()).length, n);
-    }, timeout: const Timeout(Duration(minutes: 5)));
   }
 
   // Banco em arquivo (commit real em disco, como no aparelho), conexão em isolate.

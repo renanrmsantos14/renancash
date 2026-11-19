@@ -4,7 +4,6 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
-import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/meuBancoMapping.dart' show mbCarteiraInvestimentos;
 import 'package:drift/drift.dart';
 
@@ -16,8 +15,7 @@ import 'package:drift/drift.dart';
 // `transactions.objective_fk` das transações `mb:inv:*` (mbReconciliarVinculos), e o progresso nativo do RenanCash
 // (soma dos lançamentos pagos da meta) passa a ser a soma dos saldos atuais dessas aplicações.
 // A tabela própria (e não só o objective_fk) existe porque o vínculo precisa sobreviver a um aparelho em que a
-// transação da aplicação ainda não existe; e mexer só em `objective_fk` não cria ajuste (`mb_aplicado`) nem
-// altera `dateTimeModified` das transações.
+// transação da aplicação ainda não existe; e mexer só em `objective_fk` não altera `dateTimeModified` das transações.
 
 /// Meta criada uma vez, sem valor alvo. Pk fixo: dois aparelhos que a criem juntos não duplicam (LWW).
 const String mbMetaReservaPk = 'mb:meta:reserva';
@@ -153,20 +151,14 @@ Future<List<MbAplicacao>> mbAplicacoes() async {
 // ---------------------------------------------------------------------------------------------
 // Reserva de emergência
 
-/// Cria a Reserva uma vez: pk fixo + `insertOrIgnore`; nada se o espelho já tem (ou apagou) a meta, ou se ela já
+/// Cria a Reserva uma vez: pk fixo + `insertOrIgnore`; nada se a meta já existe localmente (o espelho a traz), ou se ela já
 /// foi criada neste aparelho (quem apagar não a vê voltar). Chamar depois do pull.
 Future<void> mbGarantirReserva({DateTime? agora}) async {
   if (await mbLerEstado(_chaveReservaCriada) != null) return;
-  final id = idDoPk(mbMetaReservaPk);
-  final noEspelho = await database
-      .customSelect('SELECT 1 FROM mb_registros WHERE tabela = ? AND id = ?',
-          variables: [Variable<String>('metas'), Variable<String>(id)])
-      .get();
-  final existe = noEspelho.isNotEmpty ||
-      await (database.select(database.objectives)
+  final existe = await (database.select(database.objectives)
             ..where((o) => o.objectivePk.equals(mbMetaReservaPk)))
           .getSingleOrNull() !=
-          null;
+      null;
   if (!existe) {
     await database.into(database.objectives).insert(
         ObjectivesCompanion.insert(

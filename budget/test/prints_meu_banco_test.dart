@@ -15,7 +15,6 @@ import 'package:budget/pages/meuBancoParear.dart';
 import 'package:budget/struct/arrumarDados.dart';
 import 'package:budget/struct/defaultPreferences.dart';
 import 'package:budget/struct/editorial.dart';
-import 'package:budget/struct/mbSync/armazem.dart' show MbFila;
 import 'package:budget/struct/mbSync/conexoes.dart';
 import 'package:budget/struct/meuBancoMapping.dart' show MbDestino;
 import 'package:budget/struct/meuBancoSync.dart';
@@ -87,7 +86,6 @@ void _limparEstadoSync() {
   meuBancoUltimoErro.value = null;
   meuBancoUltimaSync.value = null;
   meuBancoSincronizando.value = false;
-  meuBancoFila.value = const MbFila(0, []);
 }
 
 MbConexao _con(String id, String banco, String? status,
@@ -262,7 +260,6 @@ void main() {
       meuBancoSincronizando.value = true;
       meuBancoUltimaSync.value =
           DateTime.now().subtract(const Duration(minutes: 1));
-      meuBancoFila.value = const MbFila(2, []);
       await _print(
         t,
         modo,
@@ -293,8 +290,6 @@ void main() {
       _limparEstadoSync();
       meuBancoUltimoErro.value =
           'Não foi possível falar com o Meu Banco. Confira a internet.';
-      meuBancoFila.value =
-          const MbFila(1, ['assinaturas · Sem nome: dados inválidos']);
       await _print(
         t,
         modo,

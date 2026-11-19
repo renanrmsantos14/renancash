@@ -198,9 +198,8 @@ test("Para revisar: notificação leva o item para os botões e some quando outr
   assert.equal(santander.item.tipo, "envio_santander");
   assert.equal(sp(santander.titulo), "Enviado ao Santander: R$ 500,00");
   // O outro aparelho responde: a notificação deixa de ser entregue ao celular.
-  const resp = await t.pedir("/api/sync", { method: "POST", headers: { ...t.auth, "content-type": "application/json" }, body: JSON.stringify({ registros: [
-    { tabela: "revisoes", id: "tx:e1", updated_at: new Date().toISOString(), deleted_at: null, dados: { tipo: "decisao", tx_id: "e1", resposta: "ajuda" } }] }) });
-  assert.equal((await resp.json()).aceitos, 1);
+  await t.db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES ('revisoes', 'tx:e1', ?1, ?2, NULL, ?2)")
+    .bind(JSON.stringify({ tipo: "decisao", tx_id: "e1", resposta: "ajuda" }), new Date().toISOString()).run();
   r = await t.celular(desde);
   assert.deepEqual(r.notificacoes.filter((n) => n.chave.startsWith("revisar:")).map((n) => n.item.tx_id), ["p1"]);
 });

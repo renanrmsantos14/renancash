@@ -1,5 +1,5 @@
-// Sincronização em duas vias com os apps: pull (dados do banco + registros do usuário) e push (registros, LWW).
-import { validarLote, inicioDaJanela } from "@meu-banco/core";
+// Pull do app: dados do banco, ciclo e avisos. A escrita do usuário é só pelo espelho (/api/espelho).
+import { inicioDaJanela } from "@meu-banco/core";
 import { hashToken, tokenDoCabecalho } from "./app.js";
 import { CHAVE_HISTORICO, serieMensal } from "./historico.js";
 
@@ -58,22 +58,6 @@ export async function puxar(db, desde, agoraIso, extras = {}) {
     sincronizado_em: ultimaSync.results[0]?.f ?? null,
     ...extras,
   };
-}
-
-// LWW no próprio SQL: só sobrescreve quando o updated_at recebido é estritamente maior.
-// `WHERE true` desfaz a ambiguidade do parser do SQLite entre ON CONFLICT e a junção do SELECT.
-const SQL_ENVIAR =
-  "INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) " +
-  "SELECT json_extract(value, '$.tabela'), json_extract(value, '$.id'), json_extract(value, '$.dados'), json_extract(value, '$.updated_at'), json_extract(value, '$.deleted_at'), ?2 " +
-  "FROM json_each(?1) WHERE true " +
-  "ON CONFLICT(tabela, id) DO UPDATE SET dados = excluded.dados, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, server_at = excluded.server_at " +
-  "WHERE excluded.updated_at > registros.updated_at";
-
-export async function enviar(db, corpo, agoraIso) {
-  const lote = validarLote(corpo?.registros, agoraIso);
-  if ("erro" in lote) return { status: 400, corpo: { erro: lote.erro } };
-  if (lote.registros.length) await db.prepare(SQL_ENVIAR).bind(JSON.stringify(lote.registros), agoraIso).run();
-  return { status: 200, corpo: { ok: true, aceitos: lote.registros.length, rejeitados: lote.rejeitados, agora: agoraIso } };
 }
 
 export function esperaAtualizar(ultimoIso, agoraMs) {

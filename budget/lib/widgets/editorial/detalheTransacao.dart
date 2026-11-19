@@ -7,6 +7,7 @@ import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
+import 'package:budget/struct/mbSync/contextoLocal.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/extrasTransacao.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
@@ -104,9 +105,7 @@ Future<DetalheModelo?> mbCarregarDetalhe(String pk) async {
 
   RegraDetalhe? regra;
   if (ehMb && contaId != null) {
-    final espelho = await mbLerEspelho();
-    final ctx =
-        MbContextoCategoria.deRegistros(espelho.values.map((e) => e.registro));
+    final ctx = await mbContextoLocal();
     final ef = mbCategoriaEfetiva(
         txId: pk.substring(mbPrefixo.length),
         contaId: contaId,

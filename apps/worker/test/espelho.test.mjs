@@ -372,11 +372,11 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("_config", "limite", { v: 2000 }),
     esp("_config", "salario", { v: "SALARIO EMPRESA" }),
     db.prepare("INSERT INTO config (chave, valor) VALUES ('salario_valor', '7500'), ('limite', '999')"), // limite do espelho vence
-    db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('categorias', 'cashew:c1', ?1, ?2, ?2)").bind(JSON.stringify({ nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] }), T1), // o pluggy só existe aqui
+    db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('categorias', 'cashew:c1', ?1, ?2, ?2)").bind(JSON.stringify({ nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] }), T1), // F5: o pluggy do registros antigo é ignorado
   ]);
 
   const registros = [
-    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1, pluggy: ["Groceries"] }],
+    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1 }], // sem pluggy
     ["categorias", "cashew:c2", { nome: "Salário", tipo: "receita", cor: null, icone: null, pai_id: "cashew:c1", ordem: 2 }],
     ["regras", "cashew:r1", { padrao: "*IFOOD*", categoria_id: "cashew:c1" }],
     ["regras", "cashew:r2", { padrao: "ENEL", categoria_id: "cashew:c1" }],

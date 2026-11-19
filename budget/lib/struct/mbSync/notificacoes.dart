@@ -57,8 +57,7 @@ Future<bool> mbResponderPelaNotificacao(String? payload, String? acao,
   // O aviso chega antes da próxima sincronização: puxa o que houver (offline segue com o que tem) e só barra
   // se já existe decisão para a transação, vinda deste ou de outro aparelho.
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
-  final espelho = await mbLerEspelho(tabela: 'revisoes');
-  final revisoes = MbRevisoes.deRegistros([for (final e in espelho.values) e.registro]);
+  final revisoes = MbRevisoes.deLinhas(await mbLerRevisoes());
   if (revisoes.decisoes.containsKey(item.txId)) return false;
   await mbResponderRevisao(item, acao, clienteParaTeste: clienteParaTeste);
   return true;

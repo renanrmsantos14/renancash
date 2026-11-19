@@ -8,7 +8,7 @@ import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, al
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido, apagarTransacoes, idsRemovidos } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
-import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
+import { autenticarAparelho, puxar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
@@ -508,8 +508,8 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json(await notificacoesAparelho(env, desde, ts));
   }
   if (rota === "POST /api/sync") {
-    const r = await enviar(env.DB, await request.json().catch(() => null), ts);
-    return json(r.corpo, r.status);
+    // F5: o app só usa o espelho (POST /api/espelho); a tabela `registros` ficou como histórico, sem escrita pelo app.
+    return json({ erro: "Sincronização por registros descontinuada: use /api/espelho" }, 410);
   }
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
   if (rota === "POST /api/ia/sugerir" || rota === "POST /api/ia/entender") {

@@ -1,12 +1,10 @@
 import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/pages/meuBancoParear.dart';
 import 'package:budget/struct/atualizador.dart';
-import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/pareamento.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
-import 'package:budget/struct/mbSync/oficial.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoDoApp, mbEspelhoLigado;
 import 'package:budget/struct/settings.dart';
@@ -58,7 +56,7 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
       _temToken = widget.pareadoInicial ?? false;
     } else {
       _carregar();
-      meuBancoAtualizarFila();
+      meuBancoAtualizarRevisar();
     }
   }
 
@@ -180,8 +178,6 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
     String msg;
     try {
       msg = await acao(cliente);
-    } on MbRecusado catch (e) {
-      msg = e.mensagem;
     } on MbErroHttp catch (e) {
       msg = e.mensagem;
     } on TimeoutException {
@@ -199,32 +195,6 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
     if (msg.isNotEmpty) openSnackbar(SnackbarMessage(title: msg));
   }
 
-  Future<void> _tornarOficial() async {
-    if (kIsWeb) return;
-    await _copiaUnicaRodar((cliente) async {
-      // O plano é calculado antes e mostrado no diálogo; nada é enviado sem confirmação.
-      final preparo = await mbPrepararOficial(cliente);
-      final p = preparo.plano;
-      if (!await _confirmar(
-          "Enviar tudo como oficial?",
-          "Serão enviados ${p.enviados} registros deste aparelho e apagados ${p.apagados} que existem no Meu Banco e não existem aqui (carteiras, categorias, orçamentos, metas, lançamentos, regras e assinaturas). Os outros aparelhos devem usar \"Recomeçar pela nuvem\" em seguida.",
-          "Enviar tudo",
-          Icons.cloud_upload_rounded)) return "";
-      if (p.apagados > 50 &&
-          !await _confirmar(
-              "Apagar ${p.apagados} registros da nuvem?",
-              "Isso é bastante coisa. Confirme só se este aparelho realmente tem os dados corretos.",
-              "Apagar mesmo",
-              Icons.warning_amber_rounded)) return "";
-      final r = await mbExecutarOficial(cliente, preparo);
-      await sincronizarMeuBanco();
-      return "Enviados ${r.enviados}, apagados ${r.apagados}." +
-          (r.rejeitados.isEmpty
-              ? ""
-              : " ${r.rejeitados.length} rejeitado(s), seguem pendentes: ${r.rejeitados.take(3).join('; ')}");
-    });
-  }
-
   Future<void> _recomecarPelaNuvem() async {
     await _copiaUnicaRodar((cliente) async {
       // Espelho ligado: a nuvem é o espelho, e a troca preserva a aparência deste aparelho.
@@ -237,37 +207,19 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
         await mbEmRodada(mbEspelhoDoApp(cliente).substituirPelaNuvem);
         return "Pronto: este aparelho agora tem os dados da nuvem.";
       }
-      final c = await mbContarNuvem(cliente);
-      if (c.lancamentos == 0 || c.categorias == 0) {
-        return 'O servidor ainda não tem lançamentos e categorias do RenanCash. Use "Enviar tudo como oficial" no celular antes.';
-      }
-      if (!await _confirmar(
-          "Recomeçar pela nuvem?",
-          "O Meu Banco tem ${c.lancamentos} lançamentos, ${c.categorias} categorias e ${c.carteiras} carteiras. Os dados deste aparelho (carteiras, categorias, orçamentos, metas, lançamentos e regras) serão apagados e baixados de novo; o que só existe aqui será perdido.",
-          "Apagar e baixar",
-          Icons.cloud_download_rounded)) return "";
-      return await mbRecomecarPelaNuvem(cliente) ??
-          "Pronto: este aparelho agora tem os dados do Meu Banco.";
+      return 'A nuvem ainda não tem os dados do RenanCash. Use "Enviar dados para a nuvem" no celular antes.';
     });
   }
 
   Widget _copiaUnicaSecao() => _secao("Cópia única", [
         Text(
-            kIsWeb ? "Os dados do celular são os oficiais. Aqui, recomece pela nuvem depois de o celular enviar tudo." : "Os dados do celular são os oficiais. Primeiro envie tudo do celular; depois, na web, recomece pela nuvem.",
+            kIsWeb ? "Os dados do celular são os oficiais. Aqui, recomece pela nuvem depois de o celular enviar tudo." : "Os dados do celular são os oficiais. Envie-os para a nuvem uma vez; depois, nos outros aparelhos, recomece pela nuvem.",
             style: EdTexto.corpo(context)),
         const SizedBox(height: 12),
         const EspelhoEnviarItem(),
         const SizedBox(height: 8),
         const EspelhoDiagnostico(),
         const SizedBox(height: 12),
-        // Só o celular é a fonte oficial; a web apenas recomeça pela nuvem.
-        if (!kIsWeb && !mbEspelhoLigado()) ...[
-          OutlinedButton(
-            onPressed: _copiaUnica ? null : _tornarOficial,
-            child: _rotuloBotao(_copiaUnica ? "Aguarde…" : "Enviar tudo como oficial"),
-          ),
-          const SizedBox(height: 10),
-        ],
         OutlinedButton(
           onPressed: _copiaUnica ? null : _recomecarPelaNuvem,
           child: _rotuloBotao(_copiaUnica ? "Aguarde…" : "Recomeçar pela nuvem"),
@@ -371,22 +323,33 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
                     : "Sincronizado ${haQuanto(ultima, DateTime.now())}",
                 style: EdTexto.rotulo(context)),
           ),
-          ValueListenableBuilder<MbFila>(
-            valueListenable: meuBancoFila,
-            builder: (context, fila, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (fila.pendentes > 0)
-                  Text(
-                      fila.pendentes == 1
-                          ? "1 alteração aguardando envio"
-                          : "${fila.pendentes} alterações aguardando envio",
-                      style: EdTexto.rotulo(context)),
-                for (final r in fila.rejeitados)
-                  Text("Rejeitado: $r",
-                      style: EdTexto.rotulo(context).copyWith(color: e.warntx)),
-              ],
-            ),
+          ValueListenableBuilder<String?>(
+            valueListenable: meuBancoUltimoErro,
+            builder: (context, erro, _) => Row(children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: erro == null ? e.pos : e.warn),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text("Pareado · $host",
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          ValueListenableBuilder<DateTime?>(
+            valueListenable: meuBancoUltimaSync,
+            builder: (context, ultima, _) => Text(
+                ultima == null
+                    ? "Ainda não sincronizado nesta sessão"
+                    : "Sincronizado ${haQuanto(ultima, DateTime.now())}",
+                style: EdTexto.rotulo(context)),
           ),
           ValueListenableBuilder<String?>(
             valueListenable: meuBancoUltimoErro,

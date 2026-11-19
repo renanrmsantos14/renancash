@@ -11,7 +11,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:drift/drift.dart' show TableUpdateQuery;
 
 /// Decide quando sincronizar sozinho. A escrita local continua imediata (feedback otimista); aqui só se agenda o envio.
-/// - edição local: espera [debounce] sem novas edições e sincroniza (várias edições viram uma rodada);
+/// - edição local (só o agendador do espelho): espera [debounce] sem novas edições e sincroniza;
 /// - voltar ao app e a cada [intervalo] em primeiro plano: puxa do servidor;
 /// - rodada já em curso: marca "de novo ao terminar" em vez de descartar;
 /// - falha: tenta de novo em [backoff] (o último valor se repete), sem fila de pedidos nem laço apertado;
@@ -340,17 +340,7 @@ void mbIniciarSyncAutomatico() {
   meuBancoSincronizando.addListener(() {
     if (!meuBancoSincronizando.value) mbAgendador.fimDeRodada();
   });
-  database
-      .tableUpdates(TableUpdateQuery.onAllTables([
-        database.wallets,
-        database.categories,
-        database.budgets,
-        database.categoryBudgetLimits,
-        database.objectives,
-        database.transactions,
-        database.associatedTitles,
-      ]))
-      .listen((_) => mbAgendador.aoEditar());
+  // Editar dados não puxa mais o banco: o pull dos dados do Pluggy é só periódico, ao voltar ao app e por aviso do servidor.
   // Qualquer tabela (inclusive `mb_saida`, avisada ao enfileirar configurações): o espelho cobre mais tabelas que o
   // sync antigo. O que o próprio pull grava não reagenda (`aoNotificar` e `_rodando`).
   database.tableUpdates(const TableUpdateQuery.any()).listen((_) => mbEspelhoAgendador.aoEditar());

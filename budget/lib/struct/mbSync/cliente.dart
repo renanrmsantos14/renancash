@@ -2,7 +2,6 @@ import 'package:budget/struct/mbSync/conexoes.dart';
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -91,22 +90,6 @@ class MbCliente {
 
   Future<Map<String, dynamic>> puxar(String? desde) => _chamar('GET', '/api/sync',
       query: desde == null || desde.isEmpty ? null : {'desde': desde});
-
-  Future<({int aceitos, List<({int indice, String motivo})> rejeitados})> enviar(
-      List<Registro> lote) async {
-    final j = await _chamar('POST', '/api/sync',
-        corpo: {'registros': lote.map((r) => r.toJson()).toList()});
-    return (
-      aceitos: (j['aceitos'] as num?)?.toInt() ?? 0,
-      rejeitados: [
-        for (final x in (j['rejeitados'] as List? ?? const []))
-          (
-            indice: ((x as Map)['indice'] as num).toInt(),
-            motivo: '${x['motivo']}'
-          )
-      ],
-    );
-  }
 
   /// Espelho completo: fila local -> servidor. Até 500 linhas por chamada.
   Future<Map<String, dynamic>> espelhoEnviar(String aparelho, List<Map<String, dynamic>> linhas) =>

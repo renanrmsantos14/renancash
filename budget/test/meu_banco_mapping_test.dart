@@ -28,7 +28,7 @@ Map<String, dynamic> _json() => {
       "pendentes": ["cc-3"],
     };
 
-const _ctx0 = MbContextoCategoria({}, [], {}, {});
+const _ctx0 = MbContextoCategoria({}, [], {});
 
 MbResultado _mapear(Map<String, dynamic> j, [MbContextoCategoria ctx = _ctx0]) =>
     mbMapearPull(j, ctx, pkCategoria: (_, nome, receita) => mbPkCategoria(nome, receita));
@@ -200,7 +200,7 @@ void main() {
     });
 
     test("ajuste gasto=1 do usuário mantém a transação mesmo sendo transferência", () {
-      final ctx = MbContextoCategoria({"s1": {"gasto": 1}}, [], {}, {});
+      final ctx = MbContextoCategoria({"s1": {"gasto": 1}}, [], {});
       final r = mbMapearPull({
         "contas": [{"id": "cc", "type": "BANK", "name": "Conta", "bank": "Inter"}],
         "transacoes": [tx("s1", "Resgate Santander", 3000)],
@@ -301,7 +301,7 @@ void main() {
     });
 
     test("ajuste do usuário no estorno prevalece", () {
-      final ctx = MbContextoCategoria({"e": {"category": "Salary"}}, [], {}, {});
+      final ctx = MbContextoCategoria({"e": {"category": "Salary"}}, [], {});
       final r = mbMapearPull({
         "contas": [{"id": "cart", "type": "CREDIT", "name": "Cartão", "bank": "Inter"}],
         "transacoes": [

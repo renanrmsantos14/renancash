@@ -73,6 +73,14 @@ class _EspelhoEnviarItemState extends State<EspelhoEnviarItem> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: Listenable.merge([mbFaseEspelho, mbEspelhoPronto]),
+      builder: (context, _) =>
+          mbFaseEspelho.value == MbFaseEspelho.pronto || mbEspelhoPronto.value ? const SizedBox.shrink() : _corpo(context),
+    );
+  }
+
+  Widget _corpo(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
