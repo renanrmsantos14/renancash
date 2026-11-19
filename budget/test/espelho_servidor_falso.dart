@@ -66,6 +66,9 @@ class ServidorEspelho {
   bool _semeando = false;
   final List<int> lotesDeSemeio = [];
 
+  /// O servidor perdeu o semeio em andamento (os lotes seguintes recebem `semeio_nao_iniciado`).
+  void esquecerSemeio() => _semeando = false;
+
   /// Contrato de POST /api/espelho/semear: lotes de 0 em diante; o primeiro limpa o espelho e o `fim` marca `semeado`.
   Map<String, dynamic> semear(int lote, List<Map<String, dynamic>> lote_, bool fim) {
     if (semeado) throw MbErroHttp(409, 'ja_semeado');
@@ -87,7 +90,13 @@ class ServidorEspelho {
     return {'aceitos': lote_.length, 'rejeitados': [], 'lote': lote, 'fim': fim, 'cursor': puxar(null, 1 << 30)['cursor']};
   }
 
+  /// Mesmo formato que o Worker aceita em `desde` (apps/worker/src/espelho.js, `CURSOR`).
+  static final RegExp cursorValido = RegExp(r'^([^|]+)\|([^|]+)\|([\s\S]+)$');
+
   Map<String, dynamic> puxar(String? desde, int limite) {
+    if (desde != null && desde.isNotEmpty && !cursorValido.hasMatch(desde)) {
+      throw MbErroHttp(400, 'desde inválido (use server_at|tabela|pk)');
+    }
     final todas = [
       for (final e in linhas.entries) (e.value.serverAt, e.key, e.value)
     ]..sort((a, b) => '${a.$1}|${a.$2}'.compareTo('${b.$1}|${b.$2}'));
@@ -120,11 +129,17 @@ class ClienteEspelhoFalso extends MbCliente {
   final ServidorEspelho servidor;
   bool semRede = false;
 
+  /// Worker sem ESPELHO: o GET responde 404.
+  bool indisponivel = false;
+
   /// Id com que o servidor diz ter autenticado este aparelho (vai em `aparelho` do POST e do GET).
   String idServidor = 'servidor-a';
 
   /// Cursores recebidos nos GETs, para os testes conferirem o recuo de 30 s na primeira página.
   final List<String?> cursoresPedidos = [];
+
+  /// Roda no início de cada GET (antes de o servidor responder).
+  Future<void> Function()? duranteGet;
 
   /// Roda no meio do envio, depois de o servidor aceitar e antes de a fila ser limpa.
   Future<void> Function()? duranteEnvio;
@@ -156,6 +171,8 @@ class ClienteEspelhoFalso extends MbCliente {
   Future<Map<String, dynamic>> espelhoPuxar(String? desde, {int limite = 2000}) async {
     if (semRede) throw http.ClientException('sem rede');
     cursoresPedidos.add(desde);
+    if (indisponivel) throw MbErroHttp(404, 'não encontrado');
+    await duranteGet?.call();
     return {...servidor.puxar(desde, limite), 'aparelho': idServidor};
   }
 }

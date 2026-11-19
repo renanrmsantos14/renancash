@@ -19,11 +19,12 @@ import 'espelho_servidor_falso.dart';
 class ClienteBanco extends MbCliente {
   ClienteBanco() : super(base: 'https://teste');
   double valor = -10.0;
+  List<Map<String, dynamic>> registros = [];
 
   @override
   Future<Map<String, dynamic>> puxar(String? desde) async => {
         'agora': DateTime.now().toUtc().toIso8601String(),
-        'registros': <Map<String, dynamic>>[],
+        'registros': registros,
         'contas': [
           {'id': 'a1', 'type': 'BANK', 'name': 'Conta'}
         ],
@@ -173,5 +174,43 @@ void main() {
     ]);
     l = await mbLerEspelho(tabela: 'revisoes');
     expect(l.keys, ['revisoes/tx:9']);
+  });
+
+  test('espelho pronto: o sync antigo carrega o estado antes de rodar e não grava revisoes do Worker em mb_revisoes', () async {
+    await mbCriarTabelas();
+    appStateSettings = {}; // sem forçar: só o `espelho_pronto` guardado liga o espelho
+    await database.customStatement("INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES ('espelho_pronto', '1')");
+    mbEspelhoPronto.value = false; // boot: o notifier ainda não foi carregado
+    mbEspelhoDescarregarEstado();
+    cliente.registros = [
+      {
+        'tabela': 'revisoes',
+        'id': 'tx:55',
+        'dados': {'tipo': 'decisao', 'resposta': 'ok'},
+        'updated_at': '2025-01-01T00:00:00.000Z',
+        'deleted_at': null,
+      }
+    ];
+    await bancoSync();
+    expect(mbEspelhoLigado(), true, reason: 'o sync carregou o estado');
+    final n = await database.customSelect('SELECT COUNT(*) n FROM mb_revisoes').getSingle();
+    expect(n.read<int>('n'), 0, reason: 'revisoes velhas do Worker não entram na tabela espelhada');
+  });
+
+  test('com o espelho ligado, ler só as revisões não consulta mb_registros', () async {
+    await database.customStatement('DROP TABLE IF EXISTS mb_registros');
+    await database.customStatement("INSERT INTO mb_revisoes (pk, dados) VALUES ('tx:1', '{\"resposta\":\"ok\"}')");
+    final l = await mbLerEspelho(tabela: 'revisoes');
+    expect(l.keys, ['revisoes/tx:1']);
+  });
+
+  test('mbEspelhoPermitido: só mbEspelho=false desliga', () {
+    appStateSettings = {};
+    expect(mbEspelhoPermitido(), true);
+    appStateSettings = {'mbEspelho': false};
+    expect(mbEspelhoPermitido(), false);
+    expect(mbEspelhoLigado(), false);
+    appStateSettings = {'mbEspelho': true};
+    expect(mbEspelhoLigado(), true);
   });
 }

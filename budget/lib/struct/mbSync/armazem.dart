@@ -58,8 +58,10 @@ Future<void> mbMigrarRevisoes(GeneratedDatabase db) async {
 
 /// Com o espelho ligado, as revisões vivem em `mb_revisoes` e substituem as de `mb_registros`.
 Future<Map<String, Espelho>> mbLerEspelho({String? tabela}) async {
-  final out = await _lerRegistros(tabela: tabela);
-  if (!mbEspelhoLigado() || (tabela != null && tabela != 'revisoes')) return out;
+  final ligado = mbEspelhoLigado();
+  // Com o espelho ligado as revisões vivem só em mb_revisoes: pedir só elas dispensa ler mb_registros.
+  final out = ligado && tabela == 'revisoes' ? <String, Espelho>{} : await _lerRegistros(tabela: tabela);
+  if (!ligado || (tabela != null && tabela != 'revisoes')) return out;
   out.removeWhere((_, e) => e.registro.tabela == 'revisoes');
   for (final l in await database.customSelect('SELECT pk, dados FROM mb_revisoes').get()) {
     final d = l.readNullable<String>('dados');

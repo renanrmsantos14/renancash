@@ -6,7 +6,7 @@ import 'package:budget/pages/addWalletPage.dart'
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/aplicarLocal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
-import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoLigado;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoCarregarEstado, mbEspelhoLigado;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
@@ -167,9 +167,12 @@ bool _ajusteMudaMapeamento(Registro novo, Registro? antigo) {
 Future<({Map<String, dynamic> json, bool refazer})> _puxarEAplicar(
     MbCliente cliente, String? desde) async {
   final json = await cliente.puxar(desde);
+  // Com o espelho ligado as decisões (`revisoes`) chegam só pelo espelho: o Worker antigo ainda guarda versões velhas
+  // delas, e gravá-las em mb_revisoes (tabela espelhada) enviaria decisões desfeitas por cima das novas.
+  final semRevisoes = mbEspelhoLigado();
   final registros = [
     for (final r in (json['registros'] as List? ?? const []))
-      Registro.fromJson((r as Map).cast<String, dynamic>())
+      if (!semRevisoes || (r as Map)['tabela'] != 'revisoes') Registro.fromJson((r as Map).cast<String, dynamic>())
   ];
   final espelho = await mbLerEspelho();
   final vencedores = remotosVencedores(espelho, registros);
@@ -273,6 +276,8 @@ Future<bool> _sincronizarUmaVez(MbCliente? clienteParaTeste) async {
     final cliente = clienteParaTeste ?? await mbClienteConfigurado();
     if (cliente == null) return false; // não configurado: silencioso
     await mbCriarTabelas();
+    // Sem o estado do espelho carregado, `mbEspelhoLigado()` diria "desligado" no começo do boot.
+    await mbEspelhoCarregarEstado();
     await _migrarCursorAntigo();
 
     final agora = isoMs(DateTime.now());

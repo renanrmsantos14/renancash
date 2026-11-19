@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 
@@ -44,6 +45,7 @@ void main() {
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    mbEspelhoPronto.value = false;
     servidor = ServidorEspelho()..semeado = false;
     celular = Disp(servidor, configs: {'currency': 'brl', 'locale': 'pt', 'numberFormatDecimal': ',', 'selectedWalletPk': '7'});
     outro = Disp(servidor);
@@ -179,7 +181,92 @@ void main() {
     expect(await e.avaliar(podeSemear: true, confirmado: true), MbFaseEspelho.pronto);
     expect(await mbLerEstado(mbChaveProntoEspelho, celular.db), '1');
   });
+  test('Android com servidor já semeado pede confirmação (e conta as pendências) antes de apagar; web troca sozinha', () async {
+    await popular(3);
+    await celular.espelho.avaliar(podeSemear: true, confirmado: true);
+    await categoria(outro.db, 'so-aqui', 'Só aqui');
+    await outro.db.customStatement(
+        'CREATE TABLE mb_registros (tabela TEXT, id TEXT, dados TEXT, updated_at TEXT, deleted_at TEXT, projecao TEXT, pendente INTEGER, motivo TEXT)');
+    await outro.db.customStatement(
+        "INSERT INTO mb_registros (tabela, id, pendente) VALUES ('ajustes', '1', 1), ('ajustes', '2', 1), ('ajustes', '3', 0)");
+
+    expect(await outro.espelho.avaliar(podeSemear: true), MbFaseEspelho.confirmarTroca);
+    expect(mbPendentesAntesDaTroca.value, 2);
+    expect(await linhaDe(outro.db, 'categories', 'category_pk', 'so-aqui'), isNotNull, reason: 'nada foi apagado');
+    expect(await mbLerEstado(mbChaveProntoEspelho, outro.db), isNull);
+
+    expect(await outro.espelho.avaliar(podeSemear: true, confirmado: true), MbFaseEspelho.pronto);
+    expect(await linhaDe(outro.db, 'categories', 'category_pk', 'so-aqui'), isNull);
+  });
+
+  test('enviar/puxar não se intercalam com a troca pela nuvem (trava única)', () async {
+    await popular(3);
+    await celular.espelho.avaliar(podeSemear: true, confirmado: true);
+    await outro.espelho.avaliar(podeSemear: false);
+    await categoria(outro.db, 'so-aqui', 'Só aqui');
+
+    final liberar = Completer<void>();
+    var primeira = true;
+    outro.cliente.duranteGet = () async {
+      if (primeira) {
+        primeira = false;
+        await liberar.future;
+      }
+    };
+    final p = outro.espelho.puxar();
+    final t = outro.espelho.substituirPelaNuvem();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(await linhaDe(outro.db, 'categories', 'category_pk', 'so-aqui'), isNotNull,
+        reason: 'a troca espera o pull em andamento terminar');
+    liberar.complete();
+    await Future.wait([p, t]);
+    expect(await linhaDe(outro.db, 'categories', 'category_pk', 'so-aqui'), isNull);
+    expect(await outro.contar('categories'), await celular.contar('categories'));
+    expect(await mbLerEstado(mbChaveProntoEspelho, outro.db), '1');
+    expect(await mbLerEstado('espelho_cursor', outro.db), isNotNull);
+  });
+
+  test('semeio_nao_iniciado na retomada: limpa o andamento e recomeça do lote 0', () async {
+    await popular(12);
+    celular.cliente.cairNoLote = 2;
+    await expectLater(celular.espelho.semearDoCelular(tamanho: 5), throwsA(isA<Exception>()));
+    servidor.esquecerSemeio();
+    await celular.espelho.semearDoCelular(tamanho: 5);
+    expect(celular.cliente.lotesEnviados, [0, 1, 2, 0, 1, 2], reason: 'o lote 2 foi recusado (409) e recomeçou do 0');
+    expect(servidor.semeado, true);
+    expect(servidor.linhas.keys.where((k) => k.startsWith('categories|')), hasLength(12));
+    expect(await mbLerEstado('espelho_semeio', celular.db), isNull);
+  });
+
+  test('semear e trocar atualizam mbEspelhoPronto na hora (mbEspelhoLigado deixa de depender do próximo boot)', () async {
+    await popular(2);
+    expect(mbEspelhoPronto.value, false);
+    await celular.espelho.avaliar(podeSemear: true, confirmado: true);
+    expect(mbEspelhoPronto.value, true);
+    mbEspelhoPronto.value = false;
+    await outro.espelho.avaliar(podeSemear: false);
+    expect(mbEspelhoPronto.value, true);
+  });
+
+  test('edições entre as tentativas do semeio não se perdem: ficam na fila e sobem depois do semeio', () async {
+    await popular(12);
+    celular.cliente.cairNoLote = 2;
+    await expectLater(celular.espelho.semearDoCelular(tamanho: 5), throwsA(isA<Exception>()));
+    // c000 já foi enviada no lote 0; c001 mudou e uma nova nasceu enquanto o semeio estava parado.
+    await celular.db.customStatement(
+        "UPDATE categories SET name = 'Renomeada', date_time_modified = ${DateTime.now().millisecondsSinceEpoch ~/ 1000 + 5} WHERE category_pk = 'c000'");
+    await categoria(celular.db, 'nova', 'Nova');
+    expect(await fila(celular.db), containsAll(['categories|c000', 'categories|nova']));
+
+    await celular.espelho.semearDoCelular(tamanho: 5);
+    expect(await fila(celular.db), containsAll(['categories|c000', 'categories|nova']), reason: 'pronto não apaga a fila');
+    expect(await celular.espelho.sincronizar(), true);
+    expect(servidor.linhas['categories|c000']!.dados!['name'], 'Renomeada');
+    expect(servidor.linhas.containsKey('categories|nova'), true);
+    expect(await fila(celular.db), isEmpty);
+  });
 }
+
 
 class _Cliente404 extends ClienteEspelhoFalso {
   _Cliente404(super.servidor);
