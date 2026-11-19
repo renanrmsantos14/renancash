@@ -46,12 +46,11 @@ function emLotes(linhas) {
 const metaDo = async (db) => Object.fromEntries((await db.prepare("SELECT chave, valor FROM espelho_meta").all()).results.map((m) => [m.chave, m.valor]));
 const defMeta = (db, chave, valor) => db.prepare("INSERT INTO espelho_meta (chave, valor) VALUES (?1, ?2) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").bind(chave, valor);
 
-export async function avisar(env, aviso) {
-  const hub = env.ESPELHO_HUB.get(env.ESPELHO_HUB.idFromName("principal"));
-  await hub.fetch("https://hub/avisar", { method: "POST", body: JSON.stringify(aviso) });
-}
+export const hubDo = (env) => env.ESPELHO_HUB.get(env.ESPELHO_HUB.idFromName("principal"));
 
-export const semeado = async (db) => (await metaDo(db)).semeado === "1";
+export const avisar = (env, aviso) => hubDo(env).fetch("https://hub/avisar", { method: "POST", body: JSON.stringify(aviso) });
+
+const semeado = async (db) => (await metaDo(db)).semeado === "1";
 
 const cursorAtual = (db) =>
   db.prepare("SELECT server_at || '|' || tabela || '|' || pk AS c FROM espelho ORDER BY server_at DESC, tabela DESC, pk DESC LIMIT 1").first("c");

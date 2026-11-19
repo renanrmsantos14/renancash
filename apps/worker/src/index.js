@@ -12,7 +12,7 @@ import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
-import { avisar, configDe, enviarEspelho, espelhoLigado, puxarEspelho, semear } from "./espelho.js";
+import { avisar, configDe, enviarEspelho, espelhoLigado, hubDo, puxarEspelho, semear } from "./espelho.js";
 
 export { EspelhoHub } from "./hub.js";
 
@@ -442,7 +442,7 @@ async function rotaEspelho(request, env, url, caminho, ctx) {
   if (rota === "GET /api/espelho/ws") {
     if (request.headers.get("upgrade") !== "websocket") return json({ erro: "Upgrade de WebSocket necessário" }, 426);
     if (!quem.aparelho && request.headers.get("origin") !== url.origin) return json({ erro: "Origem não permitida" }, 403);
-    return env.ESPELHO_HUB.get(env.ESPELHO_HUB.idFromName("principal")).fetch(request);
+    return hubDo(env).fetch(request);
   }
   if (rota === "GET /api/espelho") {
     const r = await puxarEspelho(env.DB, url.searchParams.get("desde"), url.searchParams.get("limite"));

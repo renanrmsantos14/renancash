@@ -23,6 +23,6 @@ export class EspelhoHub {
   webSocketMessage() {} // o cliente só ouve; mensagens dele (fora o ping) são ignoradas
 
   webSocketClose(ws, codigo) {
-    ws.close(codigo === 1005 ? 1000 : codigo); // 1005 não pode ser enviado de volta
+    ws.close([1005, 1006, 1015].includes(codigo) ? 1000 : codigo); // 1005, 1006 e 1015 são reservados: não podem ser enviados
   }
 }
