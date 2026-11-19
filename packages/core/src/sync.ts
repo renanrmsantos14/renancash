@@ -121,3 +121,59 @@ export function mesclar(local: ReadonlyMap<string, Registro>, remotos: readonly 
 export function inicioDaJanela(desde: string | null): string | null {
   return desde === null ? null : new Date(Date.parse(desde) - SOBREPOSICAO_MS).toISOString();
 }
+
+// ---------- Espelho completo (tabela `espelho` no D1): a linha inteira do app em JSON ----------
+
+// Mesma lista no app (budget/lib/struct/mbSync/espelho.dart). `_config` é a entidade virtual das configurações (pk = chave).
+export const TABELAS_ESPELHO = [
+  "wallets", "transactions", "categories", "category_budget_limits", "associated_titles", "budgets", "scanner_templates", "objectives",
+  "mb_orcamento_tx", "mb_meta_aplicacao", "mb_revisoes", "_config",
+] as const;
+export type TabelaEspelho = (typeof TABELAS_ESPELHO)[number];
+
+export const MAX_LINHA_ESPELHO = 16 * 1024;
+export const MAX_PK_ESPELHO = 200;
+
+export interface LinhaEspelho {
+  tabela: TabelaEspelho;
+  pk: string;
+  dados: Record<string, unknown> | null;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type LinhaRejeitada = { tabela: string; pk: string; motivo: string };
+
+function problemaLinha(bruto: unknown): string | null {
+  if (!bruto || typeof bruto !== "object") return "linha inválida";
+  const l = bruto as Record<string, unknown>;
+  if (typeof l.tabela !== "string" || !(TABELAS_ESPELHO as readonly string[]).includes(l.tabela)) return "tabela fora da allowlist";
+  if (typeof l.pk !== "string" || l.pk.length < 1 || l.pk.length > MAX_PK_ESPELHO) return "pk inválida";
+  if (!iso(l.updated_at)) return "updated_at inválido";
+  if (l.deleted_at != null) return iso(l.deleted_at) ? null : "deleted_at inválido";
+  if (!l.dados || typeof l.dados !== "object" || Array.isArray(l.dados)) return "dados ausentes sem deleted_at";
+  if (new TextEncoder().encode(JSON.stringify(l.dados)).length > MAX_LINHA_ESPELHO) return "linha acima de 16 KB";
+  return null;
+}
+
+// Mesma regra do `validarLote`: data do futuro (além da folga) vira agora; exclusão leva `dados` nulos.
+export function validarLinhasEspelho(entrada: unknown, agora: string): { linhas: LinhaEspelho[]; rejeitados: LinhaRejeitada[] } | { erro: string } {
+  if (!Array.isArray(entrada)) return { erro: "linhas deve ser uma lista" };
+  if (entrada.length > MAX_LOTE) return { erro: `no máximo ${MAX_LOTE} linhas por envio` };
+  const limite = Date.parse(agora) + FOLGA_RELOGIO_MS;
+  const corrigir = (v: string) => (Date.parse(v) > limite ? agora : v);
+  const linhas: LinhaEspelho[] = [];
+  const rejeitados: LinhaRejeitada[] = [];
+  for (const bruto of entrada) {
+    const motivo = problemaLinha(bruto);
+    const l = bruto as Record<string, unknown> | null;
+    if (motivo) {
+      rejeitados.push({ tabela: String(l?.tabela ?? ""), pk: String(l?.pk ?? ""), motivo });
+      continue;
+    }
+    const x = bruto as LinhaEspelho;
+    const deleted = x.deleted_at == null ? null : corrigir(iso(x.deleted_at) as string);
+    linhas.push({ tabela: x.tabela, pk: x.pk, dados: deleted ? null : x.dados, updated_at: corrigir(iso(x.updated_at) as string), deleted_at: deleted });
+  }
+  return { linhas, rejeitados };
+}

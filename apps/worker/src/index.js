@@ -12,6 +12,9 @@ import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
+import { avisar, configDe, enviarEspelho, espelhoLigado, hubDo, puxarEspelho, semear } from "./espelho.js";
+
+export { EspelhoHub } from "./hub.js";
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -33,7 +36,7 @@ export default {
       if (caminho.startsWith("/app/")) {
         // Manifest e ícones ficam públicos: o navegador os busca sem cookie para instalar o PWA.
         if (!APP_PUBLICO.test(caminho) && !(await sessaoValida(request, env))) return seguranca(new Response(null, { status: 302, headers: { location: "/login?volta=/app/" } }));
-        const r = seguranca(await env.ASSETS.fetch(request), CSP_APP);
+        const r = seguranca(await env.ASSETS.fetch(request), cspApp(env, url));
         r.headers.set("cache-control", "private, no-cache");
         return r;
       }
@@ -42,6 +45,7 @@ export default {
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
+      else if (ROTAS_ESPELHO.has(caminho)) resp = espelhoLigado(env) ? await rotaEspelho(request, env, url, caminho, ctx) : json({ erro: "Rota não encontrada" }, 404);
       else if (ROTAS_APARELHO.has(caminho) || ROTA_CONEXAO.test(caminho)) resp = await rotaAparelho(request, env, url, caminho, ctx); // Bearer ou cookie
       else if (!(await sessaoValida(request, env))) {
         resp = caminho.startsWith("/api/") ? json({ erro: "Sessão necessária" }, 401) : new Response(null, { status: 302, headers: { location: "/login" } });
@@ -51,7 +55,8 @@ export default {
       else if (caminho === "/api/historico" && request.method === "GET") resp = await historico(env);
       else if (caminho === "/api/fatura" && request.method === "GET") resp = await fatura(env, url);
       else if (/^\/api\/ajustes\/[^/]+$/.test(caminho) && request.method === "PUT") {
-        resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
+        if (espelhoLigado(env)) resp = json({ erro: "Edição pelo painel desativada: o app é a fonte dos ajustes" }, 410);
+        else resp = mesmaOrigem(request, url) ? await salvarAjuste(request, env, caminho.slice(13)) : json({ erro: "Origem não permitida" }, 403);
       } else if (caminho === "/api/pluggy/webhooks" && request.method === "POST") {
         if (!mesmaOrigem(request, url)) resp = json({ erro: "Origem não permitida" }, 403);
         else if (!env.PLUGGY_WEBHOOK_SECRET) resp = json({ erro: "PLUGGY_WEBHOOK_SECRET ausente" }, 500);
@@ -72,7 +77,7 @@ export default {
         resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
-      return seguranca(resp);
+      return resp.status === 101 ? resp : seguranca(resp); // upgrade de WebSocket: a resposta do DO não pode ser recriada
     } catch (e) {
       console.error("Erro na requisição", caminho, e?.stack || e);
       return seguranca(json({ erro: String(e?.message || e) }, 500));
@@ -175,6 +180,9 @@ function mesmaOrigem(request, url) {
 const CSP_PAINEL = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 const CSP_APP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
+// Com o espelho ligado o app abre um WebSocket na própria origem; 'self' não cobre wss: em todos os navegadores.
+const cspApp = (env, url) => (espelhoLigado(env) ? CSP_APP.replace("connect-src 'self'", `connect-src 'self' wss://${url.host}`) : CSP_APP);
+
 function seguranca(resp, csp = CSP_PAINEL) {
   const r = new Response(resp.body, resp);
   r.headers.set("x-content-type-options", "nosniff");
@@ -267,8 +275,7 @@ async function salvarAjuste(request, env, idUrl) {
 
 async function lerConfig(db) {
   const { results } = await db.prepare("SELECT chave, valor FROM config").all();
-  const c = Object.fromEntries(results.map((r) => [r.chave, r.valor]));
-  return { limite: c.limite ? Number(c.limite) : null, salario: c.salario || null, salarioValor: Number(c.salario_valor) || null };
+  return configDe(results);
 }
 
 // Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
@@ -413,15 +420,53 @@ async function entregarNotificacoes(request, env, url) {
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
 const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender"]);
 const MAX_CORPO_IA = 64 * 1024; // contexto + lote pequeno cabem com folga
+const ROTAS_ESPELHO = new Set(["/api/espelho", "/api/espelho/semear", "/api/espelho/ws"]);
 const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
+
+// Token de aparelho (aparelho = id do token) ou sessão do painel (aparelho = null); cookie em POST exige mesma origem.
+async function identificar(request, env, url, ts) {
+  const aparelho = await autenticarAparelho(request, env.DB, ts);
+  if (aparelho) return { aparelho };
+  if (!(await sessaoValida(request, env))) return { erro: json({ erro: "Token ou sessão necessários" }, 401, { "www-authenticate": "Bearer" }) };
+  if (request.method !== "GET" && !mesmaOrigem(request, url)) return { erro: json({ erro: "Origem não permitida" }, 403) };
+  return { aparelho: null };
+}
+
+// Espelho completo (atrás da flag ESPELHO). O semeio só vale com token de aparelho; o WebSocket do navegador (cookie) exige Origin igual.
+// A identidade do aparelho (desempate do LWW, `mudou`) é o id do token; a sessão do painel é "web".
+async function rotaEspelho(request, env, url, caminho, ctx) {
+  const quem = await identificar(request, env, url, agora());
+  if (quem.erro) return quem.erro;
+  const aparelho = quem.aparelho ?? "web";
+  const rota = `${request.method} ${caminho}`;
+  const avisarClientes = (aviso) => ctx.waitUntil(avisar(env, aviso).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
+  if (rota === "GET /api/espelho/ws") {
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return json({ erro: "Upgrade de WebSocket necessário" }, 426);
+    if (!quem.aparelho && request.headers.get("origin") !== url.origin) return json({ erro: "Origem não permitida" }, 403);
+    return hubDo(env).fetch(request);
+  }
+  if (rota === "GET /api/espelho") {
+    const r = await puxarEspelho(env.DB, url.searchParams.get("desde"), url.searchParams.get("limite"), aparelho);
+    return json(r.corpo, r.status);
+  }
+  if (rota === "POST /api/espelho") {
+    const r = await enviarEspelho(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    if (r.gravadas) avisarClientes({ tipo: "mudou", cursor: r.cursor, aparelho }); // o cursor é só uma dica: o cliente puxa pelo próprio
+    return json(r.corpo, r.status);
+  }
+  if (rota === "POST /api/espelho/semear") {
+    if (!quem.aparelho) return json({ erro: "O semeio só vale com o token do aparelho" }, 403);
+    const r = await semear(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    if (r.fim) avisarClientes({ tipo: "mudou", cursor: r.corpo.cursor, aparelho });
+    return json(r.corpo, r.status);
+  }
+  return json({ erro: "Método não permitido" }, 405);
+}
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
   const ts = agora();
-  const aparelho = await autenticarAparelho(request, env.DB, ts);
-  if (!aparelho) {
-    if (!(await sessaoValida(request, env))) return json({ erro: "Token ou sessão necessários" }, 401, { "www-authenticate": "Bearer" });
-    if (request.method !== "GET" && !mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  }
+  const quem = await identificar(request, env, url, ts);
+  if (quem.erro) return quem.erro;
   const rota = `${request.method} ${caminho}`;
   if (rota === "GET /api/sync") {
     const desde = normalizarDesde(url.searchParams.get("desde"));
@@ -723,6 +768,7 @@ async function sincronizar(env, origem) {
     .bind(agora(), ok, mensagem, log.id)
     .run();
   if (ok) await avaliarAlertas(env).catch((e) => console.error("Alertas falharam", e?.stack || e));
+  if (ok && espelhoLigado(env)) await avisar(env, { tipo: "banco" }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e));
   return { ok: !!ok, mensagem };
 }
 
