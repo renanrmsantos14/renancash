@@ -56,6 +56,11 @@ export const hubDo = (env) => env.ESPELHO_HUB.get(env.ESPELHO_HUB.idFromName("pr
 export const avisar = (env, aviso) => hubDo(env).fetch("https://hub/avisar", { method: "POST", body: JSON.stringify(aviso) });
 
 const semeado = async (db) => (await metaDo(db)).semeado === "1";
+// ESPELHO ligado E semeado: antes do semeio (ou durante um `substituir`) o espelho está vazio ou incompleto e o Worker segue em `registros`.
+export const espelhoPronto = async (env) => espelhoLigado(env) && (await semeado(env.DB));
+
+// Junção das transações com os ajustes. `pronto` = espelho ligado e semeado: junta pela pk (`'mb:' || t.id`), que usa o índice (tabela, pk).
+export const deTx = (pronto) => `FROM transactions t LEFT JOIN ${pronto ? "v_ajustes_espelho a ON a.pk = 'mb:' || t.id" : "v_ajustes a ON a.transaction_id = t.id"}`;
 
 const cursorAtual = (db) =>
   db.prepare("SELECT server_at || '|' || tabela || '|' || pk AS c FROM espelho ORDER BY server_at DESC, tabela DESC, pk DESC LIMIT 1").first("c");
@@ -148,11 +153,12 @@ export async function semear(db, corpo, agoraIso, aparelho) {
 
 const ID = (pk) => "cashew:" + pk; // mesmo prefixo do app (idDoPk): é o formato dos ids na tabela `registros`
 const comoLista = (texto) => { try { const l = JSON.parse(texto); return Array.isArray(l) ? l.map(String) : []; } catch { return []; } };
-const dia = (v) => {
+const msDe = (v) => {
   if (v == null) return null;
   const ms = typeof v === "number" ? (v < 1e11 ? v * 1000 : v) : Date.parse(v); // o Drift grava DateTime em segundos
-  return Number.isNaN(ms) ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms));
+  return Number.isNaN(ms) ? null : ms;
 };
+const dia = (v) => { const ms = msDe(v); return ms == null ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms)); };
 
 export function configDe(linhas) {
   const c = Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
@@ -164,14 +170,17 @@ export function configDe(linhas) {
 // pelo banco", então a categoria do próprio mapeador também vira ajuste: o efeito no ciclo é o mesmo); excluída vira {gasto: 0}.
 // Nome e nota só entram se a linha foi editada (date_time_modified depois de 2000, como `mbEditadoEm` do app); sem edição o texto
 // é o do banco. O `pluggy` das categorias não existe no espelho (o Cashew não tem a coluna): vem do `registros` antigo, só leitura.
-const editada = (v) => { const ms = typeof v === "number" ? (v < 1e11 ? v * 1000 : v) : Date.parse(v); return Number.isFinite(ms) && new Date(ms).getUTCFullYear() >= 2001; };
+const editada = (v) => { const ms = msDe(v); return ms != null && new Date(ms).getUTCFullYear() >= 2001; };
 export async function registrosDoEspelho(db) {
-  const { results } = await db
-    .prepare(
+  // Três leituras independentes num batch só. `_config` vem com as exclusões: o tombstone tem de apagar o valor antigo da tabela `config`.
+  const [{ results }, { results: pluggyRows }, { results: antiga }] = await db.batch([
+    db.prepare(
       "SELECT tabela, pk, dados, deleted_at FROM espelho WHERE tabela IN ('categories', 'associated_titles', 'budgets', 'objectives', 'mb_orcamento_tx', 'mb_meta_aplicacao', 'mb_revisoes', '_config') " +
         "OR (tabela = 'transactions' AND (pk LIKE 'mb:%' OR (deleted_at IS NULL AND json_extract(dados, '$.type') = 1)))"
-    )
-    .all();
+    ),
+    db.prepare("SELECT id, json_extract(dados, '$.pluggy') AS p FROM registros WHERE tabela = 'categorias' AND deleted_at IS NULL AND json_type(dados, '$.pluggy') = 'array'"),
+    db.prepare("SELECT chave, valor FROM config"),
+  ]);
   const vivas = results.filter((r) => r.deleted_at == null && r.dados != null).map((r) => ({ ...r, d: JSON.parse(r.dados) }));
   const daTabela = (t) => vivas.filter((r) => r.tabela === t);
   const registros = [];
@@ -179,7 +188,7 @@ export async function registrosDoEspelho(db) {
 
   const categorias = new Map();
   const pluggy = new Map();
-  for (const r of (await db.prepare("SELECT id, json_extract(dados, '$.pluggy') AS p FROM registros WHERE tabela = 'categorias' AND deleted_at IS NULL AND json_type(dados, '$.pluggy') = 'array'").all()).results) { const l = comoLista(r.p); if (l.length) pluggy.set(r.id, l); }
+  for (const r of pluggyRows) { const l = comoLista(r.p); if (l.length) pluggy.set(r.id, l); }
   for (const { pk, d } of daTabela("categories")) {
     categorias.set(pk, d.name);
     novo("categorias", ID(pk), { ...(pluggy.has(ID(pk)) ? { pluggy: pluggy.get(ID(pk)) } : {}), nome: d.name, tipo: d.income ? "receita" : "despesa", cor: d.colour ?? null, icone: d.icon_name ?? null, pai_id: d.main_category_pk ? ID(d.main_category_pk) : null, ordem: d.order });
@@ -224,7 +233,9 @@ export async function registrosDoEspelho(db) {
   }
 
   // `_config` vence; a tabela `config` (ciclo gravado pelo painel antigo) cobre o que o app ainda não sincronizou.
-  const antiga = (await db.prepare("SELECT chave, valor FROM config").all()).results;
-  const config = configDe([...antiga, ...daTabela("_config").map((r) => ({ chave: r.pk, valor: r.d.v == null ? null : String(r.d.v) }))]);
+  const config = configDe([...antiga, ...results.filter((r) => r.tabela === "_config").map((r) => {
+    const v = r.deleted_at == null && r.dados != null ? JSON.parse(r.dados).v : null; // tombstone = null, que sobrescreve o valor antigo
+    return { chave: r.pk, valor: v == null ? null : String(v) };
+  })]);
   return { registros, config };
 }

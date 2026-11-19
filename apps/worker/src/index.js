@@ -12,7 +12,7 @@ import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
-import { avisar, configDe, enviarEspelho, espelhoLigado, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
+import { avisar, configDe, enviarEspelho, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
 export { EspelhoHub } from "./hub.js";
 
@@ -209,16 +209,15 @@ const decodificar = (segmento) => { try { return decodeURIComponent(segmento); }
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
 const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, t.entre_minhas, t.tipo_credito, t.contraparte, t.bill_month, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
-// Com ESPELHO = 1 os ajustes vêm do espelho (v_ajustes_espelho), não de `registros`.
-const deTx = (env) => `FROM transactions t LEFT JOIN ${espelhoLigado(env) ? "v_ajustes_espelho" : "v_ajustes"} a ON a.transaction_id = t.id`;
 
 async function dados(env, url) {
   const db = env.DB;
+  const pronto = await espelhoPronto(env);
   const mesParam = url.searchParams.get("mes");
   const mes = /^\d{4}-\d{2}$/.test(mesParam || "") ? mesParam : hojeSP().slice(0, 7);
   const [contas, transacoes, meses, snaps, ultimaOk, ultima] = await db.batch([
     db.prepare("SELECT * FROM accounts ORDER BY type, name"),
-    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(env)} WHERE t.date >= ?1 AND t.date <= ?2 ORDER BY t.date DESC, t.id`).bind(mes + "-01", mes + "-31"),
+    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.date >= ?1 AND t.date <= ?2 ORDER BY t.date DESC, t.id`).bind(mes + "-01", mes + "-31"),
     db.prepare("SELECT DISTINCT substr(date, 1, 7) AS mes FROM transactions ORDER BY mes DESC LIMIT 60"),
     db.prepare("SELECT key, data, updated_at FROM snapshots"),
     db.prepare("SELECT finished_at FROM sync_log WHERE ok = 1 ORDER BY id DESC LIMIT 1"),
@@ -239,19 +238,21 @@ async function dados(env, url) {
 
 // Últimos 6 meses (campos mínimos) para os gráficos; o cliente aplica a regra de "não é gasto".
 async function historico(env) {
+  const pronto = await espelhoPronto(env);
   const hoje = hojeSP();
   const de = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7) - 6, 1)).toISOString().slice(0, 10);
   const { results } = await env.DB.prepare(
-    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto ${deTx(env)} WHERE t.date >= ?1 AND t.scheduled = 0`
+    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto ${deTx(pronto)} WHERE t.date >= ?1 AND t.scheduled = 0`
   ).bind(de).all();
   return json({ mesAtual: hoje.slice(0, 7), de, transacoes: results });
 }
 
 // Compras de um cartão numa janela de datas (a fatura), incluindo parcelas futuras.
 async function fatura(env, url) {
+  const pronto = await espelhoPronto(env);
   const [conta, de, ate] = ["conta", "de", "ate"].map((k) => url.searchParams.get(k) || "");
   if (!conta || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return json({ erro: "Parâmetros inválidos" }, 400);
-  const { results } = await env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(env)} WHERE t.account_id = ?1 AND t.date >= ?2 AND t.date <= ?3 ORDER BY t.date DESC, t.id`)
+  const { results } = await env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.account_id = ?1 AND t.date >= ?2 AND t.date <= ?3 ORDER BY t.date DESC, t.id`)
     .bind(conta, de, ate).all();
   return json({ transacoes: results });
 }
@@ -282,16 +283,20 @@ async function lerConfig(db) {
 // Base do ciclo e dos alertas: 200 dias de transações (6 meses de média + ciclo atual) e todas as parcelas futuras.
 async function baseCiclo(env) {
   const hoje = hojeSP();
+  const pronto = await espelhoPronto(env);
   const [tx, contas, lido] = await Promise.all([
-    env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(env)} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
+    env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
     env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
     // Com o espelho ligado, configurações, ajustes, revisões, metas e o resto vêm só do espelho (registrosDoEspelho).
-    espelhoLigado(env) ? registrosDoEspelho(env.DB) : Promise.all([
+    pronto ? registrosDoEspelho(env.DB) : Promise.all([
       lerConfig(env.DB),
       env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas','revisoes','metas')").all(),
     ]).then(([config, regs]) => ({ config, registros: regs.results.flatMap((r) => { try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; } }) })),
   ]);
   const { config, registros } = lido;
+  // Transação ligada a empréstimo (divida_id no ajuste) não é gasto, como no app (onlyShowIfOnlyExpenseAndIncome): o "para gastar" fecha igual nos dois.
+  const comDivida = new Set(registros.filter((r) => r.tabela === "ajustes" && r.dados?.divida_id).map((r) => r.id));
+  if (comDivida.size) tx.results = tx.results.map((t) => (comDivida.has(t.id) ? { ...t, ajuste_gasto: 0 } : t));
   // Conta e cartão do Santander ficam fora de tudo que sai daqui (ciclo, alertas, resumo semanal, "disponível").
   const [semIgnorar, contasUsadas] = semIgnoradas(tx.results, contas.results);
   // As respostas da fila "Para revisar" mexem no que conta como gasto e no que pode ser salário antes de qualquer cálculo.
@@ -334,13 +339,24 @@ async function salvarConfig(request, env, url, ctx) {
     novas.salario_valor = t.amount;
   }
   if (!ops.length) return json({ erro: "Nada para salvar" }, 400);
-  await env.DB.batch(ops);
-  if (espelhoLigado(env)) {
+  // Com o espelho pronto ele é a fonte: grava primeiro nele e só mexe em `config` se aceitou. O updated_at é max(agora, atual + 1 ms),
+  // senão um relógio adiantado do celular venceria a edição do painel.
+  let aviso = null;
+  if (await espelhoPronto(env)) {
     const ts = agora();
-    const linhas = Object.entries(novas).map(([pk, v]) => ({ tabela: "_config", pk, dados: v === null ? null : { v }, updated_at: ts, deleted_at: v === null ? ts : null }));
-    const r = await enviarEspelho(env.DB, { linhas }, ts, "web");
-    if (r.gravadas) ctx.waitUntil(avisar(env, { tipo: "mudou", cursor: r.cursor, aparelho: "web" }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
+    const atuais = new Map((await env.DB.prepare("SELECT pk, updated_at FROM espelho WHERE tabela = '_config'").all()).results.map((r) => [r.pk, r.updated_at]));
+    const linhas = Object.entries(novas).map(([pk, v]) => {
+      const seguinte = atuais.has(pk) ? new Date(Date.parse(atuais.get(pk)) + 1).toISOString() : ts;
+      const at = seguinte > ts ? seguinte : ts;
+      return { tabela: "_config", pk, dados: v === null ? null : { v }, updated_at: at, deleted_at: v === null ? at : null };
+    });
+    let r;
+    try { r = await enviarEspelho(env.DB, { linhas }, ts, "web"); } catch (e) { console.error("Espelho recusou a configuração", e?.stack || e); return json({ erro: "Não foi possível gravar no espelho" }, 502); }
+    if (r.status !== 200 || r.corpo.rejeitados.length) return json({ erro: "O espelho rejeitou a configuração", detalhe: r.corpo }, r.status === 200 ? 409 : r.status);
+    aviso = r;
   }
+  await env.DB.batch(ops);
+  if (aviso?.gravadas) ctx.waitUntil(avisar(env, { tipo: "mudou", cursor: aviso.cursor, aparelho: "web" }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
   return json({ ok: true });
 }
 
@@ -663,9 +679,10 @@ async function appTransacoes(request, env, url) {
   const desde = normalizarDesde(url.searchParams.get("desde"));
   if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
   const db = env.DB;
+  const pronto = await espelhoPronto(env);
   const [contas, tx, pend] = await db.batch([
     db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
-    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(env)} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
+    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
   ]);
   return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));
