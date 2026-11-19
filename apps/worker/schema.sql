@@ -147,3 +147,6 @@ CREATE TABLE IF NOT EXISTS espelho_meta (
   chave TEXT PRIMARY KEY,
   valor TEXT
 );
+
+-- A view v_ajustes_espelho foi removida: o SQLite materializava a view e a junção virava O(tx x espelho). deTx (espelho.js) junta direto em `espelho`.
+DROP VIEW IF EXISTS v_ajustes_espelho;

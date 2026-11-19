@@ -56,6 +56,20 @@ export const hubDo = (env) => env.ESPELHO_HUB.get(env.ESPELHO_HUB.idFromName("pr
 export const avisar = (env, aviso) => hubDo(env).fetch("https://hub/avisar", { method: "POST", body: JSON.stringify(aviso) });
 
 const semeado = async (db) => (await metaDo(db)).semeado === "1";
+// ESPELHO ligado E semeado: antes do semeio (ou durante um `substituir`) o espelho está vazio ou incompleto e o Worker segue em `registros`.
+export const espelhoPronto = async (env) => espelhoLigado(env) && (await semeado(env.DB));
+
+// Junção das transações com os ajustes. Com o espelho pronto junta direto em `espelho` (por pk e pela categoria), sem passar pela view
+// v_ajustes_espelho: o SQLite do CI materializa a view e vira laço aninhado O(tx x espelho). `ajuste` = colunas ajuste_categoria,
+// ajuste_gasto e o `updated_at` do ajuste (maior entre transação e categoria: renomear a categoria muda a linha do pull incremental).
+export const deTx = (pronto) =>
+  pronto
+    ? "FROM transactions t LEFT JOIN espelho a ON a.tabela = 'transactions' AND a.pk = 'mb:' || t.id LEFT JOIN espelho c ON c.tabela = 'categories' AND c.pk = json_extract(a.dados, '$.category_fk')"
+    : "FROM transactions t LEFT JOIN v_ajustes a ON a.transaction_id = t.id";
+export const ajuste = (pronto) =>
+  pronto
+    ? { categoria: "CASE WHEN a.deleted_at IS NULL AND c.deleted_at IS NULL THEN json_extract(c.dados, '$.name') END", gasto: "CASE WHEN a.deleted_at IS NOT NULL THEN 0 END", atualizado: "CASE WHEN c.server_at > a.server_at THEN c.server_at ELSE a.server_at END" }
+    : { categoria: "a.category", gasto: "a.gasto", atualizado: "a.updated_at" };
 
 const cursorAtual = (db) =>
   db.prepare("SELECT server_at || '|' || tabela || '|' || pk AS c FROM espelho ORDER BY server_at DESC, tabela DESC, pk DESC LIMIT 1").first("c");
@@ -148,11 +162,12 @@ export async function semear(db, corpo, agoraIso, aparelho) {
 
 const ID = (pk) => "cashew:" + pk; // mesmo prefixo do app (idDoPk): é o formato dos ids na tabela `registros`
 const comoLista = (texto) => { try { const l = JSON.parse(texto); return Array.isArray(l) ? l.map(String) : []; } catch { return []; } };
-const dia = (v) => {
+const msDe = (v) => {
   if (v == null) return null;
   const ms = typeof v === "number" ? (v < 1e11 ? v * 1000 : v) : Date.parse(v); // o Drift grava DateTime em segundos
-  return Number.isNaN(ms) ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms));
+  return Number.isNaN(ms) ? null : ms;
 };
+const dia = (v) => { const ms = msDe(v); return ms == null ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms)); };
 
 export function configDe(linhas) {
   const c = Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
@@ -162,22 +177,30 @@ export function configDe(linhas) {
 // Projeta o espelho no formato que `baseCiclo` lê hoje da tabela `registros` ({tabela, id, dados}) e na tabela `config`.
 // Só leitura. Ajustes vêm das linhas `mb:` de transactions: a categoria atual vira `categoria_id` (o espelho não guarda a "aplicada
 // pelo banco", então a categoria do próprio mapeador também vira ajuste: o efeito no ciclo é o mesmo); excluída vira {gasto: 0}.
+// Nome e nota só entram se a linha foi editada (date_time_modified depois de 2000, como `mbEditadoEm` do app); sem edição o texto
+// é o do banco. O `pluggy` das categorias não existe no espelho (o Cashew não tem a coluna): vem do `registros` antigo, só leitura.
+const editada = (v) => { const ms = msDe(v); return ms != null && new Date(ms).getUTCFullYear() >= 2001; };
 export async function registrosDoEspelho(db) {
-  const { results } = await db
-    .prepare(
+  // Três leituras independentes num batch só. `_config` vem com as exclusões: o tombstone tem de apagar o valor antigo da tabela `config`.
+  const [{ results }, { results: pluggyRows }, { results: antiga }] = await db.batch([
+    db.prepare(
       "SELECT tabela, pk, dados, deleted_at FROM espelho WHERE tabela IN ('categories', 'associated_titles', 'budgets', 'objectives', 'mb_orcamento_tx', 'mb_meta_aplicacao', 'mb_revisoes', '_config') " +
         "OR (tabela = 'transactions' AND (pk LIKE 'mb:%' OR (deleted_at IS NULL AND json_extract(dados, '$.type') = 1)))"
-    )
-    .all();
+    ),
+    db.prepare("SELECT id, json_extract(dados, '$.pluggy') AS p FROM registros WHERE tabela = 'categorias' AND deleted_at IS NULL AND json_type(dados, '$.pluggy') = 'array'"),
+    db.prepare("SELECT chave, valor FROM config"),
+  ]);
   const vivas = results.filter((r) => r.deleted_at == null && r.dados != null).map((r) => ({ ...r, d: JSON.parse(r.dados) }));
   const daTabela = (t) => vivas.filter((r) => r.tabela === t);
   const registros = [];
   const novo = (tabela, id, dados) => registros.push({ tabela, id, dados, deleted_at: null });
 
   const categorias = new Map();
+  const pluggy = new Map();
+  for (const r of pluggyRows) { const l = comoLista(r.p); if (l.length) pluggy.set(r.id, l); }
   for (const { pk, d } of daTabela("categories")) {
     categorias.set(pk, d.name);
-    novo("categorias", ID(pk), { nome: d.name, tipo: d.income ? "receita" : "despesa", cor: d.colour ?? null, icone: d.icon_name ?? null, pai_id: d.main_category_pk ? ID(d.main_category_pk) : null, ordem: d.order });
+    novo("categorias", ID(pk), { ...(pluggy.has(ID(pk)) ? { pluggy: pluggy.get(ID(pk)) } : {}), nome: d.name, tipo: d.income ? "receita" : "despesa", cor: d.colour ?? null, icone: d.icon_name ?? null, pai_id: d.main_category_pk ? ID(d.main_category_pk) : null, ordem: d.order });
   }
   for (const { pk, d } of daTabela("associated_titles")) {
     if (!d.title?.trim() || d.title.includes("*")) continue; // não projetável como padrão (mesma regra do app)
@@ -191,7 +214,7 @@ export async function registrosDoEspelho(db) {
   }
   const aplicacoes = Map.groupBy(daTabela("mb_meta_aplicacao"), (r) => r.d.meta_pk);
   for (const { pk, d } of daTabela("objectives")) {
-    if (d.type !== 0) continue; // empréstimos (type 1) não entram no ciclo
+    if (d.type !== 0) { novo("dividas", ID(pk), { tipo: "emprestimo", nome: d.name, sentido: d.income ? "me_devem" : "devo", valor_total: d.amount }); continue; } // dívida não entra no ciclo
     novo("metas", ID(pk), { nome: d.name, valor_alvo: d.amount, prazo: dia(d.end_date), aplicacao_ids: (aplicacoes.get(pk) ?? []).map((a) => a.d.aplicacao_pk).sort() });
   }
   for (const { pk, d } of daTabela("transactions")) {
@@ -200,27 +223,28 @@ export async function registrosDoEspelho(db) {
   for (const { pk, d } of daTabela("mb_revisoes")) novo("revisoes", pk, d);
 
   const escolhas = Map.groupBy(daTabela("mb_orcamento_tx"), (r) => r.d.tx_pk);
-  const idsMb = results.filter((x) => x.tabela === "transactions" && x.pk.startsWith("mb:")).map((x) => x.pk.slice(3));
-  // O espelho não guarda date_time_modified: texto "editado" = o que difere da descrição que veio do banco.
-  const descricoes = new Map((await db.prepare("SELECT t.id, t.description FROM transactions t JOIN json_each(?1) j ON t.id = j.value").bind(JSON.stringify(idsMb)).all()).results.map((x) => [x.id, x.description]));
   const texto = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null);
   for (const r of results.filter((x) => x.tabela === "transactions" && x.pk.startsWith("mb:"))) {
     const id = r.pk.slice(3);
+    if (id.startsWith("inv:")) continue; // investimento do banco: não é transação do ciclo
     if (r.deleted_at != null) { novo("ajustes", id, { gasto: 0 }); continue; }
     const d = JSON.parse(r.dados);
+    const edicao = editada(d.date_time_modified);
     const ids = (escolhas.get(r.pk) ?? []).map((e) => e.d.orcamento_pk).filter(Boolean).map(ID).sort();
     const ajuste = {
       ...(categorias.has(d.category_fk) ? { categoria_id: ID(d.category_fk), category: categorias.get(d.category_fk) } : {}),
       ...(escolhas.has(r.pk) ? { orcamento_ids: ids } : {}),
       ...(d.objective_loan_fk ? { divida_id: ID(d.objective_loan_fk) } : {}),
-      ...(texto(d.name) && texto(d.name) !== descricoes.get(id)?.trim() ? { nome: texto(d.name) } : {}),
-      ...(texto(d.note) && d.note !== "Pendente" ? { nota: texto(d.note) } : {}),
+      ...(edicao && texto(d.name) ? { nome: texto(d.name) } : {}),
+      ...(edicao && texto(d.note) && d.note !== "Pendente" ? { nota: texto(d.note) } : {}),
     };
     if (Object.keys(ajuste).length) novo("ajustes", id, ajuste);
   }
 
   // `_config` vence; a tabela `config` (ciclo gravado pelo painel antigo) cobre o que o app ainda não sincronizou.
-  const antiga = (await db.prepare("SELECT chave, valor FROM config").all()).results;
-  const config = configDe([...antiga, ...daTabela("_config").map((r) => ({ chave: r.pk, valor: r.d.v == null ? null : String(r.d.v) }))]);
+  const config = configDe([...antiga, ...results.filter((r) => r.tabela === "_config").map((r) => {
+    const v = r.deleted_at == null && r.dados != null ? JSON.parse(r.dados).v : null; // tombstone = null, que sobrescreve o valor antigo
+    return { chave: r.pk, valor: v == null ? null : String(v) };
+  })]);
   return { registros, config };
 }

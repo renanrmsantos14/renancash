@@ -100,6 +100,15 @@ Testes: adaptar `ciclo-sync.test.mjs`, `alertas.test.mjs`, `revisao.test.mjs`, `
 Verificação: `/api/notificacoes` com token do celular devolve as mesmas revisões; resposta pela notificação chega à web.
 Risco: projeção de ajustes divergir em estorno e investimento `mb:inv:`.
 
+#### F4 implementada (Worker; Flutter intocado)
+- Com `ESPELHO=1`, `baseCiclo` (logo `/api/sync`, `/api/ciclo`, `notificacoesAparelho`, `avaliarAlertas`, `alertaSemanal`) lê configurações, ajustes, revisões, metas, orçamentos, regras e assinaturas só de `registrosDoEspelho(db)`; `/api/dados`, `/api/historico`, `/api/fatura` e o ciclo juntam os ajustes direto em `espelho` (`deTx`/`ajuste` em espelho.js) em vez de `v_ajustes`. Flag desligada: nada muda (`registros` e `config`).
+- Projeção completa: `nome`/`nota` do ajuste só entram se `date_time_modified` é de 2001 em diante (mesma regra de `mbEditadoEm`; sem edição o texto é o do banco); `divida_id` (de `objective_loan_fk`); `dividas` (objetivos `type` 1); `mb:inv:*` fica de fora; a categoria atual da transação `mb:` vira `categoria_id`/`category` do ajuste (o espelho não guarda a "aplicada", e o efeito no ciclo é o mesmo).
+- `pluggy` das categorias NÃO existe no espelho (o Cashew não tem a coluna): `registrosDoEspelho` ainda lê esse campo de `registros` (só leitura). Antes de remover `registros` (F5) é preciso decidir onde ele vive (ex.: tabela `mb_categoria_pluggy` espelhada).
+- Revisões: o Worker não tem rota de resposta; quem responde é o app (botões da notificação e fila), que grava `mb_revisoes` e o espelho propaga (LWW + `mudou`). Com a flag ligada o Worker lê as decisões de `mb_revisoes`; testado: a resposta sai da fila de `/api/sync` e some do item da notificação.
+- Transações do banco: o app puxa `GET /api/sync` (D1 `transactions`) e o mapper grava as linhas `mb:` localmente, que viajam pelo espelho; `sincronizar` já avisa `{tipo:"banco"}` com a flag ligada. Nada mais é necessário no Worker.
+- `PUT /api/config` (limite e `salario_id`) com a flag ligada também grava `_config` no espelho (aparelho `web`, LWW, aviso `mudou`), senão um `_config` antigo venceria o valor novo. Grava primeiro no espelho (se falhar ou rejeitar: 502/409 e `config` fica intocado), com `updated_at = max(agora, atual + 1 ms)` para um relógio adiantado do celular não vencer o painel. Sem semeio vale só a tabela `config`.
+- Correções do code-review: `espelhoPronto` (flag ligada E `semeado`; durante `substituir` volta a `registros`); junção direta em `espelho` por pk e categoria, sem a view (que o SQLite do CI materializa; a view foi removida; EXPLAIN sem SCAN/MATERIALIZE); `updated_at` da view = max(transação, categoria) para o pull incremental ver renomeação; tombstone de `_config` sobrescreve `config`; `divida_id` tira a transação do gasto do ciclo (`baseCiclo`, mesma regra do app, com e sem a flag); `registrosDoEspelho` lê em um `db.batch`.
+
 ### F5 — Remover o caminho antigo
 Remover: `projetarLocal.dart`, `oficial.dart` (menos `mbLimparDadosLocais`), `detectar.dart`, a aplicação de `registros` em `aplicarLocal.dart`, envio em `meuBancoSync.dart` (`_sincronizarUmaVez`), repuxar, o botão, `POST /api/sync` com registros (410). Manter: pull do banco, Pluggy, IA, notificações, workmanager, `registros` no D1.
 Verificação: uma semana de uso real antes de apagar; grep por `mbTornarOficial|projetar|detectarMudancasLocais` vazio.
@@ -135,7 +144,7 @@ Limites atuais de D1/DO grátis; `connect-src 'self'` e `wss:`; JSON1/`json_patc
 - `PUT /api/ajustes/:id` responde 410 com a flag ligada (o painel antigo perde a edição; F4).
 - Ticket HMAC do WebSocket (plano B) não foi implementado: Android usa Bearer no cabeçalho e a web usa cookie com checagem de Origin.
 - Limite prático: o D1 aceita cerca de 1 MB por comando SQL; o Worker divide o POST em lotes de 1 MB.
-- `registrosDoEspelho` projeta categorias, regras, orçamentos, metas, assinaturas, revisões e ajustes (`mb:`). Limitações: o ajuste não leva a categoria aplicada, nome/nota/divida_id, nem `pluggy` das categorias; dívidas não são projetadas.
+- `registrosDoEspelho` projeta categorias, regras, orçamentos, metas, assinaturas, revisões e ajustes (`mb:`); a F4 completou a projeção (ver abaixo).
 
 ### Correções do code-review (PR #95)
 - Contrato do Worker: o POST não devolve `cursor` (o cliente só adota cursor do GET); `rejeitados` `mais_antiga` traz `atual`, aplicado na hora; rejeição por tamanho ou tabela desconhecida fica em `mb_estado.espelho_rejeitados`; `aparelho` autenticado vem no POST/GET e é guardado em `mb_estado.espelho_aparelho_servidor` (o `mudou` próprio é filtrado por ele); a primeira página de cada pull recua 30 s só no `server_at`.

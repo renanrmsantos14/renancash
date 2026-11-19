@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { criarAmbiente, criarAparelho, entrarComSenha, ORIGEM } from "./ambiente.mjs";
-import { registrosDoEspelho } from "../src/espelho.js";
+import { ajuste, deTx, registrosDoEspelho } from "../src/espelho.js";
+import { criarD1 } from "./d1.mjs";
 import { EspelhoHub } from "../src/hub.js";
 import { contextoDeRegistros, categoriaEfetiva } from "@meu-banco/core";
 import { resumoCiclo } from "../src/ciclo.js";
@@ -359,7 +360,9 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("mb_meta_aplicacao", "ap2", { aplicacao_pk: "ap2", meta_pk: "m1" }),
     esp("mb_orcamento_tx", '["mb:g1","o1"]', { tx_pk: "mb:g1", orcamento_pk: "o1" }),
     esp("transactions", "mb:g1", { transaction_pk: "mb:g1", category_fk: "c1", name: "IFOOD", note: "Pendente" }),
-    esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp" }),
+    esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp", date_time_modified: dia("2026-11-12T12:00:00Z") }),
+    esp("transactions", "mb:g3", { transaction_pk: "mb:g3", category_fk: "c9", name: "Texto do banco", note: "Nota do banco", date_time_modified: dia("2000-01-01T00:00:00Z") }), // não editada: texto não vira ajuste
+    esp("transactions", "mb:inv:x1", { transaction_pk: "mb:inv:x1", category_fk: "c1", name: "CDB" }), // investimento do banco: fora
     db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, updated_at) VALUES ('g1', 'inter', '2026-11-10', 'IFOOD', -120, ''), ('g2', 'inter', '2026-11-11', 'RESTAURANTE X', -80, '')"),
     esp("transactions", "mb:gone", null, { deleted_at: T1 }),
     esp("transactions", "s1", { type: 1, name: "Netflix", amount: -40, date_created: dia("2026-11-05T15:00:00Z"), category_fk: "c1" }),
@@ -369,14 +372,16 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("_config", "limite", { v: 2000 }),
     esp("_config", "salario", { v: "SALARIO EMPRESA" }),
     db.prepare("INSERT INTO config (chave, valor) VALUES ('salario_valor', '7500'), ('limite', '999')"), // limite do espelho vence
+    db.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('categorias', 'cashew:c1', ?1, ?2, ?2)").bind(JSON.stringify({ nome: "Mercado", tipo: "despesa", pluggy: ["Groceries"] }), T1), // o pluggy só existe aqui
   ]);
 
   const registros = [
-    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1 }],
+    ["categorias", "cashew:c1", { nome: "Mercado", tipo: "despesa", cor: "#fff", icone: "cart.png", pai_id: null, ordem: 1, pluggy: ["Groceries"] }],
     ["categorias", "cashew:c2", { nome: "Salário", tipo: "receita", cor: null, icone: null, pai_id: "cashew:c1", ordem: 2 }],
     ["regras", "cashew:r1", { padrao: "*IFOOD*", categoria_id: "cashew:c1" }],
     ["regras", "cashew:r2", { padrao: "ENEL", categoria_id: "cashew:c1" }],
     ["orcamentos", "cashew:o1", { nome: "Mercado", valor: 800, categoria_ids: ["cashew:c1"], periodo: "ciclo", arquivado: 1 }],
+    ["dividas", "cashew:emp", { tipo: "emprestimo", nome: "Empréstimo", sentido: "devo", valor_total: 100 }],
     ["metas", "cashew:m1", { nome: "Viagem", valor_alvo: 5000, prazo: "2027-06-30", aplicacao_ids: ["ap1", "ap2"] }],
     ["assinaturas", "cashew:s1", { nome: "Netflix", valor: 40, dia: 5, categoria_id: "cashew:c1" }],
     ["revisoes", "tx:p1", revDecisao],
@@ -410,4 +415,155 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
   };
   assert.deepEqual(calcular(projetado.registros, projetado.config), calcular(registros, config));
   assert.equal(calcular(registros, config).resumo.gasto, 120 + 900 + 50, "a decisão 'ajuda' conta o envio ao Santander como gasto");
+});
+
+// ---------- F4: ciclo, painel antigo e alertas leem o espelho ----------
+
+test("com a flag ligada, ciclo, /api/dados, histórico e fatura leem os ajustes do espelho e ignoram `registros`", async () => {
+  const hoje = new Date().toLocaleDateString("sv", { timeZone: "America/Sao_Paulo" });
+  const dia = (n) => new Date(Date.parse(hoje + "T12:00:00Z") - n * 86_400_000).toISOString().slice(0, 10);
+  const { pedir, env, auth, enviar, esperar } = await preparar();
+  const ts = new Date().toISOString();
+  const tx = (id, d, desc, valor) => env.DB.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, 'inter', ?2, ?3, ?4, ?5, 'POSTED', 0, ?6)").bind(id, d, desc, valor, valor > 0 ? "CREDIT" : "DEBIT", ts);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, updated_at) VALUES ('inter', 'BANK', 'CHECKING_ACCOUNT', 'Conta', 'Inter', ?1)").bind(ts),
+    tx("s1", dia(5), "SALARIO EMPRESA", 7500), tx("g1", dia(2), "MERCADO", -100), tx("g2", dia(1), "FARMACIA", -50), tx("g3", dia(1), "PADARIA", -30),
+    // o painel antigo zerou o g2 em `registros`: com a flag ligada isso não vale mais
+    env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('ajustes', 'g2', '{\"gasto\":0}', ?1, ?1)").bind(ts),
+  ]);
+  const gasto = async () => (await (await pedir("/api/sync", { headers: auth })).json()).ciclo.gasto;
+  assert.equal(await gasto(), 180, "sem nada no espelho: tudo conta");
+  // o app exclui o g1 (tombstone `mb:g1`) e recategoriza o g3
+  const novas = [
+    { tabela: "categories", pk: "c1", dados: { name: "Padaria", income: 0 }, updated_at: ts, deleted_at: null },
+    { tabela: "transactions", pk: "mb:g1", dados: null, updated_at: ts, deleted_at: ts },
+    { tabela: "transactions", pk: "mb:g3", dados: { category_fk: "c1" }, updated_at: ts, deleted_at: null },
+  ];
+  assert.equal((await enviar(novas)).aceitos, 3);
+  await esperar();
+  assert.equal(await gasto(), 80, "g1 zerado pelo espelho; g2 continua contando");
+  const cookie = await entrarComSenha(pedir);
+  const lista = async (caminho, chave = "transacoes") => Object.fromEntries((await (await pedir(caminho, { headers: { cookie } })).json())[chave].map((t) => [t.id, [t.ajuste_gasto, t.ajuste_categoria]]));
+  const esperado = { g1: [0, null], g2: [null, null], g3: [null, "Padaria"], s1: [null, null] };
+  assert.deepEqual(await lista("/api/dados?mes=" + hoje.slice(0, 7)), esperado);
+  assert.deepEqual(await lista("/api/historico"), esperado);
+  assert.deepEqual(await lista(`/api/fatura?conta=inter&de=${dia(10)}&ate=${hoje}`), esperado);
+});
+
+// ---------- F4: correções do code-review ----------
+
+const hojeSP = () => new Date().toLocaleDateString("sv", { timeZone: "America/Sao_Paulo" });
+const diasAtras = (n) => new Date(Date.parse(hojeSP() + "T12:00:00Z") - n * 86_400_000).toISOString().slice(0, 10);
+// Conta corrente, salário há 5 dias e as transações dadas ([id, dia, descrição, valor]).
+async function semearCiclo(env, txs) {
+  const ts = new Date().toISOString();
+  const tx = (id, d, desc, valor) => env.DB.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, 'inter', ?2, ?3, ?4, ?5, 'POSTED', 0, ?6)").bind(id, d, desc, valor, valor > 0 ? "CREDIT" : "DEBIT", ts);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO accounts (id, type, subtype, name, bank, updated_at) VALUES ('inter', 'BANK', 'CHECKING_ACCOUNT', 'Conta', 'Inter', ?1)").bind(ts),
+    tx("s1", diasAtras(5), "SALARIO EMPRESA", 7500),
+    ...txs.map(([id, d, desc, valor]) => tx(id, diasAtras(d), desc, valor)),
+  ]);
+}
+const gastoDoCiclo = async (pedir, auth) => (await (await pedir("/api/sync", { headers: auth })).json()).ciclo.gasto;
+
+test("review 1: a junção com o espelho usa a PK (ajuste e categoria), sem view materializada nem varredura", async () => {
+  const { env } = await preparar();
+  const plano = (await env.DB.prepare(`EXPLAIN QUERY PLAN SELECT t.id, ${ajuste(true).categoria}, ${ajuste(true).gasto} ${deTx(true)} WHERE t.date >= ?1 OR ${ajuste(true).atualizado} > ?2`).bind("2026-01-01", "2026-01-01").all()).results.map((r) => r.detail).join("\n");
+  assert.doesNotMatch(plano, /MATERIALIZE|SCAN (a|c|e|espelho)\b/, plano);
+  assert.match(plano, /SEARCH \w+ USING (COVERING )?INDEX \w*espelho\w* \(tabela=\? AND pk=\?\)/, plano);
+});
+
+test("review 2: ESPELHO ligado e ainda não semeado segue em `registros`, e passa ao espelho depois do semeio", async () => {
+  const { env, pedir, auth, enviar, semear, esperar } = await preparar({ semeado: false });
+  await semearCiclo(env, [["g1", 2, "MERCADO", -100], ["g2", 1, "FARMACIA", -50]]);
+  const ts = new Date().toISOString();
+  await env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('ajustes', 'g2', '{\"gasto\":0}', ?1, ?1)").bind(ts).run();
+  assert.equal(await gastoDoCiclo(pedir, auth), 100, "não semeado: vale o ajuste de `registros`");
+  assert.equal((await semear({})).status, 200);
+  await esperar();
+  assert.equal(await gastoDoCiclo(pedir, auth), 150, "semeado: o ajuste antigo deixa de valer");
+  // durante um `substituir` (lote 0 apaga o "semeado") volta para `registros`
+  assert.equal((await semear({ lote: 0, fim: false, substituir: true })).status, 200);
+  assert.equal(await gastoDoCiclo(pedir, auth), 100, "semeio em andamento: `registros`");
+  void enviar;
+});
+
+test("review 3: `_config` com tombstone sobrescreve a tabela `config` com null", async () => {
+  const db = criarD1();
+  await db.batch([
+    db.prepare("INSERT INTO config (chave, valor) VALUES ('limite', '500'), ('salario', 'EMPRESA'), ('salario_valor', '7500')"),
+    db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('_config', 'limite', NULL, ?1, ?1, ?1, 'web'), ('_config', 'salario', '{\"v\":\"OUTRA\"}', ?1, NULL, ?1, 'web')").bind(T1),
+  ]);
+  const { config } = await registrosDoEspelho(db);
+  assert.equal(config.limite, null, "o tombstone apagou o limite antigo");
+  assert.equal(config.salario, "OUTRA");
+  assert.equal(config.salarioValor, 7500, "sem `_config`, a tabela antiga vale");
+});
+
+test("review 4: PUT /api/config grava primeiro no espelho; se ele falha, devolve erro e não grava `config`", async () => {
+  const { env, pedir } = await preparar();
+  const cookie = await entrarComSenha(pedir);
+  const put = (corpo) => pedir("/api/config", { method: "PUT", headers: { cookie, origin: ORIGEM, "content-type": "application/json" }, body: JSON.stringify(corpo) });
+  const original = env.DB;
+  env.DB = new Proxy(original, { get: (d, k) => (k === "batch" ? async () => { throw new Error("D1 fora"); } : d[k].bind(d)) });
+  const r = await put({ limite: 1234 });
+  env.DB = original;
+  assert.equal(r.status, 502);
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM config").first("n"), 0, "config intocado");
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM espelho WHERE tabela = '_config'").first("n"), 0);
+  assert.equal((await put({ limite: 1234 })).status, 200);
+  assert.equal(await env.DB.prepare("SELECT valor FROM config WHERE chave = 'limite'").first("valor"), "1234");
+});
+
+test("review 4: a edição do painel vence um `_config` do app com relógio adiantado (max(agora, atual + 1 ms))", async () => {
+  const { env, pedir } = await preparar();
+  const adiantado = new Date(Date.now() + 120_000).toISOString(); // dentro da folga de 5 min: o servidor aceita como está
+  await env.DB.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('_config', 'limite', '{\"v\":999}', ?1, NULL, ?1, 'celular')").bind(adiantado).run();
+  const cookie = await entrarComSenha(pedir);
+  const r = await pedir("/api/config", { method: "PUT", headers: { cookie, origin: ORIGEM, "content-type": "application/json" }, body: JSON.stringify({ limite: 2000 }) });
+  assert.equal(r.status, 200);
+  const l = await env.DB.prepare("SELECT dados, updated_at, aparelho FROM espelho WHERE tabela = '_config' AND pk = 'limite'").first();
+  assert.deepEqual([JSON.parse(l.dados).v, l.aparelho], [2000, "web"]);
+  assert.ok(l.updated_at > adiantado);
+});
+
+test("review 5: renomear a categoria faz o pull incremental devolver a transação", async () => {
+  const { env, pedir, auth, enviar, esperar } = await preparar();
+  await semearCiclo(env, [["g1", 2, "MERCADO", -100]]);
+  await enviar([
+    { tabela: "categories", pk: "c1", dados: { name: "Mercado", income: 0 }, updated_at: T1, deleted_at: null },
+    lin("mb:g1", { category_fk: "c1" }),
+  ]);
+  await esperar();
+  const pull = async (desde) => (await pedir("/api/app/transacoes" + (desde ? "?desde=" + encodeURIComponent(desde) : ""), { headers: auth })).json();
+  const primeiro = await pull();
+  assert.equal(primeiro.transacoes.find((t) => t.id === "g1").categoria, "Mercado");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal((await enviar([{ tabela: "categories", pk: "c1", dados: { name: "Supermercado", income: 0 }, updated_at: T2, deleted_at: null }])).aceitos, 1);
+  const segundo = await pull(primeiro.agora);
+  assert.deepEqual(segundo.transacoes.map((t) => [t.id, t.categoria]), [["g1", "Supermercado"]]);
+  assert.deepEqual((await pull(segundo.agora)).transacoes, [], "sem mudança nova: nada");
+});
+
+test("review 6: transação ligada a empréstimo não conta no gasto do ciclo, com a flag ligada e desligada", async () => {
+  const txs = [["g1", 2, "MERCADO", -100], ["emp", 1, "PIX AMIGO", -300]];
+  // ligada: o app manda objective_loan_fk na transação `mb:`
+  const ligado = await preparar();
+  await semearCiclo(ligado.env, txs);
+  assert.equal(await gastoDoCiclo(ligado.pedir, ligado.auth), 400);
+  await ligado.enviar([
+    { tabela: "objectives", pk: "o1", dados: { name: "Amigo", type: 1, income: 0, amount: 300 }, updated_at: T1, deleted_at: null },
+    lin("mb:emp", { objective_loan_fk: "o1" }),
+  ]);
+  await ligado.esperar();
+  assert.equal(await gastoDoCiclo(ligado.pedir, ligado.auth), 100, "ligada: o empréstimo fica fora");
+  // desligada: o ajuste `divida_id` está em `registros`
+  const antigo = criarAmbiente();
+  await semearCiclo(antigo.env, txs);
+  const token = await criarAparelho(antigo.env);
+  const authAntigo = { authorization: "Bearer " + token };
+  assert.equal(await gastoDoCiclo(antigo.pedir, authAntigo), 400);
+  const ts = new Date().toISOString();
+  await antigo.env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('ajustes', 'emp', '{\"divida_id\":\"cashew:o1\"}', ?1, ?1)").bind(ts).run();
+  assert.equal(await gastoDoCiclo(antigo.pedir, authAntigo), 100, "desligada: o empréstimo fica fora");
 });
