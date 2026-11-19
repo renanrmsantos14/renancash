@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:budget/struct/databaseGlobal.dart';
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoEstadoMudou;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:drift/drift.dart';
 
@@ -13,6 +14,8 @@ const String mbDdlOrcamentoTx = 'CREATE TABLE IF NOT EXISTS mb_orcamento_tx ('
 const String mbDdlMetaAplicacao = 'CREATE TABLE IF NOT EXISTS mb_meta_aplicacao ('
     'aplicacao_pk TEXT PRIMARY KEY, meta_pk TEXT NOT NULL)';
 
+const String mbDdlEstado = 'CREATE TABLE IF NOT EXISTS mb_estado (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)';
+
 Future<void> mbCriarTabelas() async {
   await database.customStatement(mbDdlOrcamentoTx);
   await database.customStatement(mbDdlMetaAplicacao);
@@ -21,8 +24,7 @@ Future<void> mbCriarTabelas() async {
       'tabela TEXT NOT NULL, id TEXT NOT NULL, dados TEXT, updated_at TEXT NOT NULL, '
       'deleted_at TEXT, projecao TEXT, pendente INTEGER NOT NULL DEFAULT 0, motivo TEXT, '
       'PRIMARY KEY (tabela, id))');
-  await database.customStatement(
-      'CREATE TABLE IF NOT EXISTS mb_estado (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)');
+  await database.customStatement(mbDdlEstado);
   await database.customStatement(
       'CREATE TABLE IF NOT EXISTS mb_aplicado (tx_pk TEXT PRIMARY KEY, categoria_pk TEXT NOT NULL)');
 }
@@ -98,14 +100,16 @@ Future<String?> mbLerEstado(String chave) async {
   return l?.read<String>('valor');
 }
 
-Future<void> mbGravarEstado(Map<String, String> valores) =>
-    database.transaction(() async {
-      for (final e in valores.entries) {
-        await database.customStatement(
-            'INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES (?, ?)',
-            [e.key, e.value]);
-      }
-    });
+Future<void> mbGravarEstado(Map<String, String> valores) async {
+  await database.transaction(() async {
+    for (final e in valores.entries) {
+      await database.customStatement(
+          'INSERT OR REPLACE INTO mb_estado (chave, valor) VALUES (?, ?)',
+          [e.key, e.value]);
+    }
+  });
+  await mbEspelhoEstadoMudou(valores.keys);
+}
 
 Future<void> mbRemoverEstado(String chave) =>
     database.customStatement('DELETE FROM mb_estado WHERE chave = ?', [chave]);

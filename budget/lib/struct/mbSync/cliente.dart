@@ -108,6 +108,15 @@ class MbCliente {
     );
   }
 
+  /// Espelho completo: fila local -> servidor. Até 500 linhas por chamada.
+  Future<Map<String, dynamic>> espelhoEnviar(String aparelho, List<Map<String, dynamic>> linhas) =>
+      _chamar('POST', '/api/espelho', corpo: {'aparelho': aparelho, 'linhas': linhas});
+
+  /// Espelho completo: linhas depois do cursor (`server_at|tabela|pk`), com apagadas; `mais` indica nova página.
+  Future<Map<String, dynamic>> espelhoPuxar(String? desde, {int limite = 2000}) =>
+      _chamar('GET', '/api/espelho',
+          query: {if (desde != null && desde.isNotEmpty) 'desde': desde, 'limite': '$limite'});
+
   // Marca a entrada que é o salário (usado pela fila "Para revisar" quando o salário não foi detectado).
   Future<void> definirSalario(String txId) async {
     await _chamar('PUT', '/api/config', corpo: {'salario_id': txId});

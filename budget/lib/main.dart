@@ -172,9 +172,13 @@ class App extends StatelessWidget {
           updateGlobalAppLifecycleState: true,
           onAppResume: () async {
             mbAgendador.voltouAoApp(); // puxa o que mudou em outro aparelho
+            mbEspelhoVoltouAoApp();
             await setHighRefreshRate();
           },
-          onAppPaused: mbAgendador.foiParaSegundoPlano,
+          onAppPaused: () {
+            mbAgendador.foiParaSegundoPlano();
+            mbEspelhoSegundoPlano();
+          },
           child: InitializeBiometrics(
             child: InitializeAppLinks(
               child: WatchForDayChange(

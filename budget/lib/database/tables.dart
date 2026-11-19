@@ -25,6 +25,7 @@ import 'package:budget/pages/activityPage.dart';
 
 import 'package:flutter/material.dart' show RangeValues;
 import 'package:budget/struct/mbSync/armazem.dart' show mbDdlOrcamentoTx;
+import 'package:budget/struct/mbSync/espelhoTriggers.dart' show mbEspelhoDerrubarTriggers, mbEspelhoPrepararBanco;
 import 'package:budget/struct/mbSync/orcamentos.dart'
     show mbCarteirasDoOrcamento, mbPertenceAoOrcamento;
 part 'tables.g.dart';
@@ -728,6 +729,8 @@ class FinanceDatabase extends _$FinanceDatabase {
       // },
       onUpgrade: (migrator, from, to) async {
         print("Migrating from: " + from.toString() + " to " + to.toString());
+        // Triggers do espelho apontam para tabelas que a migração pode recriar; o beforeOpen os cria de novo.
+        await mbEspelhoDerrubarTriggers(this);
         if (from <= 9) {
           await migrator.createTable($AppSettingsTable(database));
         }
@@ -1193,6 +1196,8 @@ class FinanceDatabase extends _$FinanceDatabase {
         } catch (e) {
           // The column already existed
         }
+        // Depois do addColumn acima: o hash dos triggers vem da lista de colunas.
+        await mbEspelhoPrepararBanco(this);
 
         if (details.hadUpgrade && details.versionBefore != null) {
           print(

@@ -1,4 +1,5 @@
-import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador;
+import 'package:budget/struct/mbSync/agendador.dart' show mbAgendador, mbEspelhoAgendador;
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoConfigMudou;
 import 'package:budget/struct/mbSync/configuracoes.dart' show mbConfigsSincronizadas;
 import 'package:budget/struct/mbSync/inicioOrdem.dart' show mbMigrarOrdemInicio;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -182,6 +183,8 @@ Future<bool> updateSettings(
   List<int> pagesNeedingRefresh = const [],
   bool forceGlobalStateUpdate = false,
   bool setStateAllPageFrameworks = false,
+  // false ao aplicar o que veio do servidor, para o espelho não reenviar o que acabou de receber.
+  bool sincronizar = true,
 }) async {
   bool isChanged = appStateSettings[setting] != value;
 
@@ -190,6 +193,10 @@ Future<bool> updateSettings(
       'userSettings', json.encode(appStateSettings));
   // Configuração que sincroniza: agenda o envio (o agendador ignora o que a própria rodada de sync grava).
   if (isChanged && mbConfigsSincronizadas.contains(setting)) mbAgendador.aoEditar();
+  if (isChanged && sincronizar) {
+    await mbEspelhoConfigMudou(setting);
+    mbEspelhoAgendador.aoEditar();
+  }
 
   if (updateGlobalState == true) {
     // Only refresh global state if the value is different
