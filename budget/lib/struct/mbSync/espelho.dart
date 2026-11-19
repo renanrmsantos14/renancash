@@ -46,6 +46,10 @@ final ValueNotifier<String> mbProgressoEspelho = ValueNotifier('');
 /// Mensagem da última falha do semeio ou da troca (fase `erro`).
 final ValueNotifier<String> mbErroEspelho = ValueNotifier('');
 
+/// Por que o espelho está como está ("sem pareamento", "HTTP 401: ...", "adiado pelo usuário"). Atualizado a cada
+/// decisão do agendador e mostrado em Configurações > Meu Banco, para não depender de adivinhar em produção.
+final ValueNotifier<String> mbDiagnosticoEspelho = ValueNotifier('o agendador ainda não rodou');
+
 /// Alterações do Meu Banco ainda não enviadas (`mb_registros.pendente`) que a troca pela nuvem descartaria.
 final ValueNotifier<int> mbPendentesAntesDaTroca = ValueNotifier(0);
 
