@@ -12,7 +12,7 @@ import { autenticarAparelho, puxar, enviar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
-import { avisar, configDe, enviarEspelho, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
+import { avisar, configDe, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
 export { EspelhoHub } from "./hub.js";
 
@@ -208,7 +208,7 @@ const decodificar = (segmento) => { try { return decodeURIComponent(segmento); }
 // ---------- API do painel ----------
 
 // Transações já com o ajuste do painel (categoria e "gasto"), numa consulta só.
-const COLUNAS_TX = "t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, t.entre_minhas, t.tipo_credito, t.contraparte, t.bill_month, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto";
+const colunasTx = (pronto) => `t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.category, t.merchant, t.scheduled, t.entre_minhas, t.tipo_credito, t.contraparte, t.bill_month, ${ajuste(pronto).categoria} AS ajuste_categoria, ${ajuste(pronto).gasto} AS ajuste_gasto`;
 
 async function dados(env, url) {
   const db = env.DB;
@@ -217,7 +217,7 @@ async function dados(env, url) {
   const mes = /^\d{4}-\d{2}$/.test(mesParam || "") ? mesParam : hojeSP().slice(0, 7);
   const [contas, transacoes, meses, snaps, ultimaOk, ultima] = await db.batch([
     db.prepare("SELECT * FROM accounts ORDER BY type, name"),
-    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.date >= ?1 AND t.date <= ?2 ORDER BY t.date DESC, t.id`).bind(mes + "-01", mes + "-31"),
+    db.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE t.date >= ?1 AND t.date <= ?2 ORDER BY t.date DESC, t.id`).bind(mes + "-01", mes + "-31"),
     db.prepare("SELECT DISTINCT substr(date, 1, 7) AS mes FROM transactions ORDER BY mes DESC LIMIT 60"),
     db.prepare("SELECT key, data, updated_at FROM snapshots"),
     db.prepare("SELECT finished_at FROM sync_log WHERE ok = 1 ORDER BY id DESC LIMIT 1"),
@@ -242,7 +242,7 @@ async function historico(env) {
   const hoje = hojeSP();
   const de = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7) - 6, 1)).toISOString().slice(0, 10);
   const { results } = await env.DB.prepare(
-    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, a.category AS ajuste_categoria, a.gasto AS ajuste_gasto ${deTx(pronto)} WHERE t.date >= ?1 AND t.scheduled = 0`
+    `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.category, ${ajuste(pronto).categoria} AS ajuste_categoria, ${ajuste(pronto).gasto} AS ajuste_gasto ${deTx(pronto)} WHERE t.date >= ?1 AND t.scheduled = 0`
   ).bind(de).all();
   return json({ mesAtual: hoje.slice(0, 7), de, transacoes: results });
 }
@@ -252,7 +252,7 @@ async function fatura(env, url) {
   const pronto = await espelhoPronto(env);
   const [conta, de, ate] = ["conta", "de", "ate"].map((k) => url.searchParams.get(k) || "");
   if (!conta || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return json({ erro: "Parâmetros inválidos" }, 400);
-  const { results } = await env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.account_id = ?1 AND t.date >= ?2 AND t.date <= ?3 ORDER BY t.date DESC, t.id`)
+  const { results } = await env.DB.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE t.account_id = ?1 AND t.date >= ?2 AND t.date <= ?3 ORDER BY t.date DESC, t.id`)
     .bind(conta, de, ate).all();
   return json({ transacoes: results });
 }
@@ -285,7 +285,7 @@ async function baseCiclo(env) {
   const hoje = hojeSP();
   const pronto = await espelhoPronto(env);
   const [tx, contas, lido] = await Promise.all([
-    env.DB.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
+    env.DB.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
     env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
     // Com o espelho ligado, configurações, ajustes, revisões, metas e o resto vêm só do espelho (registrosDoEspelho).
     pronto ? registrosDoEspelho(env.DB) : Promise.all([
@@ -682,7 +682,7 @@ async function appTransacoes(request, env, url) {
   const pronto = await espelhoPronto(env);
   const [contas, tx, pend] = await db.batch([
     db.prepare("SELECT id, type, name, bank, balance, credit_limit, available_limit, due_date FROM accounts ORDER BY type, name"),
-    db.prepare(`SELECT ${COLUNAS_TX} ${deTx(pronto)} WHERE ?1 IS NULL OR t.updated_at > ?1 OR a.updated_at > ?1 ORDER BY t.date, t.id`).bind(desde),
+    db.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE ?1 IS NULL OR t.updated_at > ?1 OR ${ajuste(pronto).atualizado} > ?1 ORDER BY t.date, t.id`).bind(desde),
     db.prepare("SELECT id FROM transactions WHERE status = 'PENDING' ORDER BY id"),
   ]);
   return json(montarResposta({ agora: agoraIso, contas: contas.results, transacoes: tx.results, pendentes: pend.results }));

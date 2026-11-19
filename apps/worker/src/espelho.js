@@ -59,8 +59,17 @@ const semeado = async (db) => (await metaDo(db)).semeado === "1";
 // ESPELHO ligado E semeado: antes do semeio (ou durante um `substituir`) o espelho está vazio ou incompleto e o Worker segue em `registros`.
 export const espelhoPronto = async (env) => espelhoLigado(env) && (await semeado(env.DB));
 
-// Junção das transações com os ajustes. `pronto` = espelho ligado e semeado: junta pela pk (`'mb:' || t.id`), que usa o índice (tabela, pk).
-export const deTx = (pronto) => `FROM transactions t LEFT JOIN ${pronto ? "v_ajustes_espelho a ON a.pk = 'mb:' || t.id" : "v_ajustes a ON a.transaction_id = t.id"}`;
+// Junção das transações com os ajustes. Com o espelho pronto junta direto em `espelho` (por pk e pela categoria), sem passar pela view
+// v_ajustes_espelho: o SQLite do CI materializa a view e vira laço aninhado O(tx x espelho). `ajuste` = colunas ajuste_categoria,
+// ajuste_gasto e o `updated_at` do ajuste (maior entre transação e categoria: renomear a categoria muda a linha do pull incremental).
+export const deTx = (pronto) =>
+  pronto
+    ? "FROM transactions t LEFT JOIN espelho a ON a.tabela = 'transactions' AND a.pk = 'mb:' || t.id LEFT JOIN espelho c ON c.tabela = 'categories' AND c.pk = json_extract(a.dados, '$.category_fk')"
+    : "FROM transactions t LEFT JOIN v_ajustes a ON a.transaction_id = t.id";
+export const ajuste = (pronto) =>
+  pronto
+    ? { categoria: "CASE WHEN a.deleted_at IS NULL AND c.deleted_at IS NULL THEN json_extract(c.dados, '$.name') END", gasto: "CASE WHEN a.deleted_at IS NOT NULL THEN 0 END", atualizado: "CASE WHEN c.server_at > a.server_at THEN c.server_at ELSE a.server_at END" }
+    : { categoria: "a.category", gasto: "a.gasto", atualizado: "a.updated_at" };
 
 const cursorAtual = (db) =>
   db.prepare("SELECT server_at || '|' || tabela || '|' || pk AS c FROM espelho ORDER BY server_at DESC, tabela DESC, pk DESC LIMIT 1").first("c");

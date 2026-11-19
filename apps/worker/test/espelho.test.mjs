@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { criarAmbiente, criarAparelho, entrarComSenha, ORIGEM } from "./ambiente.mjs";
-import { deTx, registrosDoEspelho } from "../src/espelho.js";
+import { ajuste, deTx, registrosDoEspelho } from "../src/espelho.js";
 import { criarD1 } from "./d1.mjs";
 import { EspelhoHub } from "../src/hub.js";
 import { contextoDeRegistros, categoriaEfetiva } from "@meu-banco/core";
@@ -466,10 +466,10 @@ async function semearCiclo(env, txs) {
 }
 const gastoDoCiclo = async (pedir, auth) => (await (await pedir("/api/sync", { headers: auth })).json()).ciclo.gasto;
 
-test("review 1: a junção com v_ajustes_espelho usa a PK do espelho, sem varrer a tabela", async () => {
+test("review 1: a junção com o espelho usa a PK (ajuste e categoria), sem view materializada nem varredura", async () => {
   const { env } = await preparar();
-  const plano = (await env.DB.prepare(`EXPLAIN QUERY PLAN SELECT t.id, a.category ${deTx(true)} WHERE t.date >= ?1`).bind("2026-01-01").all()).results.map((r) => r.detail).join("\n");
-  assert.doesNotMatch(plano, /SCAN (e|a|espelho)\b/, plano);
+  const plano = (await env.DB.prepare(`EXPLAIN QUERY PLAN SELECT t.id, ${ajuste(true).categoria}, ${ajuste(true).gasto} ${deTx(true)} WHERE t.date >= ?1 OR ${ajuste(true).atualizado} > ?2`).bind("2026-01-01", "2026-01-01").all()).results.map((r) => r.detail).join("\n");
+  assert.doesNotMatch(plano, /MATERIALIZE|SCAN (a|c|e|espelho)\b/, plano);
   assert.match(plano, /SEARCH \w+ USING (COVERING )?INDEX \w*espelho\w* \(tabela=\? AND pk=\?\)/, plano);
 });
 

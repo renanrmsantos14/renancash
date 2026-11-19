@@ -148,15 +148,5 @@ CREATE TABLE IF NOT EXISTS espelho_meta (
   valor TEXT
 );
 
--- Ajustes das transações `mb:` no formato antigo (category/gasto) lidos do espelho: é o que /api/dados, /api/historico e
--- /api/fatura juntam no lugar de v_ajustes quando ESPELHO = 1. category = nome da categoria atual; excluída = gasto 0.
+-- A view v_ajustes_espelho foi removida: o SQLite materializava a view e a junção virava O(tx x espelho). deTx (espelho.js) junta direto em `espelho`.
 DROP VIEW IF EXISTS v_ajustes_espelho;
-CREATE VIEW v_ajustes_espelho AS
-  SELECT e.pk AS pk,
-         substr(e.pk, 4) AS transaction_id,
-         CASE WHEN e.deleted_at IS NULL AND c.deleted_at IS NULL THEN json_extract(c.dados, '$.name') END AS category,
-         CASE WHEN e.deleted_at IS NOT NULL THEN 0 END AS gasto,
-         CASE WHEN c.server_at > e.server_at THEN c.server_at ELSE e.server_at END AS updated_at -- renomear/apagar a categoria também muda a linha do pull incremental
-  FROM espelho e
-  LEFT JOIN espelho c ON c.tabela = 'categories' AND c.pk = json_extract(e.dados, '$.category_fk')
-  WHERE e.tabela = 'transactions' AND e.pk LIKE 'mb:%' AND e.pk NOT LIKE 'mb:inv:%';
