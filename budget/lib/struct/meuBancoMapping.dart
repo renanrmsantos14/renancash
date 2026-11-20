@@ -416,8 +416,9 @@ class MbCompra {
   final DateTime data;
   final String categoriaNome;
   final String categoriaPk;
+  final String? subcategoriaPk;
   const MbCompra(this.pk, this.estabelecimento, this.centavos, this.data,
-      this.categoriaNome, this.categoriaPk);
+      this.categoriaNome, this.categoriaPk, [this.subcategoriaPk]);
 }
 
 class MbTransacao {
@@ -434,11 +435,12 @@ class MbTransacao {
   // Só vale na primeira importação: depois a subcategoria é do usuário.
   final String? subcategoriaPk;
   final bool pendente;
-  // Estorno e cashback entram como valor positivo numa categoria de despesa, para abater o gasto.
-  MbTransacao abatendo(String categoriaNome, String categoriaPk) => MbTransacao(
+  // Estorno e cashback entram como valor positivo numa categoria de despesa, para abater o gasto. A subcategoria
+  // é a do gasto abatido, senão a subcategoria dele fica com o gasto cheio.
+  MbTransacao abatendo(String categoriaNome, String categoriaPk, [String? subcategoriaPk]) => MbTransacao(
       pk: pk, nome: nome, valor: valor, receita: false, nota: nota, data: data,
       carteiraPk: carteiraPk, categoriaNome: categoriaNome,
-      categoriaPk: categoriaPk, pendente: pendente);
+      categoriaPk: categoriaPk, subcategoriaPk: subcategoriaPk, pendente: pendente);
 
   const MbTransacao({
     required this.pk,
@@ -741,18 +743,28 @@ Set<String> _abaterReembolsosVinculados(
     List<MbTransacao> transacoes, Map<String, String> vinculos, List<MbCompra> locais) {
   final reservadas = <String>{};
   if (vinculos.isEmpty) return reservadas;
-  final gastos = <String, ({String nome, String pk})>{
-    for (final c in locais) c.pk: (nome: c.categoriaNome, pk: c.categoriaPk),
+  final porPk = {for (final c in locais) c.pk: c};
+  final gastos = {
+    ...porPk,
     for (final t in transacoes)
-      if (t.valor < 0) t.pk: (nome: t.categoriaNome, pk: t.categoriaPk),
+      if (t.valor < 0) t.pk: _compra(t, porPk),
   };
   for (var i = 0; i < transacoes.length; i++) {
     final gasto = gastos[vinculos[transacoes[i].pk]];
     if (gasto == null) continue;
     reservadas.add(vinculos[transacoes[i].pk]!);
-    transacoes[i] = transacoes[i].abatendo(gasto.nome, gasto.pk);
+    transacoes[i] = transacoes[i].abatendo(gasto.categoriaNome, gasto.categoriaPk, gasto.subcategoriaPk);
   }
   return reservadas;
+}
+
+// Gasto do pull como compra abatível. A subcategoria do pull só vale na primeira importação: se o gasto já está
+// no app na mesma categoria, vale a que está lá (escolha do usuário); a de outra categoria não serve a esta.
+MbCompra _compra(MbTransacao t, Map<String, MbCompra> locais) {
+  final local = locais[t.pk];
+  return MbCompra(
+      t.pk, mbNormalizarEstabelecimento(t.nome), (-t.valor * 100).round(), t.data, t.categoriaNome, t.categoriaPk,
+      local != null && local.categoriaPk == t.categoriaPk ? local.subcategoriaPk : t.subcategoriaPk);
 }
 
 // Estorno (mesmo valor e estabelecimento de uma compra nos 60 dias anteriores) abate o gasto: vira valor
@@ -764,11 +776,9 @@ void _abaterEstornos(List<MbTransacao> transacoes, Set<String> estornos,
   final pks = {for (final t in transacoes) t.pk};
   final compras = <int, List<MbCompra>>{};
   void add(MbCompra c) => (compras[c.centavos] ??= []).add(c);
+  final porPk = {for (final c in locais) c.pk: c};
   for (final t in transacoes) {
-    if (t.valor < 0) {
-      add(MbCompra(t.pk, mbNormalizarEstabelecimento(t.nome),
-          (-t.valor * 100).round(), t.data, t.categoriaNome, t.categoriaPk));
-    }
+    if (t.valor < 0) add(_compra(t, porPk));
   }
   locais.where((c) => !pks.contains(c.pk)).forEach(add);
 
@@ -807,6 +817,6 @@ void _abaterEstornos(List<MbTransacao> transacoes, Set<String> estornos,
         t.data, mbNormalizarEstabelecimento(t.nome), (t.valor * 100).round());
     if (alvo == null) continue;
     usadas.add(alvo.pk);
-    transacoes[i] = t.abatendo(alvo.categoriaNome, alvo.categoriaPk);
+    transacoes[i] = t.abatendo(alvo.categoriaNome, alvo.categoriaPk, alvo.subcategoriaPk);
   }
 }

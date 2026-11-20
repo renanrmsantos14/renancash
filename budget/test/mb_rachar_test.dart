@@ -7,7 +7,7 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/reembolso.dart';
-import 'package:budget/struct/mbSync/armazem.dart' show mbLerRevisoes;
+import 'package:budget/struct/mbSync/armazem.dart' show mbLerRevisoes, mbRemoverEstado;
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:drift/drift.dart' show Value;
@@ -184,6 +184,51 @@ void main() {
       expect((await tx('mb:r1')).income, true);
       expect([await geral(), await gasto(cat), await receitas()], [120, 120, 60]);
       expect(meuBancoReembolsos.value, isEmpty);
+    });
+
+    test('reembolso ligado fica na subcategoria do gasto, mesmo se o gasto voltar no mesmo pull', () async {
+      cliente.transacoes = [
+        _tx('g1', 'REPUBLIC CA', -162.80, categoria: 'Eating out'),
+        _tx('r1', 'PIX RECEBIDO RAFAEL', 40.70),
+      ];
+      await sync();
+      // O usuário escolheu a subcategoria "Normal" no gasto depois da importação.
+      final cat = (await tx('mb:g1')).categoryFk;
+      await database.into(database.categories).insert(CategoriesCompanion.insert(
+          categoryPk: const Value('sub-normal'), name: 'Normal', order: 0, mainCategoryPk: Value(cat),
+          income: const Value(false), dateTimeModified: Value(DateTime.now())));
+      await (database.update(database.transactions)..where((t) => t.transactionPk.equals('mb:g1')))
+          .write(const TransactionsCompanion(subCategoryFk: Value('sub-normal')));
+
+      await ligar('r1', 'PIX RECEBIDO RAFAEL', 40.70, 'g1');
+      final r1 = await tx('mb:r1');
+      expect([r1.amount, r1.categoryFk, r1.subCategoryFk], [40.70, cat, 'sub-normal']);
+      expect((await tx('mb:g1')).subCategoryFk, 'sub-normal');
+
+      // Reembolso ligado antes da correção (sem subcategoria): a carga completa única da atualização corrige.
+      await (database.update(database.transactions)..where((t) => t.transactionPk.equals('mb:r1')))
+          .write(const TransactionsCompanion(subCategoryFk: Value(null)));
+      await sync();
+      expect((await tx('mb:r1')).subCategoryFk, isNull, reason: 'pull incremental não traz o r1 de volta');
+      await mbRemoverEstado('subcategoria_abatimentos_v1');
+      await sync();
+      expect((await tx('mb:r1')).subCategoryFk, 'sub-normal');
+    });
+
+    test('reembolso sem gasto (em "Outros") mantém a subcategoria escolhida pelo usuário na carga completa', () async {
+      cliente.transacoes = [_tx('r2', 'PIX RECEBIDO MARIA', 25)];
+      await sync();
+      await mbResponderRevisao(mbItemDeEntrada('mb:r2', 25, DateTime.now(), 'PIX RECEBIDO MARIA'), 'reembolso',
+          clienteParaTeste: cliente);
+      final cat = (await tx('mb:r2')).categoryFk;
+      await database.into(database.categories).insert(CategoriesCompanion.insert(
+          categoryPk: const Value('sub-outros'), name: 'Amigos', order: 0, mainCategoryPk: Value(cat),
+          income: const Value(false), dateTimeModified: Value(DateTime.now())));
+      await (database.update(database.transactions)..where((t) => t.transactionPk.equals('mb:r2')))
+          .write(const TransactionsCompanion(subCategoryFk: Value('sub-outros')));
+      await mbRemoverEstado('subcategoria_abatimentos_v1');
+      await sync();
+      expect((await tx('mb:r2')).subCategoryFk, 'sub-outros');
     });
 
     test('dois reembolsos (R\$ 40 + R\$ 40) num gasto de R\$ 120: conta R\$ 40, mesmo sem "Pix recebido" na descrição',
