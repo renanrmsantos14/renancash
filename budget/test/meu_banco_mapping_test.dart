@@ -1,3 +1,4 @@
+import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:budget/struct/mbSync/revisao.dart' show mbCategoriaAClassificar;
@@ -310,6 +311,60 @@ void main() {
         ],
       }, ctx, pkCategoria: (_, n, rc) => mbPkCategoria(n, rc));
       expect(r.transacoes.firstWhere((t) => t.pk == "mb:e").receita, true);
+    });
+  });
+
+  group("Alimentação por Pluggy e por app de delivery", () {
+    final destinos = mbResolverDestinos(const [
+      CatLocal(pk: "ali", nome: "Alimentação", receita: false),
+      CatLocal(pk: "del", nome: "Delivery", receita: false, paiPk: "ali"),
+      CatLocal(pk: "res", nome: "Restaurante", receita: false, paiPk: "ali"),
+      CatLocal(pk: "comp", nome: "Compras", receita: false),
+    ]);
+
+    List<String?> sug(String desc, String? cat,
+        {double valor = -30, MbContextoCategoria ctx = _ctx0}) {
+      final t = mbMapearPull({
+        "contas": [{"id": "cc", "type": "BANK", "name": "Conta", "bank": "Inter"}],
+        "transacoes": [
+          {"id": "x", "account_id": "cc", "date": "2026-01-10", "description": desc, "amount": valor, "status": "POSTED", "category": cat, "scheduled": 0},
+        ],
+      }, ctx,
+              destinos: destinos,
+              pkCategoria: (id, nome, receita) => id ?? mbPkCategoria(nome, receita))
+          .transacoes
+          .single;
+      return [t.categoriaPk, t.subcategoriaPk];
+    }
+
+    test("Pluggy Food delivery vira Delivery, Eating out vira Restaurante, Food and drinks fica em Alimentação", () {
+      expect(sug("Loja", "Food delivery"), ["ali", "del"]);
+      expect(sug("Loja", "Eating out"), ["ali", "res"]);
+      expect(sug("Loja", "Food and drinks"), ["ali", null]);
+    });
+
+    test("app de delivery com Pluggy Shopping vira Delivery", () {
+      expect(sug("Compra no débito - 99food *pizza Hut - Vasao Jose Dos Bra", "Shopping"), ["ali", "del"]);
+      expect(sug("Compra no débito - Ifd*mo Fome Ltda      Sao Jose Dos Bra", "Shopping"), ["ali", "del"]);
+      expect(sug("IFOOD *RESTAURANTE", null), ["ali", "del"]);
+      expect(sug("Compra no débito - Loja de roupas", "Shopping"), ["mb:cat:d:Compras", null]);
+    });
+
+    test("regra do usuário vence a descrição de delivery", () {
+      final ctx = MbContextoCategoria({}, [MbRegraCtx("r", "*ifood*", "comp", null, 0)], {});
+      expect(sug("IFOOD *RESTAURANTE", "Shopping", ctx: ctx)[1], null);
+    });
+
+    test("estorno do iFood continua receita e sem subcategoria de despesa", () {
+      final t = mbMapearPull({
+        "contas": [{"id": "cc", "type": "BANK", "name": "Conta", "bank": "Inter"}],
+        "transacoes": [
+          {"id": "x", "account_id": "cc", "date": "2026-01-10", "description": "IFOOD estorno", "amount": 30, "status": "POSTED", "category": "Shopping", "scheduled": 0},
+        ],
+      }, _ctx0, destinos: destinos, pkCategoria: (_, n, rc) => mbPkCategoria(n, rc))
+          .transacoes
+          .single;
+      expect([t.receita, t.subcategoriaPk], [true, null]);
     });
   });
 }

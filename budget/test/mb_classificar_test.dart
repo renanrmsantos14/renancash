@@ -127,6 +127,17 @@ void main() {
       expect(mbSugestaoLocal(_l('mb:4'), const [MbPadrao('FABIANA SILVA', 'sumiu')], _opcoes), isNull);
     });
 
+    test('sem IA: app de delivery sugere Alimentação › Delivery; padrão confirmado vence; sem a sub, como antes', () {
+      final l = _l('mb:5', descricao: 'Compra no débito - 99food *pizza Hut', valor: -40);
+      final s = mbSugestaoLocal(l, const [], _opcoes)!;
+      expect([s.categoriaPk, s.subPk, s.confianca], ['alim', 'deliv', 0.7]);
+      final comPadrao = mbSugestaoLocal(l, [MbPadrao(mbChavePadrao(l.descricao), 'beleza')], _opcoes)!;
+      expect([comPadrao.categoriaPk, comPadrao.fonte], ['beleza', MbFonteSugestao.padrao]);
+      final semSub = MbOpcoes.montar(const [CatLocal(pk: 'alim', nome: 'Alimentação', receita: false)]);
+      expect(mbSugestaoLocal(l, const [], semSub), isNull);
+      expect(mbSugestaoLocal(_l('mb:6', descricao: 'IFOOD estorno', valor: 40), const [], _opcoes), isNull);
+    });
+
     test('resposta da IA conferida no aparelho: pk inexistente, sub de outra categoria e receita em saída caem', () {
       final l = _l('mb:1');
       final ok = MbSugestao.daIa({
