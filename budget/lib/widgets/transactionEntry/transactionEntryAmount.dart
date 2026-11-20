@@ -2,6 +2,7 @@ import 'package:budget/colors.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/currencyFunctions.dart';
+import 'package:budget/struct/mbSync/rachadas.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
@@ -24,10 +25,16 @@ class TransactionEntryAmount extends StatelessWidget {
   final String? categoriaNome; // define o tipo (gasto, receita, investimento…) e a cor do valor
 
   @override
-  Widget build(BuildContext context) {
-    double count = transaction.amount.abs() *
-        (amountRatioToPrimaryCurrencyGivenPk(
-            Provider.of<AllWallets>(context), transaction.walletFk));
+  Widget build(BuildContext context) => ValueListenableBuilder<MbRachadas>(
+        valueListenable: meuBancoRachadas,
+        builder: (context, rachadas, _) => _corpo(context,
+            transaction.amount < 0 ? rachadas.porGasto[transaction.transactionPk] : null, rachadas),
+      );
+
+  // Conta rachada: minha parte em destaque, total pago riscado e menor, e quem dividiu.
+  Widget _corpo(BuildContext context, MbRachada? rachada, MbRachadas rachadas) {
+    final ratio = amountRatioToPrimaryCurrencyGivenPk(Provider.of<AllWallets>(context), transaction.walletFk);
+    double count = (rachada == null ? transaction.amount.abs() : -rachadas.valorNaLista(transaction)) * ratio;
     // Ajuste de saldo (categoria "0", ex.: valor atual de um investimento) não é entrada nem saída
     // e fica fora do total do dia: sem sinal e marcado como "ajuste".
     final ajuste = ehAjusteDeSaldo(transaction);
@@ -79,6 +86,21 @@ class TransactionEntryAmount extends StatelessWidget {
             ),
           ],
         ),
+        if (rachada != null) ...[
+          Text(
+              '−${convertToMoney(Provider.of<AllWallets>(context), transaction.amount.abs() * ratio, allDecimals: true)}',
+              style: TextStyle(
+                  fontSize: 11,
+                  decoration: TextDecoration.lineThrough,
+                  color: getColor(context, "textLight"))),
+          TextFont(
+            text: '👥 ${rachada.pessoas}',
+            fontSize: 11,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textColor: getColor(context, "textLight"),
+          ),
+        ],
         if (ajuste)
           TextFont(
             text: 'ajuste · fora do total',

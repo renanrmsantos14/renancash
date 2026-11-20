@@ -504,23 +504,29 @@ Future<void> _aplicarInvestimentos(List<MbInvestimento> lista) async {
 // (a fila some na hora), manda ao servidor e remapeia as transações. `categoriaPk` só para resposta "categoria".
 // Offline ou com falha, a decisão fica pendente e vai na próxima sincronização.
 Future<void> mbResponderRevisao(MbItemRevisao item, String resposta,
-    {String? categoriaPk, String? reembolsoDe, MbCliente? clienteParaTeste}) async {
+    {String? categoriaPk, String? reembolsoDe, String? trocoDe, MbCliente? clienteParaTeste}) async {
   if (item.txId == null || !mbRespostasRevisao.contains(resposta)) return;
   if (resposta == 'categoria' && categoriaPk == null) return;
+  if (resposta == 'troco' && trocoDe == null) return; // troco sem o reembolso que ele abate não existe
   await mbCriarTabelas();
   await mbGravarRevisoes(mbRegistrosDeResposta(item, resposta,
-      categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, agora: isoMs(DateTime.now())));
+      categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, trocoDe: trocoDe, agora: isoMs(DateTime.now())));
   await mbGravarEstado({_chaveRepuxar: isoMs(DateTime.now())});
   await mbAtualizarRevisar();
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
 }
 
 // Desliga um reembolso (ou desfaz qualquer resposta): apaga a decisão e o re-pull completo devolve a transação ao que o
-// banco diz. Item que vinha da fila do Worker volta para ela.
+// banco diz. Item que vinha da fila do Worker volta para ela. Desligar um reembolso desfaz também os trocos dele.
 Future<void> mbDesfazerRevisao(String txId, {MbCliente? clienteParaTeste}) async {
   await mbCriarTabelas();
   final agora = isoMs(DateTime.now());
-  await mbGravarRevisoes([Registro('revisoes', 'tx:$txId', null, agora, agora)]);
+  final trocos = [
+    for (final r in await mbLerRevisoes())
+      if (r.tabela == 'revisoes' && r.deletedAt == null && r.dados?['resposta'] == 'troco' && r.dados?['troco_de'] == txId)
+        r.id
+  ];
+  await mbGravarRevisoes([for (final id in ['tx:$txId', ...trocos]) Registro('revisoes', id, null, agora, agora)]);
   await mbGravarEstado({_chaveRepuxar: agora});
   await mbAtualizarRevisar();
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);

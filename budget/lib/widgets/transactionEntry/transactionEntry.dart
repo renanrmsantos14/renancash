@@ -15,6 +15,7 @@ import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntryTypeButton.dart';
+import 'package:budget/widgets/transactionEntry/indicacaoRachada.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -114,6 +115,7 @@ class TransactionEntry extends StatelessWidget {
     this.showExcludedBudgetTag,
     this.enableFutureTransactionsDivider = false,
     this.aboveWidget,
+    this.busca,
   }) : super(key: key);
 
   final Widget openPage;
@@ -138,6 +140,7 @@ class TransactionEntry extends StatelessWidget {
   final bool Function(Transaction transaction)? showExcludedBudgetTag;
   final bool enableFutureTransactionsDivider;
   final Widget? aboveWidget;
+  final String? busca; // texto da busca: gasto rachado achado pelo Pix mostra "inclui Pix de …"
 
   final double fabSize = 50;
 
@@ -525,6 +528,7 @@ class TransactionEntry extends StatelessWidget {
                                       ),
                                     ],
                                   ),
+                                IndicacaoRachada(transaction: transaction, busca: busca),
                                 tags,
                               ],
                             ),
@@ -574,6 +578,7 @@ class TransactionEntry extends StatelessWidget {
                               textColor: getColor(context, "textLight"),
                             ),
                           ),
+                        IndicacaoRachada(transaction: transaction, busca: busca),
                         tags,
                       ],
                     ),

@@ -53,6 +53,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
 
   Future<void> _ligar(MbGastoCandidato g) => _salvar(() => mbConfirmarReembolso(_l, g.pk));
 
+  Future<void> _devolverTroco(MbVinculoReembolso v) => _salvar(() => mbConfirmarTroco(_l, v.reembolsoPk));
+
   Future<void> _salvar(Future<void> Function() acao) async {
     if (_enviando) return;
     setState(() {
@@ -128,6 +130,11 @@ class _ItemClassificarState extends State<ItemClassificar> {
         // Salário e rendimento já vêm com a categoria do mês passado: sem "Rachou uma conta?" na frente.
         final parteDeConta =
             _l.valor > 0 && !mbEhJurosPoupanca(_l) && sugestao?.fonte != MbFonteSugestao.mesPassado;
+        // Pix enviado à pessoa que mandou um reembolso há até 3 dias: pode ser o troco. Só vira troco com o toque.
+        final troco = _l.valor < 0
+            ? mbSugerirTroco(meuBancoReembolsos.value, meuBancoTrocos.value,
+                descricao: _l.descricao, valor: _l.valor, data: _l.data)
+            : null;
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -181,6 +188,18 @@ class _ItemClassificarState extends State<ItemClassificar> {
                 ],
               ]),
             ),
+            if (troco != null) ...[
+              const SizedBox(height: 16),
+              Text('Devolveu o troco?', style: EdTexto.h2(context)),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: BotaoEscolha(
+                    rotulo: 'Devolvi parte do reembolso de ${mbNomeDoPagador(troco.pagador)}',
+                    tipo: TipoMov.gasto,
+                    onTap: _enviando ? null : () => _devolverTroco(troco)),
+              ),
+            ],
             const SizedBox(height: 16),
             Text(cat == null || sugestao == null ? 'Qual é a categoria?' : 'Não é isso? Toque na certa', style: EdTexto.h2(context)),
             const SizedBox(height: 8),

@@ -134,6 +134,24 @@ for (const espelho of MODOS) test(`reembolso abate o gasto como estorno genéric
   assert.equal(c.revisar.length, 0);
 });
 
+// Conta rachada com troco (caso sintético de 18/11): gasto 76,23, Pix recebido +50 ligado ao gasto, Pix enviado −11,88 de troco à mesma pessoa.
+// O Geral conta a parte de quem pagou: 76,23 − 50 + 11,88 = 38,11, igual ao que o app mostra.
+const racha = [...salarios, ["g1", 2, "99food Pizza Hut", -76.23], ["r1", 2, "Pix recebido - Ana Souza", 50], ["t1", 1, "Pix enviado devolvido - Ana Souza", -11.88]];
+for (const espelho of MODOS) test(`troco devolve parte do reembolso: o Geral conta 76,23 − 50 + 11,88 = 38,11 ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente(racha, espelho);
+  await enviar(A, [decisao("r1", "reembolso", { reembolso_de: "g1" }), decisao("t1", "troco", { troco_de: "r1" })]);
+  const c = await ciclo(A);
+  assert.ok(Math.abs(c.gasto - 38.11) < 0.005, `gasto ${c.gasto}`);
+  assert.equal(c.revisar.some((i) => i.tx_id === "t1"), false);
+});
+
+for (const espelho of MODOS) test(`troco de reembolso desligado do gasto volta para a fila e não abate nada ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente(racha, espelho);
+  await enviar(A, [decisao("r1", "reembolso"), decisao("t1", "troco", { troco_de: "r1" })]); // reembolso sem `reembolso_de`
+  const c = await ciclo(A);
+  assert.equal(c.revisar.some((i) => i.tx_id === "t1"), true);
+});
+
 for (const espelho of MODOS) test(`salário não detectado em 35 dias vira item com candidatas; PUT /api/config por token marca o salário ${nomeDoModo(espelho)}`, async () => {
   const { A, ciclo, amb } = await ambiente([["s1", 80, "SALARIO EMPRESA", 7500], ["x1", 12, "TRANSFERENCIA RECEBIDA EMPRESA", 6000], ["x2", 6, "PIX RECEBIDO EXTRA", 100]], espelho);
   const c = await ciclo(A);

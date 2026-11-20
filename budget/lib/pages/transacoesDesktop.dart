@@ -3,6 +3,7 @@ import 'package:budget/functions.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/struct/mbSync/rachadas.dart';
 import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
@@ -18,11 +19,15 @@ class LinhaTransacao {
     required this.categoria,
     required this.conta,
     required this.valorPrincipal,
+    this.rachada,
+    this.indicacao = '',
   });
   final Transaction transacao;
   final String categoria;
   final String conta;
-  final double valorPrincipal; // na moeda principal, com sinal
+  final double valorPrincipal; // na moeda principal, com sinal (a minha parte, quando a conta foi rachada)
+  final MbRachada? rachada; // conta rachada: Pix de rachar e trocos ficam dentro desta linha
+  final String indicacao; // "inclui Pix de Valentina +R$ 50,00…": só aparece numa busca
 }
 
 /// Filtra por tipo e por texto (descrição, categoria, conta ou notas).
@@ -33,7 +38,7 @@ List<LinhaTransacao> mbFiltrarLinhas(
     for (final l in linhas)
       if ((receita == null || l.transacao.income == receita) &&
           (q.isEmpty ||
-              '${l.transacao.name} ${l.categoria} ${l.conta} ${l.transacao.note}'
+              '${l.transacao.name} ${l.categoria} ${l.conta} ${l.transacao.note} ${l.rachada?.textoDeBusca ?? ''}'
                   .toLowerCase()
                   .contains(q)))
         l
@@ -88,17 +93,23 @@ class _TransacoesDesktopState extends State<TransacoesDesktop> {
     final carteiras = Provider.of<AllWallets>(context);
     return ColoredBox(
       color: e.bg,
-      child: StreamBuilder<List<Transaction>>(
+      child: ValueListenableBuilder<MbRachadas>(
+        valueListenable: meuBancoRachadas,
+        builder: (context, rachadas, _) => StreamBuilder<List<Transaction>>(
         stream: _transacoes,
         builder: (context, snap) {
+          final buscando = _busca.text.trim().isNotEmpty;
           final linhas = [
             for (final t in snap.data ?? const <Transaction>[])
+              if (!rachadas.ocultos.contains(t.transactionPk))
               LinhaTransacao(
                 transacao: t,
                 categoria: _categorias[t.categoryFk]?.name ?? '',
                 conta: carteiras.indexedByPk[t.walletFk]?.name ?? '',
-                valorPrincipal: t.amount *
+                valorPrincipal: rachadas.valorNaLista(t) *
                     amountRatioToPrimaryCurrencyGivenPk(carteiras, t.walletFk),
+                rachada: t.amount < 0 ? rachadas.porGasto[t.transactionPk] : null,
+                indicacao: buscando && t.amount < 0 ? rachadas.porGasto[t.transactionPk]?.indicacao ?? '' : '',
               )
           ];
           final visiveis = mbFiltrarLinhas(
@@ -218,6 +229,7 @@ class _TransacoesDesktopState extends State<TransacoesDesktop> {
             ],
           );
         },
+        ),
       ),
     );
   }
@@ -286,9 +298,13 @@ class _LinhaState extends State<_Linha> {
     final cor = prevista ? e.mu : tipo.cor(context);
     final carteiras = Provider.of<AllWallets>(context);
     // Valor na moeda da própria conta (os totais do mês usam a moeda principal).
-    final valor = convertToMoney(carteiras, t.amount.abs(),
+    final r = l.rachada;
+    final bruto = t.amount.abs();
+    final liquido = r == null ? bruto : r.liquido((bruto * 100).round()) / 100;
+    String dinheiro(double v) => convertToMoney(carteiras, v,
         currencyKey: carteiras.indexedByPk[t.walletFk]?.currency,
         allDecimals: true);
+    final valor = dinheiro(liquido);
     Widget celula(int i, String texto,
             {TextStyle? estilo, bool direita = false}) =>
         Expanded(
@@ -322,14 +338,43 @@ class _LinhaState extends State<_Linha> {
             child: Row(children: [
               celula(0,
                   '${t.dateCreated.day.toString().padLeft(2, '0')}/${t.dateCreated.month.toString().padLeft(2, '0')}'),
-              celula(1, t.name.isEmpty ? l.categoria : t.name,
-                  estilo: EdTexto.corpo(context)
-                      .copyWith(color: e.tx, fontWeight: FontWeight.w500)),
+              if (l.indicacao.isEmpty)
+                celula(1, t.name.isEmpty ? l.categoria : t.name,
+                    estilo: EdTexto.corpo(context)
+                        .copyWith(color: e.tx, fontWeight: FontWeight.w500))
+              else
+                Expanded(
+                  flex: _colunas[1],
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(t.name.isEmpty ? l.categoria : t.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: EdTexto.corpo(context).copyWith(
+                                color: e.tx, fontWeight: FontWeight.w500)),
+                        Text(l.indicacao,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: EdTexto.rotulo(context)),
+                      ]),
+                ),
               celula(2, l.categoria),
               celula(3, l.conta),
               Expanded(
                 flex: _colunas[4],
                 child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  if (r != null) ...[
+                    // Conta rachada: quem dividiu e o total pago riscado, antes da minha parte.
+                    Flexible(
+                      child: Text(
+                          '👥 ${r.pessoas}  ${t.income ? '+' : '−'}${dinheiro(bruto)}',
+                          overflow: TextOverflow.ellipsis,
+                          style: EdTexto.rotulo(context)
+                              .copyWith(decoration: TextDecoration.lineThrough)),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   if (!prevista) ...[IconeTipo(tipo, tamanho: 20), const SizedBox(width: 8)],
                   Flexible(
                     child: Text('${t.income ? '+' : '−'}$valor${prevista ? ' · previsto' : ''}',

@@ -4,6 +4,7 @@
 import 'package:budget/struct/mbSync/bancos.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
+import 'package:budget/struct/mbSync/reembolso.dart' show mbTrocosLigados, mbVinculosReembolso;
 import 'package:budget/struct/mbSync/revisao.dart';
 
 const String mbPrefixo = "mb:";
@@ -549,6 +550,10 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
   // Reembolsos da fila com gasto confirmado: pk do reembolso -> pk do gasto.
   final vinculos = <String, String>{};
   final inicioCiclo = _mapa(json["ciclo"])["inicio"] as String?;
+  // Trocos (Pix enviado que devolve parte de um reembolso) que valem: seguem a categoria do gasto do reembolso.
+  final trocosValidos = {
+    for (final t in mbTrocosLigados(revisoes.decisoes.values, mbVinculosReembolso(revisoes.decisoes.values))) t.trocoPk
+  };
   for (final t in (json["transacoes"] as List? ?? const [])) {
     final id = t["id"].toString();
     if (ignoradasPks.contains(mbPkConta(t["account_id"].toString())) ||
@@ -679,6 +684,12 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
       final gasto = revisoes.decisoes[id]?['reembolso_de'];
       if (gasto is String) vinculos[mbPkTransacao(id)] = mbPkTransacao(gasto);
     }
+    // Troco: continua uma saída (não é gasto novo) e vai para a categoria e subcategoria do gasto que o reembolso abate.
+    if (resposta == 'troco' && trocosValidos.contains(mbPkTransacao(id))) {
+      final reembolso = revisoes.decisoes[revisoes.decisoes[id]?['troco_de']];
+      final gasto = reembolso?['reembolso_de'];
+      if (gasto is String) vinculos[mbPkTransacao(id)] = mbPkTransacao(gasto);
+    }
     transacoes.add(cashback
         ? tx.abatendo(mbCategoriaCashback,
             pkCategoria(null, mbCategoriaCashback, false))
@@ -737,8 +748,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
   );
 }
 
-// Reembolso com gasto confirmado: fica na categoria desse gasto (do mesmo pull ou de pulls anteriores). Se o gasto
-// não existe mais, o reembolso segue em "Outros". Devolve os gastos já usados, que estorno automático não pode abater.
+// Reembolso (e troco) com gasto confirmado: fica na categoria desse gasto (do mesmo pull ou de pulls anteriores). Se o
+// gasto não existe mais, o reembolso segue em "Outros" e o troco na categoria que já tinha. Devolve os gastos já usados, que estorno automático não pode abater.
 Set<String> _abaterReembolsosVinculados(
     List<MbTransacao> transacoes, Map<String, String> vinculos, List<MbCompra> locais) {
   final reservadas = <String>{};
