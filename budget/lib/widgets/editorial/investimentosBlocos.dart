@@ -1,6 +1,7 @@
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/bancos.dart';
-import 'package:budget/struct/mbSync/estadoInicio.dart' show BancoInicio, brl;
+import 'package:budget/struct/mbSync/extrasTransacao.dart' show mbMesesPt;
+import 'package:budget/struct/mbSync/estadoInicio.dart' show BancoInicio, ItemBanco, brl;
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/widgets/editorial/bancosInicio.dart' show LogoBanco;
 import 'package:budget/widgets/editorial/contas.dart' show comSinal;
@@ -14,11 +15,6 @@ import 'package:flutter/services.dart';
 // Blocos da tela de Investimentos: topo, gráfico, bancos com as aplicações, "Mês a mês" e a folha de detalhe.
 // Só leem dados já carregados (sem banco local), para a tela, os testes e os prints.
 
-const _meses = [
-  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
-];
-
 const _mesesCurtos = [
   'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
   'jul', 'ago', 'set', 'out', 'nov', 'dez'
@@ -27,7 +23,7 @@ const _mesesCurtos = [
 String mbNomeDoMes(String mes) {
   final p = mes.split('-');
   final m = p.length == 2 ? int.tryParse(p[1]) : null;
-  return m == null || m < 1 || m > 12 ? mes : '${_meses[m - 1]} de ${p[0]}';
+  return m == null || m < 1 || m > 12 ? mes : '${mbMesesPt[m - 1]} de ${p[0]}';
 }
 
 String mbRotuloCurtoMes(String mes) {
@@ -71,7 +67,7 @@ typedef GrupoInvestimento = ({BancoInicio banco, List<MbAplicacao> aplicacoes});
 
 /// Agrupa por banco (mesmo casamento por nome da Início): maior total primeiro, "Outros" por último.
 List<GrupoInvestimento> mbAgruparAplicacoes(List<MbAplicacao> aplicacoes) {
-  final grupos = <String, ({BancoInicio banco, List<MbAplicacao> lista})>{};
+  final grupos = <String, ({String nome, String? logo, int? cor, List<MbAplicacao> lista})>{};
   for (final a in aplicacoes) {
     final texto = a.banco?.trim() ?? '';
     final conhecido = mbBancoConhecido(texto);
@@ -81,31 +77,25 @@ List<GrupoInvestimento> mbAgruparAplicacoes(List<MbAplicacao> aplicacoes) {
         .putIfAbsent(
             id,
             () => (
-                  banco: (
-                    id: id,
-                    nome: conhecido?.nome ?? (limpo.isEmpty ? 'Outros' : limpo),
-                    logo: conhecido?.logo,
-                    cor: conhecido?.cor,
-                    subtitulo: '',
-                    total: 0.0,
-                    itens: const []
-                  ),
+                  nome: conhecido?.nome ?? (limpo.isEmpty ? 'Outros' : limpo),
+                  logo: conhecido?.logo,
+                  cor: conhecido?.cor,
                   lista: <MbAplicacao>[]
                 ))
         .lista
         .add(a);
   }
   final out = [
-    for (final g in grupos.values)
+    for (final MapEntry(key: id, value: g) in grupos.entries)
       (
         banco: (
-          id: g.banco.id,
-          nome: g.banco.nome,
-          logo: g.banco.logo,
-          cor: g.banco.cor,
+          id: id,
+          nome: g.nome,
+          logo: g.logo,
+          cor: g.cor,
           subtitulo: '',
           total: g.lista.fold<double>(0, (s, a) => s + a.saldo),
-          itens: g.banco.itens
+          itens: const <ItemBanco>[]
         ),
         aplicacoes: (g.lista..sort((x, y) => y.saldo.compareTo(x.saldo)))
       )
@@ -142,14 +132,16 @@ class TopoInvestimentos extends StatelessWidget {
     final total = aplicacoes.fold(0.0, (s, a) => s + a.saldo);
     final variacoes = mbSerieComVariacao(serie);
     final ultima = variacoes.isEmpty ? null : variacoes.last;
-    final comAplicado = [
-      for (final a in aplicacoes)
-        if (detalhes[a.id]?.aplicado != null) (a, detalhes[a.id]!.aplicado!)
-    ];
-    final investido = comAplicado.fold(0.0, (s, x) => s + x.$2);
-    final rendeu = comAplicado.fold(0.0, (s, x) => s + (x.$1.saldo - x.$2));
+    var investido = 0.0, rendeu = 0.0, comAplicado = 0;
+    for (final a in aplicacoes) {
+      final aplicado = detalhes[a.id]?.aplicado;
+      if (aplicado == null) continue;
+      comAplicado++;
+      investido += aplicado;
+      rendeu += a.saldo - aplicado;
+    }
     final pct = investido > 0 ? rendeu / investido * 100 : null;
-    final faltam = aplicacoes.length - comAplicado.length;
+    final faltam = aplicacoes.length - comAplicado;
     final e = cores(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text('Saldo total', style: EdTexto.rotulo(context)),
@@ -167,7 +159,7 @@ class TopoInvestimentos extends StatelessWidget {
               style: EdTexto.rotulo(context)
                   .copyWith(color: _corRendimento(e, ultima.variacao!))),
         ),
-      if (comAplicado.isNotEmpty) ...[
+      if (comAplicado > 0) ...[
         const SizedBox(height: 16),
         IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -214,10 +206,7 @@ class _Caixa extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-            color: e.surf,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: e.line)),
+        decoration: _decoracaoCartao(e),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(rotulo, style: EdTexto.rotulo(context).copyWith(fontSize: 11.5)),
           const SizedBox(height: 4),
@@ -293,7 +282,7 @@ class GraficoInvestimentos extends StatelessWidget {
           rotulosX: [for (final m in serie) mbRotuloCurtoMes(m.mes).split('/').first],
           color: e.acc,
           // Diferente de zero faz o eixo Y partir do menor saldo, não de 0 (senão a curva fica achatada).
-          amountBefore: serie.first.total == 0 ? 0 : serie.first.total,
+          amountBefore: serie.first.total,
         ),
       ]),
     );
@@ -525,9 +514,10 @@ class _LinhaAplicacao extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     final a = aplicacao, d = detalhe;
+    final taxa = _taxaCurta(d?.taxa);
     final subtitulo = [
       if (d?.subtipo != null && d!.subtipo!.trim().isNotEmpty) d.subtipo!.trim(),
-      if (_taxaCurta(d?.taxa) != null) _taxaCurta(d?.taxa)!,
+      if (taxa != null) taxa,
     ].join(' · ');
     final vence = d?.vencimento == null ? null : 'vence ${_data(d!.vencimento!)}';
     final rend = mbRendimentoAplicacao(a, d);
@@ -666,20 +656,20 @@ class DetalheInvestimento extends StatelessWidget {
         const SizedBox(height: 4),
         Text(brl(a.saldo), style: EdTexto.numeroGrande(context).copyWith(fontSize: 32)),
         const SizedBox(height: 12),
-        for (var i = 0; i < linhas.length; i++) ...[
+        for (final (rotulo, valor, cor) in linhas) ...[
           Divider(height: 1, thickness: 1, color: e.line),
           ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Row(children: [
               ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 190),
-                  child: Text(linhas[i].$1, style: EdTexto.rotulo(context))),
+                  child: Text(rotulo, style: EdTexto.rotulo(context))),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(linhas[i].$2,
+                child: Text(valor,
                     textAlign: TextAlign.end,
                     style: EdTexto.corpo(context).copyWith(
-                        fontWeight: FontWeight.w500, color: linhas[i].$3)),
+                        fontWeight: FontWeight.w500, color: cor)),
               ),
             ]),
           ),
