@@ -130,26 +130,31 @@ class _Opcao extends StatelessWidget {
   }
 }
 
-/// A pessoa de um empréstimo: o escolhido soma o Pix ao empréstimo dela; "Criar empréstimo" abre um novo só com a pessoa.
+/// A pessoa de um empréstimo: o escolhido (da pessoa sugerida ou, em "Outros empréstimos", de qualquer um aberto) soma o
+/// Pix a ele; "Criar empréstimo" abre um novo só com a pessoa.
 typedef MbPessoaDoEmprestimo = ({String pessoa, String? emprestimoId});
 
 Future<MbPessoaDoEmprestimo?> mbEscolherPessoaDoEmprestimo(BuildContext context,
-    {required String sugestao, required double valor, required List<MbEmprestimo> daPessoa}) async {
+    {required String sugestao,
+    required double valor,
+    required List<MbEmprestimo> daPessoa,
+    List<MbEmprestimo> outros = const []}) async {
   final r = await openBottomSheet(
     context,
     PopupFramework(
       title: 'Empréstimo',
       subtitle: brl(valor.abs()),
-      child: _PessoaDoEmprestimo(sugestao: sugestao, daPessoa: daPessoa),
+      child: _PessoaDoEmprestimo(sugestao: sugestao, daPessoa: daPessoa, outros: outros),
     ),
   );
   return r is MbPessoaDoEmprestimo ? r : null;
 }
 
 class _PessoaDoEmprestimo extends StatefulWidget {
-  const _PessoaDoEmprestimo({required this.sugestao, required this.daPessoa});
+  const _PessoaDoEmprestimo({required this.sugestao, required this.daPessoa, this.outros = const []});
   final String sugestao;
   final List<MbEmprestimo> daPessoa;
+  final List<MbEmprestimo> outros; // os abertos de outras pessoas (ou com nome escrito diferente): também dá para somar
 
   @override
   State<_PessoaDoEmprestimo> createState() => _PessoaDoEmprestimoState();
@@ -175,9 +180,16 @@ class _PessoaDoEmprestimoState extends State<_PessoaDoEmprestimo> {
           child: Text('Somar a um empréstimo de ${widget.sugestao.trim().isEmpty ? 'quem já tem' : widget.sugestao.trim()}',
               style: EdTexto.rotulo(context)),
         ),
-        for (final e in widget.daPessoa)
-          _LinhaEmprestimo(e,
-              onTap: () => popRoute(context, (pessoa: (e.pessoa ?? '').trim(), emprestimoId: e.txId))),
+        for (final e in widget.daPessoa) _linha(e),
+        Divider(height: 24, thickness: 1, color: c.line),
+      ],
+      if (widget.outros.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(widget.daPessoa.isEmpty ? 'Somar a um empréstimo existente' : 'Outros empréstimos',
+              style: EdTexto.rotulo(context)),
+        ),
+        for (final e in widget.outros) _linha(e),
         Divider(height: 24, thickness: 1, color: c.line),
       ],
       Text('Empréstimo novo para', style: EdTexto.rotulo(context)),
@@ -197,6 +209,9 @@ class _PessoaDoEmprestimoState extends State<_PessoaDoEmprestimo> {
       ),
     ]);
   }
+
+  Widget _linha(MbEmprestimo e) =>
+      _LinhaEmprestimo(e, onTap: () => popRoute(context, (pessoa: (e.pessoa ?? '').trim(), emprestimoId: e.txId)));
 
   void _criar() => popRoute(context, (pessoa: _nome.text.trim(), emprestimoId: null));
 }
