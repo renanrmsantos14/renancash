@@ -217,7 +217,10 @@ export async function registrosDoEspelho(db) {
   for (const { pk, d } of daTabela("transactions")) {
     if (d.type === 1 && !pk.startsWith("mb:")) novo("assinaturas", ID(pk), { nome: d.name?.trim() || "Sem nome", valor: Math.abs(d.amount), dia: Number(dia(d.date_created)?.slice(8)), categoria_id: ID(d.category_fk) });
   }
-  for (const { pk, d } of daTabela("mb_revisoes")) novo("revisoes", pk, d);
+  // A linha do app é {pk, dados} com a decisão em texto JSON; a malformada fica de fora, como em lerRevisoes.
+  for (const { pk, d } of daTabela("mb_revisoes")) {
+    try { const dec = JSON.parse(d.dados); if (dec && typeof dec === "object") novo("revisoes", pk, dec); } catch {}
+  }
 
   const escolhas = Map.groupBy(daTabela("mb_orcamento_tx"), (r) => r.d.tx_pk);
   const texto = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null);

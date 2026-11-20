@@ -367,8 +367,11 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("transactions", "mb:gone", null, { deleted_at: T1 }),
     esp("transactions", "s1", { type: 1, name: "Netflix", amount: -40, date_created: dia("2026-11-05T15:00:00Z"), category_fk: "c1" }),
     esp("transactions", "comum", { type: null, name: "Almoço", category_fk: "c1" }),
-    esp("mb_revisoes", "tx:p1", revDecisao),
-    esp("mb_revisoes", "dest:JOAO", revDestino),
+    // Formato real do app: {pk, dados} com a decisão em texto JSON.
+    esp("mb_revisoes", "tx:p1", { pk: "tx:p1", dados: JSON.stringify(revDecisao) }),
+    esp("mb_revisoes", "dest:JOAO", { pk: "dest:JOAO", dados: JSON.stringify(revDestino) }),
+    esp("mb_revisoes", "tx:ruim", { pk: "tx:ruim", dados: "{" }),
+    esp("mb_revisoes", "tx:nulo", { pk: "tx:nulo", dados: "null" }),
     esp("_config", "limite", { v: 2000 }),
     esp("_config", "salario", { v: "SALARIO EMPRESA" }),
     db.prepare("INSERT INTO config (chave, valor) VALUES ('salario_valor', '7500'), ('limite', '999')"), // limite do espelho vence
