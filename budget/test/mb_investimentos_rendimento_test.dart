@@ -68,7 +68,7 @@ void main() {
     expect(v[3].rendimento, closeTo(15, 1e-9));
   });
 
-  testWidgets('tela mostra quanto investiu, quanto rendeu e a taxa de cada aplicação', (t) async {
+  testWidgets('tela mostra quanto está investido, quanto rendeu e a taxa de cada aplicação', (t) async {
     appStateSettings = {
       'theme': 'light',
       'materialYou': false,
@@ -117,10 +117,12 @@ void main() {
       ),
     ));
     await t.pump(const Duration(seconds: 2));
-    expect(find.text('Você investiu'), findsOneWidget);
+    expect(find.text('Total investido'), findsOneWidget);
+    expect(find.text('Investido'), findsOneWidget);
     expect(find.text('Rendeu'), findsOneWidget);
-    expect(find.text(' (+10,00%)'), findsOneWidget);
-    expect(find.text('110% do CDI · vence em 01/03/2028'), findsOneWidget);
+    expect(find.text('+10,00%'), findsOneWidget);
+    expect(find.text('110% CDI'), findsOneWidget);
+    expect(find.text('vence 01/03/2028'), findsOneWidget);
     expect(find.textContaining('Uma aplicação fica de fora'), findsOneWidget);
     expect(find.textContaining('rendeu '), findsOneWidget); // novembro: rendeu +R$ 100
   });
