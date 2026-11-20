@@ -37,6 +37,8 @@ const String _chaveRevisoesMigradas = "revisoes_migradas_v1";
 // Uma decisão da fila "Para revisar" deste aparelho muda como transações antigas são mapeadas: o pull incremental não
 // as traz de volta, então a próxima sincronização refaz a carga completa. Decisões de outros aparelhos chegam pelo espelho.
 const String _chaveRepuxar = "repuxar_revisoes";
+// Abatimentos importados antes de herdarem a subcategoria do gasto só se corrigem com uma carga completa, feita uma vez.
+const String _chaveSubAbatimentos = "subcategoria_abatimentos_v1";
 
 const FlutterSecureStorage _storage = FlutterSecureStorage();
 
@@ -201,6 +203,9 @@ Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
     await mbEspelhoCarregarEstado();
     await _migrarCursorAntigo();
 
+    if (await mbLerEstado(_chaveSubAbatimentos) == null) {
+      await mbGravarEstado({_chaveRepuxar: isoMs(DateTime.now()), _chaveSubAbatimentos: '1'});
+    }
     final convertido = await mbLerEstado(_chaveConversao) != null;
     final repuxar = await mbLerEstado(_chaveRepuxar);
     // Pull completo na primeira vez, depois de converter as categorias e quando uma resposta da fila pede o remapeamento.
@@ -369,7 +374,12 @@ Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
     // A linha é compartilhada com os outros aparelhos pelo espelho: a atualização grava só o que vem do banco e a
     // categoria decidida pelo mapeador. Pago, "pular pagamento" e origem pertencem a quem editou, e reescrevê-los
     // a cada pull brigaria com os outros aparelhos.
+    // Abatimento (estorno, reembolso: positivo fora de receita) acompanha a subcategoria do gasto. Sem subcategoria
+    // vinda do gasto (cashback, reembolso em "Outros", gasto sem subcategoria), fica a que o usuário escolheu.
     final atualizacao = dados.copyWith(
+        subCategoryFk: !t.receita && t.valor > 0 && t.subcategoriaPk != null
+            ? Value(t.subcategoriaPk)
+            : const Value.absent(),
         paid: const Value.absent(),
         skipPaid: const Value.absent(),
         methodAdded: const Value.absent());
@@ -430,7 +440,7 @@ Future<({List<MbCompra> compras, List<MbCompra> abatimentos})>
       .get();
   for (final t in linhas) {
     final c = MbCompra(t.transactionPk, mbNormalizarEstabelecimento(t.name),
-        (t.amount.abs() * 100).round(), t.dateCreated, '', t.categoryFk);
+        (t.amount.abs() * 100).round(), t.dateCreated, '', t.categoryFk, t.subCategoryFk);
     if (t.amount < 0) {
       compras.add(c);
     } else if (t.amount > 0) {
