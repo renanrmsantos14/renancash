@@ -1,5 +1,6 @@
 import 'package:budget/struct/mbSync/agendador.dart' show mbEspelhoReavaliar;
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoConfigMudou;
+import 'package:budget/struct/mbSync/barra.dart' show mbMigrarBarra;
 import 'package:budget/struct/mbSync/inicioOrdem.dart' show mbMigrarOrdemInicio;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
@@ -147,6 +148,7 @@ Future<bool> initializeSettings() async {
   Map<String, dynamic> defaultPreferences = await getDefaultPreferences();
 
   mbMigrarOrdemInicio(appStateSettings);
+  mbMigrarBarra(appStateSettings);
 
   // save settings
   await sharedPreferences.setString(

@@ -21,7 +21,7 @@ const Map<String, String> _rotulos = {
   'emprestimo': 'Empréstimo',
   'investimento': 'Investimento',
   'ajuda': 'Ajuda',
-  'devolucao': 'Devolução',
+  'devolucao': 'Me pagou um empréstimo',
   'reembolso': 'Reembolso',
   'renda': 'Renda',
 };
@@ -29,14 +29,17 @@ const Map<String, String> _rotulos = {
 String mbPayloadAlerta(Map<String, dynamic> n) =>
     mbPrefixoPayload + jsonEncode({'chave': '${n['chave']}', if (n['item'] != null) 'item': n['item']});
 
-/// Botões da notificação: as respostas do item. Reembolso precisa escolher o gasto, então abre o app.
+/// Respostas que pedem uma escolha (gasto, pessoa ou empréstimo): o botão abre o app em vez de responder sozinho.
+const Set<String> _pedemOApp = {'reembolso', 'emprestimo', 'devolucao'};
+
+/// Botões da notificação: as respostas do item.
 List<AndroidNotificationAction> mbAcoesDoAlerta(Map<String, dynamic> n) {
   final item = MbItemRevisao.tentar(n['item']);
   if (item == null) return const [];
   return [
     for (final r in item.respostas)
       AndroidNotificationAction(r, _rotulos[r] ?? r,
-          showsUserInterface: r == 'reembolso', cancelNotification: r != 'reembolso')
+          showsUserInterface: _pedemOApp.contains(r), cancelNotification: !_pedemOApp.contains(r))
   ];
 }
 
@@ -45,7 +48,7 @@ List<AndroidNotificationAction> mbAcoesDoAlerta(Map<String, dynamic> n) {
 Future<bool> mbResponderPelaNotificacao(String? payload, String? acao,
     {MbCliente? clienteParaTeste}) async {
   if (payload == null || !payload.startsWith(mbPrefixoPayload) || acao == null || acao.isEmpty) return false;
-  if (acao == 'reembolso') return false;
+  if (_pedemOApp.contains(acao)) return false;
   final Object? json;
   try {
     json = jsonDecode(payload.substring(mbPrefixoPayload.length));

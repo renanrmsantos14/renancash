@@ -88,6 +88,10 @@ test("revisoes: decisão e memória de destinatário válidas; resposta desconhe
   assert.ok(dadosValidos("revisoes", { tipo: "destinatario", destinatario: "JOAO", categoria_id: "c1" }));
   assert.ok(!dadosValidos("revisoes", { tipo: "decisao", tx_id: "t1", resposta: "voar" }));
   assert.ok(dadosValidos("revisoes", { tipo: "decisao", tx_id: "t2", resposta: "troco", troco_de: "r1", valor: 11.88, data: "2026-11-18" }));
+  assert.ok(dadosValidos("revisoes", { tipo: "decisao", tx_id: "t3", resposta: "emprestimo", pessoa: "Isabel", emprestimo_id: "t0", valor: 250, data: "2026-11-11" }));
+  assert.ok(dadosValidos("revisoes", { tipo: "decisao", tx_id: "t4", resposta: "devolucao", emprestimo_id: "t3", sobra: 10, sobra_para: "reembolso", reembolso_de: "g1", valor: 60, data: "2026-11-18" }));
+  assert.ok(dadosValidos("revisoes", { tipo: "perdao", emprestimo_id: "t3", valor: 40, data: "2026-11-20" }));
+  assert.ok(!dadosValidos("revisoes", { tipo: "decisao", tx_id: "t4", resposta: "devolucao", sobra_para: "doacao" }));
   const r = validarLote([{ ...base, id: "tx:t1", dados: { tipo: "decisao", tx_id: "t1", resposta: "voar" } }], AGORA);
   assert.ok("rejeitados" in r && r.rejeitados.length === 1);
 });

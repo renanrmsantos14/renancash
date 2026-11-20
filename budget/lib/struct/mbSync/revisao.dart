@@ -23,7 +23,10 @@ import 'package:flutter/foundation.dart';
 // Decisões e memória por destinatário ficam na tabela `revisoes` do `registros` (sincronizada entre aparelhos):
 //   id `tx:<transação>`  { tipo: "decisao", tx_id, resposta, categoria_id?, valor, data, descricao }
 //   id `dest:<nome>`     { tipo: "destinatario", destinatario, categoria_id }
-// Empréstimos e devoluções (emprestimos.dart) e reembolsos (`reembolso_de` = id do gasto reembolsado) saem das decisões
+//   id `perdao:<empréstimo>` { tipo: "perdao", emprestimo_id, valor, data }   (saldo perdoado: vira gasto em `data`)
+// "emprestimo" leva `pessoa` (e `emprestimo_id` para somar a um empréstimo que já existe); "devolucao" leva `emprestimo_id` do empréstimo
+// que o Pix abate e, se passou do saldo, `sobra`, `sobra_para` (emprestimo | reembolso | renda) e `sobra_id`; `recategorizado`: o item
+// "empréstimo sem pessoa" foi resolvido trocando a categoria. Empréstimos e devoluções (emprestimos.dart) e reembolsos (`reembolso_de` = id do gasto reembolsado) saem das decisões
 // com resposta "emprestimo" | "devolucao" | "reembolso"; "troco" (Pix enviado, `troco_de` = id do reembolso que ele abate)
 // devolve parte de um reembolso (reembolso.dart). A regra de tipo é a mesma de apps/worker/src/revisao.js (tipoDeRevisao).
 
@@ -88,15 +91,26 @@ MbTipoRevisao? mbTipoDeRevisao(
 class MbRevisoes {
   final Map<String, Map<String, dynamic>> decisoes;
   final Map<String, String> destinos;
-  const MbRevisoes([this.decisoes = const {}, this.destinos = const {}]);
+  /// Perdões de empréstimo por id do empréstimo ({ emprestimo_id, valor, data }).
+  final Map<String, Map<String, dynamic>> perdoes;
+  const MbRevisoes([this.decisoes = const {}, this.destinos = const {}, this.perdoes = const {}]);
 
   factory MbRevisoes.deLinhas(Iterable<Registro> regs) {
     final decisoes = <String, Map<String, dynamic>>{};
     final destinos = <String, String>{};
+    final perdoes = <String, Map<String, dynamic>>{};
     for (final r in regs) {
       final d = r.dados;
       if (r.tabela != 'revisoes' || r.deletedAt != null || d == null) continue;
-      if (d['tipo'] == 'decisao' && d['tx_id'] is String && d['resposta'] is String) {
+      if (d['tipo'] == 'perdao') {
+        final valor = d['valor'];
+        if (d['emprestimo_id'] is String &&
+            valor is num &&
+            valor > 0 &&
+            RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch('${d['data'] ?? ''}')) {
+          perdoes[d['emprestimo_id'] as String] = d;
+        }
+      } else if (d['tipo'] == 'decisao' && d['tx_id'] is String && d['resposta'] is String) {
         decisoes[d['tx_id'] as String] = d;
       } else if (d['tipo'] == 'destinatario' &&
           d['destinatario'] is String &&
@@ -110,7 +124,7 @@ class MbRevisoes {
       final r = decisoes[d['troco_de']];
       return r == null || r['resposta'] != 'reembolso' || r['reembolso_de'] is! String;
     });
-    return MbRevisoes(decisoes, destinos);
+    return MbRevisoes(decisoes, destinos, perdoes);
   }
 
   /// Resposta do usuário; no Pix enviado, a memória do destinatário conta como "categoria".
@@ -150,7 +164,17 @@ class MbItemRevisao {
 
   bool get ehSalario => tipo == 'salario_nao_detectado';
 
+  /// Empréstimo que já existe (categoria "Empréstimo" ou decisão sem pessoa) e precisa de uma pessoa.
+  bool get semPessoa => tipo == 'emprestimo_sem_pessoa';
+
   /// Respostas oferecidas para este tipo de item (Pix enviado escolhe a categoria, não aparece aqui).
+  /// "devolucao" (na tela: "Me pagou um empréstimo") só existe com empréstimo em aberto: [emprestimos] vem de meuBancoEmprestimos.
+  List<String> respostasCom(MbEmprestimos emprestimos) => [
+        for (final r in respostas)
+          if (r != 'devolucao' || emprestimos.abertos.isNotEmpty) r
+      ];
+
+  /// Todas as respostas possíveis do tipo (sem olhar os empréstimos em aberto).
   List<String> get respostas => switch (tipo) {
         'envio_santander' => const ['emprestimo', 'investimento', 'ajuda'],
         'pix_recebido' => const ['devolucao', 'reembolso', 'renda'],
@@ -191,12 +215,18 @@ List<MbItemRevisao> mbItensRevisar(Object? ciclo) => [
 List<MbItemRevisao> mbFilaVisivel(List<MbItemRevisao> itens, MbRevisoes revisoes) => [
       for (final i in itens)
         if (i.ehSalario ||
-            (!revisoes.decisoes.containsKey(i.txId) &&
+            (i.semPessoa && _precisaDePessoa(revisoes.decisoes[i.txId])) ||
+            (!i.semPessoa &&
+                !revisoes.decisoes.containsKey(i.txId) &&
                 !(i.tipo == 'pix_enviado' &&
                     i.destinatario != null &&
                     revisoes.destinos.containsKey(i.destinatario))))
           i
     ];
+
+// O item "empréstimo sem pessoa" some quando a decisão já tem a pessoa ou a categoria foi trocada.
+bool _precisaDePessoa(Map<String, dynamic>? d) =>
+    d == null || !(d['recategorizado'] == 1 || (d['resposta'] == 'emprestimo' && (d['pessoa'] as String?)?.trim().isNotEmpty == true));
 
 /// Fila que a Início mostra, lida do que está no aparelho.
 final ValueNotifier<List<MbItemRevisao>> meuBancoRevisar = ValueNotifier(const []);
@@ -223,7 +253,7 @@ Future<void> mbAtualizarRevisar() async {
     } catch (_) {}
     final revisoes = MbRevisoes.deLinhas(await mbLerRevisoes());
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
-    meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values);
+    meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values, perdoes: revisoes.perdoes.values);
     meuBancoReembolsos.value = mbVinculosReembolso(revisoes.decisoes.values);
     meuBancoTrocos.value = mbTrocosLigados(revisoes.decisoes.values, meuBancoReembolsos.value);
     await mbAtualizarRachadas(meuBancoReembolsos.value, meuBancoTrocos.value);
@@ -235,9 +265,23 @@ Future<void> mbAtualizarRevisar() async {
   await mbAtualizarAvisos();
 }
 
+/// Registro do perdão do saldo de um empréstimo: o valor fica fixo e vira gasto em `data`.
+Registro mbRegistroDePerdao(String emprestimoId, double valor, String data, String agora) =>
+    Registro('revisoes', 'perdao:$emprestimoId',
+        {'tipo': 'perdao', 'emprestimo_id': emprestimoId, 'valor': valor, 'data': data}, agora, null);
+
 /// Registros a gravar ao responder: a decisão da transação e, no Pix enviado com categoria, a memória do destinatário.
 List<Registro> mbRegistrosDeResposta(MbItemRevisao item, String resposta,
-    {String? categoriaPk, String? reembolsoDe, String? trocoDe, required String agora}) {
+    {String? categoriaPk,
+    String? reembolsoDe,
+    String? trocoDe,
+    String? pessoa,
+    String? emprestimoId,
+    double? sobra,
+    String? sobraPara,
+    String? sobraId,
+    bool recategorizado = false,
+    required String agora}) {
   final descricao = item.descricao ?? '';
   return [
     Registro(
@@ -256,6 +300,17 @@ List<Registro> mbRegistrosDeResposta(MbItemRevisao item, String resposta,
           if (resposta == 'reembolso' && reembolsoDe != null) 'reembolso_de': reembolsoDe,
           // Troco: id (sem prefixo "mb:") do Pix recebido, ligado como reembolso, que este Pix enviado abate.
           if (resposta == 'troco' && trocoDe != null) 'troco_de': trocoDe,
+          // Empréstimo: a pessoa (e, se soma a um que já existe, o id dele). Devolução: o empréstimo que o Pix abateu.
+          if (resposta == 'emprestimo' && pessoa != null && pessoa.trim().isNotEmpty) 'pessoa': pessoa.trim(),
+          if ((resposta == 'emprestimo' || resposta == 'devolucao') && emprestimoId != null) 'emprestimo_id': emprestimoId,
+          // O que passou do saldo e para onde foi (outro empréstimo, reembolso de um gasto ou renda).
+          if (resposta == 'devolucao' && sobra != null && sobra > 0 && sobraPara != null) ...{
+            'sobra': sobra,
+            'sobra_para': sobraPara,
+            if (sobraId != null) 'sobra_id': sobraId,
+            if (sobraPara == 'reembolso' && reembolsoDe != null) 'reembolso_de': reembolsoDe,
+          },
+          if (recategorizado) 'recategorizado': 1,
         },
         agora,
         null),

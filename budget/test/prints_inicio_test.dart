@@ -369,6 +369,11 @@ void main() {
           find.byType(MaterialApp),
           matchesGoldenFile(
               '../../.verificacao/prints/inicio_editorial_completo_$modo.png'));
+      // Fim da Início: "Emprestado em aberto" e, por último, o botão Configurações (PR de empréstimos).
+      await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+              '../../.verificacao/2026-11-20-t3-emprestimos-vinculo/inicio_fim_$modo.png'));
     });
 
     // Sem limite no Geral: o cartão pede "Definir limite do ciclo"; as demais seções seguem.

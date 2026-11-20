@@ -24,6 +24,8 @@ import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/editWalletsPage.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/homePage/painelDesktop.dart' show PainelDesktop;
+import 'package:budget/pages/emprestimosPage.dart';
+import 'package:budget/pages/investimentosEvolucaoPage.dart';
 import 'package:budget/pages/pendenciasPage.dart';
 import 'package:budget/pages/notificationsPage.dart';
 import 'package:budget/pages/objectivesListPage.dart';
@@ -383,7 +385,9 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
         key: upcomingOverdueTransactionsStateKey,
         overdueTransactions: null), //16
     CreditDebtTransactions(key: creditDebtTransactionsKey, isCredit: null), //17
-    const PendenciasPage(), //18 (aba do modo Meu Banco)
+    const PendenciasPage(), //18 (Configurações > Pendências)
+    const EmprestimosPage(), //19 (aba do modo Meu Banco)
+    const InvestimentosEvolucaoPage(), //20 (aba do modo Meu Banco)
   ];
 
   late int currentPage = widget.widthSideNavigationBar <= 0

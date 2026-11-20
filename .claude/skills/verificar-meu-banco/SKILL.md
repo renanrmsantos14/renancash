@@ -70,3 +70,8 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 
 ## Espelho: botão e diagnóstico (Configurações > Meu Banco)
 - "Enviar dados para a nuvem" (só Android, some quando a fase é `pronto` ou `mbEspelhoPronto`; subtítulo "Este celular vira a fonte oficial") confirma e chama `mbEspelhoEnviarAgora()` (ignora "Agora não"); mostra andamento e o erro com HTTP e mensagem. A linha "Espelho: <fase> · <motivo>" vem de `mbDiagnosticoEspelho` (também na web). Testes: `test/espelho_enviar_test.dart`, `test/mb_espelho_fases_test.dart`.
+
+## Empréstimos ligados a uma pessoa
+- Cálculo (`struct/mbSync/emprestimos.dart`): pagamento abate o empréstimo escolhido (`emprestimo_id`); sem vínculo (decisão antiga) é FIFO; vínculo com empréstimo inexistente não abate nada; sobra (`sobra_para` emprestimo/reembolso/renda); perdão (`perdao:<id>`). Testes: `flutter test test/mb_emprestimos_test.dart test/mb_emprestimos_vinculo_test.dart test/mb_revisao_test.dart`.
+- Fora do Geral: resposta `emprestimo` em qualquer saída não-cartão e `devolucao` vinculada não viram transação (`meuBancoMapping.dart`); perdão vira gasto `mb:perdao:<id>` na data do perdão; sobra→reembolso vira reembolso do valor da sobra, sobra→renda vira receita da sobra. Desfazer perdão ou o empréstimo remove o gasto sintético / solta o pagamento (`mbDesfazerPerdao`, `mbDesfazerRevisao`).
+- Paridade: o teste "paridade do Geral com o Worker" usa os mesmos cenários e totais de `apps/worker/test/revisao.test.mjs` (365,95 -> 100 -> 140 e 200 -> 170); mude os dois juntos.

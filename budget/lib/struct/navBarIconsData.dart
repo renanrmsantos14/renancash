@@ -59,7 +59,21 @@ Map<String, NavBarIconData> getNavBarIconsData() {
       labelLong: "spending-and-savings-goals",
       navigationIndexedStackIndex: 14,
     ),
-    // Aba do modo Meu Banco (não é atalho configurável).
+    // Abas do modo Meu Banco (não são atalhos configuráveis).
+    "emprestimos": NavBarIconData(
+      iconData: appStateSettings["outlinedIcons"]
+          ? Icons.handshake_outlined
+          : Icons.handshake_rounded,
+      label: "Empréstimos",
+      navigationIndexedStackIndex: 19,
+    ),
+    "investimentos": NavBarIconData(
+      iconData: appStateSettings["outlinedIcons"]
+          ? Icons.trending_up_outlined
+          : Icons.trending_up_rounded,
+      label: "Investimentos",
+      navigationIndexedStackIndex: 20,
+    ),
     "pendencias": NavBarIconData(
       iconData: Icons.inbox_outlined,
       label: "Pendências",

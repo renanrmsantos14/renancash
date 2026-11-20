@@ -39,31 +39,20 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class BottomNavBarState extends State<BottomNavBar> {
-  // No modo Meu Banco a barra é: atalho 0 · atalho 1 · Pendências · atalho 2 · Mais.
-  // As metas ficam na Início ("Ver todas"); Mais é o caminho para configurações, backup e sobre.
+  // No modo Meu Banco a barra é fixa: Início · Transações · Orçamentos · Empréstimos · Investimentos.
+  // Configurações é o último item do fim da Início; Pendências, Metas, Assinaturas e Sobre ficam dentro de Configurações.
 
-  List<String> get _atalhosPareado => [
-        "${appStateSettings["customNavBarShortcut0"]}",
-        "${appStateSettings["customNavBarShortcut1"]}",
-        "pendencias",
-        "${appStateSettings["customNavBarShortcut2"]}",
-        "more",
+  List<String> get _atalhosPareado => const [
+        "home",
+        "transactions",
+        "budgets",
+        "emprestimos",
+        "investimentos",
       ];
 
-  // Atalho inválido cai no índice padrão da posição, como na barra normal (0, 1, 2).
-  static const List<int> _padraoPareado = [0, 1, 18, 2, 3];
-
-  List<int> get _indicesPareado {
-    final atalhos = _atalhosPareado;
-    return [
-      for (var i = 0; i < atalhos.length; i++)
-        // "more" abre a mesma página (3) da barra normal, não a cópia sem chave (4).
-        atalhos[i] == "more"
-            ? _padraoPareado[i]
-            : navBarIconsData[atalhos[i]]?.navigationIndexedStackIndex ??
-                _padraoPareado[i],
-    ];
-  }
+  List<int> get _indicesPareado => [
+        for (final a in _atalhosPareado) navBarIconsData[a]!.navigationIndexedStackIndex
+      ];
 
   @override
   void initState() {
@@ -666,6 +655,8 @@ const Map<String, String> _rotulosEditorial = {
   "budgets": "Orçamentos",
   "goals": "Metas",
   "more": "Mais",
+  "emprestimos": "Empréstimos",
+  "investimentos": "Investimentos",
   "pendencias": "Pendências",
 };
 

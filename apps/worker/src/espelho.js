@@ -226,7 +226,7 @@ export async function registrosDoEspelho(db) {
   const texto = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null);
   for (const r of results.filter((x) => x.tabela === "transactions" && x.pk.startsWith("mb:"))) {
     const id = r.pk.slice(3);
-    if (id.startsWith("inv:")) continue; // investimento do banco: não é transação do ciclo
+    if (id.startsWith("inv:") || id.startsWith("perdao:")) continue; // investimento do banco e perdão de empréstimo (gasto sintético do app): não são transações do banco
     if (r.deleted_at != null) { novo("ajustes", id, { gasto: 0 }); continue; }
     const d = JSON.parse(r.dados);
     const edicao = editada(d.date_time_modified);
