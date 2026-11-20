@@ -30,7 +30,12 @@ export const TABELAS: Readonly<Record<Tabela, Esquema>> = {
   // Fila "Para revisar": tipo "decisao" (id `tx:<transação>`) guarda a resposta do usuário; tipo "destinatario" (id `dest:<nome>`)
   // lembra a categoria do Pix enviado a essa pessoa. "reembolso" liga o Pix recebido ao gasto (`reembolso_de`); "troco" liga o Pix enviado
   // à mesma pessoa ao reembolso que ele abate (`troco_de` = id do Pix recebido). valor/data/descricao ficam na decisão para a lista de empréstimos não depender da transação.
-  revisoes: { tipo: ["decisao", "destinatario"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda", "troco"], "categoria_id?": "texto", "reembolso_de?": "texto", "troco_de?": "texto", "valor?": "numero", "data?": "data", "descricao?": "texto" },
+  // Empréstimo: "emprestimo" leva a `pessoa` e, para somar a um empréstimo que já existe, `emprestimo_id` (id da decisão que o abriu; sem ele a
+  // própria decisão abre um). "devolucao" com `emprestimo_id` abate esse empréstimo (sem ele, abate o mais antigo em aberto, como antes);
+  // `sobra` (reais) é a parte do Pix que passou do saldo, com destino em `sobra_para` ("emprestimo" + `sobra_id`, "reembolso" + `reembolso_de`, "renda").
+  // tipo "perdao" (id `perdao:<emprestimo_id>`): o saldo (`valor`) perdoado em `data` vira gasto nesse dia e sai do aberto.
+  // `recategorizado`: o item "empréstimo sem pessoa" da fila foi resolvido recolocando a categoria da transação.
+  revisoes: { tipo: ["decisao", "destinatario", "perdao"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda", "troco"], "categoria_id?": "texto", "reembolso_de?": "texto", "troco_de?": "texto", "pessoa?": "texto", "emprestimo_id?": "texto", "sobra?": "numero", "sobra_para?": ["emprestimo", "reembolso", "renda"], "sobra_id?": "texto", "recategorizado?": [0, 1], "valor?": "numero", "data?": "data", "descricao?": "texto" },
   // Uma configuração do app que afeta dados e cálculos (id = nome da chave); `valor` é o JSON do valor.
   configuracoes: { valor: "json" },
   carteiras: { nome: "texto", "cor?": "texto", "icone?": "texto", "ordem?": "numero", "moeda?": "texto", "decimais?": "numero" },

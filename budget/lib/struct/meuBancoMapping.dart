@@ -568,7 +568,7 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     final contaId = t["account_id"].toString();
     final cartao = cartoes[contaId] ?? false;
     // Cartão: compra positiva vira despesa (negativa), estorno vira receita. Conta: o sinal já é o do RenanCash.
-    final valor = cartao ? -bruto : bruto;
+    final valorOriginal = cartao ? -bruto : bruto;
     // Fila "Para revisar" (só conta): a resposta do usuário decide o que Pix e envios ao Santander são.
     // Só vale no ciclo atual (o histórico não é reclassificado) ou onde o usuário já respondeu.
     final noCiclo = inicioCiclo != null &&
@@ -576,13 +576,19 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
     final rev = cartao || !(noCiclo || revisoes.decisoes.containsKey(id))
         ? null
         : mbTipoDeRevisao(
-            descricao: descricao, valor: valor, categoria: categoria, entreMinhas: entreMinhas);
+            descricao: descricao, valor: valorOriginal, categoria: categoria, entreMinhas: entreMinhas);
     // Reembolso ligado pelo usuário (Pendências, editar transação) vale para qualquer entrada, não só "Pix recebido".
-    final resposta = rev != null
+    final respostaDaFila = rev != null
         ? revisoes.resposta(id, rev)
-        : valor > 0 && revisoes.decisoes[id]?['resposta'] == 'reembolso'
+        : valorOriginal > 0 && revisoes.decisoes[id]?['resposta'] == 'reembolso'
             ? 'reembolso'
             : null;
+    // Pix que pagou um empréstimo e passou do saldo: só a sobra segue como reembolso (abate o gasto) ou renda; o resto abateu o empréstimo.
+    final sobra = rev?.tipo == 'pix_recebido' && respostaDaFila == 'devolucao' ? mbSobraDaDevolucao(revisoes.decisoes[id], valorOriginal) : null;
+    final resposta = sobra?.para ?? respostaDaFila;
+    final valor = sobra?.valor ?? valorOriginal;
+    // Empréstimo com pessoa não é gasto, seja Pix, envio ao Santander ou compra de débito (antes e depois de a categoria "Empréstimo" valer).
+    final emprestimo = !cartao && valorOriginal < 0 && revisoes.decisoes[id]?['resposta'] == 'emprestimo';
     final envioSantander = rev?.tipo == 'envio_santander';
     // Inter -> Santander só é gasto se for "ajuda"; o ajuste do painel não vale aqui (igual ao Worker).
     final gasto = envioSantander ? null : ctx.ajustes[id]?["gasto"];
@@ -590,7 +596,8 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
       ignoradas++;
       continue;
     }
-    final foraPelaResposta = (envioSantander && resposta != 'ajuda') ||
+    final foraPelaResposta = emprestimo ||
+        (envioSantander && resposta != 'ajuda') ||
         (rev?.tipo == 'pix_recebido' && resposta == 'devolucao');
     if (foraPelaResposta ||
         (gasto != 1 &&
@@ -698,6 +705,24 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
                 pkCategoria(null, mbCategoriaOutros, false))
             : tx);
   }
+  // Perdão de empréstimo: o saldo perdoado vira gasto na data do perdão, numa carteira que não seja cartão (a menor pk, como no Worker).
+  final carteiras = [for (final c in contas) if (!c.cartao) c.walletPk]..sort();
+  if (carteiras.isNotEmpty) {
+    for (final p in revisoes.perdoes.values) {
+      final pessoa = revisoes.decisoes[p['emprestimo_id']]?['pessoa'];
+      transacoes.add(MbTransacao(
+          pk: mbPkTransacao('perdao:${p['emprestimo_id']}'),
+          nome: pessoa is String && pessoa.trim().isNotEmpty ? 'Perdão de empréstimo · ${pessoa.trim()}' : 'Perdão de empréstimo',
+          valor: -(p['valor'] as num).toDouble(),
+          receita: false,
+          nota: 'Saldo do empréstimo perdoado',
+          data: _parseData('${p['data']}'),
+          carteiraPk: carteiras.first,
+          categoriaNome: mbCategoriaOutros,
+          categoriaPk: pkCategoria(null, mbCategoriaOutros, false),
+          pendente: false));
+    }
+  }
   final reservadas = _abaterReembolsosVinculados(transacoes, vinculos, compras);
   _abaterEstornos(transacoes, estornos, compras, abatimentos, reservadas);
   final pendentes = <String>{
@@ -746,6 +771,14 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
           ]
         : null,
   );
+}
+
+/// Parte do Pix que passou do saldo do empréstimo e o usuário mandou para reembolso ou renda (a que abate outro empréstimo não vira transação).
+({String para, double valor})? mbSobraDaDevolucao(Map<String, dynamic>? decisao, double valorDoPix) {
+  final sobra = decisao?['sobra'];
+  final para = decisao?['sobra_para'];
+  if (sobra is! num || sobra <= 0 || (para != 'reembolso' && para != 'renda')) return null;
+  return (para: para as String, valor: sobra > valorDoPix ? valorDoPix : sobra.toDouble());
 }
 
 // Reembolso (e troco) com gasto confirmado: fica na categoria desse gasto (do mesmo pull ou de pulls anteriores). Se o

@@ -55,3 +55,9 @@ description: "Verifica o tema Editorial (modos claro/escuro e 4 acentos), a tela
 ## Limites
 - `mb_sync_drift_test`, `mb_orcamentos_test`, `mb_revisao_test` e `perf_test` já falham na main nesta máquina (Windows, sincronização local); não são regressão de UI.
 - Sem aparelho Android aqui; widget e notificações ficam na `verificar-meu-banco`.
+
+## Barra, aba Empréstimos e Configurações na Início
+- Barra do modo pareado é fixa: Início, Transações, Orçamentos, Empréstimos, Investimentos (`bottomNavBar.dart` `_atalhosPareado`, `navBarIconsData.dart` "emprestimos"/"investimentos", páginas em `navigationFramework.dart`); no desktop a lateral (`lateralEditorial.dart`, `mbItensLateral`) segue a mesma ordem. Configurações NÃO fica na barra: só o botão no fim da Início (`BotaoConfiguracoesInicio`); Pendências, Metas, Assinaturas e Sobre ficam dentro de Configurações (seção "Atalhos").
+- Migração única dos atalhos personalizados: `mbMigrarBarra` (`struct/mbSync/barra.dart`, flag `barraEmprestimosMigrada`) — `flutter test test/mb_emprestimos_vinculo_test.dart`.
+- Prova visual: `PRINTS=1 flutter test test/prints_emprestimos_test.dart test/prints_inicio_test.dart --update-goldens` gera barra, aba Empréstimos, fila "Me pagou um empréstimo" e fim da Início em `.verificacao/<data>-<branch>/`. Confira: 5 abas na ordem, "Emprestado em aberto" na Início, botão Configurações por último.
+- Aba Empréstimos (`pages/emprestimosPage.dart`): total em aberto no topo, cartão por pessoa (original, recebido, saldo), "Perdoar o restante" com confirmação, "Quitados" recolhido com "Desfazer" nos perdoados.

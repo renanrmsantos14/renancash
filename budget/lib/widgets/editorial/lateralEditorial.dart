@@ -24,15 +24,16 @@ const List<ItemLateral> mbItensLateral = [
   (chave: 'pendencias', rotulo: 'Pendências'),
   (chave: 'budgets', rotulo: 'Orçamentos'),
   (chave: 'goals', rotulo: 'Metas'),
-  (chave: 'loans', rotulo: 'Dívidas'),
+  (chave: 'emprestimos', rotulo: 'Empréstimos'),
+  (chave: 'investimentos', rotulo: 'Investimentos'),
   (chave: 'subscriptions', rotulo: 'Assinaturas'),
   (chave: 'settings', rotulo: 'Configurações'),
 ];
 
-/// Itens da lateral e da busca: Pendências só existe no modo pareado.
+/// Itens da lateral e da busca: Pendências, Empréstimos e Investimentos só existem no modo pareado.
 List<ItemLateral> mbItensLateralVisiveis() => [
       for (final i in mbItensLateral)
-        if (i.chave != 'pendencias' || meuBancoPareado.value) i
+        if (meuBancoPareado.value || !const {'pendencias', 'emprestimos', 'investimentos'}.contains(i.chave)) i
     ];
 
 typedef ContaLateral = ({String id, String nome});

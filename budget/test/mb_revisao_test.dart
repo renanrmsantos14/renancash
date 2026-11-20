@@ -327,7 +327,7 @@ void main() {
       final pix = {'id': 'tx:r1', 'tipo': 'pix_recebido', 'tx_id': 'r1', 'valor': 60};
       final acoes = mbAcoesDoAlerta({'chave': 'revisar:tx:r1', 'item': pix});
       expect([for (final a in acoes) [a.id, a.showsUserInterface]],
-          [['devolucao', false], ['reembolso', true], ['renda', false]]);
+          [['devolucao', true], ['reembolso', true], ['renda', false]]);
       expect(mbAcoesDoAlerta({'chave': 'revisar:tx:p1', 'item': {'id': 'tx:p1', 'tipo': 'pix_enviado', 'tx_id': 'p1', 'valor': 5}}), isEmpty);
       expect(mbAcoesDoAlerta({'chave': 'revisar:salario:2026-11'}), isEmpty);
     });
@@ -382,9 +382,9 @@ void main() {
         {'id': 'tx:d1', 'tipo': 'pix_recebido', 'tx_id': 'd1', 'data': _hoje(), 'descricao': 'Pix recebido: Pai', 'valor': 300}]};
       await sync();
       expect(meuBancoEmprestimos.value.abertos, isEmpty);
-      await mbResponderRevisao(meuBancoRevisar.value.firstWhere((i) => i.txId == 'e1'), 'emprestimo', clienteParaTeste: cliente);
+      await mbResponderRevisao(meuBancoRevisar.value.firstWhere((i) => i.txId == 'e1'), 'emprestimo', pessoa: 'Pai', clienteParaTeste: cliente);
       expect(meuBancoEmprestimos.value.devido, 800);
-      await mbResponderRevisao(meuBancoRevisar.value.single, 'devolucao', clienteParaTeste: cliente);
+      await mbResponderRevisao(meuBancoRevisar.value.single, 'devolucao', emprestimoId: 'e1', clienteParaTeste: cliente);
       expect([meuBancoEmprestimos.value.devido, meuBancoEmprestimos.value.abertos.single.original], [500, 800]);
       expect((await database.select(database.transactions).get()).where((t) => t.transactionPk.startsWith('mb:e1') || t.transactionPk.startsWith('mb:d1')), isEmpty);
     });
@@ -394,10 +394,50 @@ void main() {
       cliente.ciclo = {'inicio': _hoje(), 'revisar': [
         {'id': 'tx:e1', 'tipo': 'envio_santander', 'tx_id': 'e1', 'data': _hoje(), 'descricao': 'PIX ENVIADO SANTANDER', 'valor': 800}]};
       await sync();
-      await mbResponderRevisao(meuBancoRevisar.value.single, 'emprestimo', clienteParaTeste: cliente);
+      await mbResponderRevisao(meuBancoRevisar.value.single, 'emprestimo', pessoa: 'Pai', clienteParaTeste: cliente);
       expect((await database.select(database.transactions).get()).where((t) => t.transactionPk == 'mb:e1'), isEmpty);
       final d = (await mbLerRevisoes()).lastWhere((r) => r.id == 'tx:e1').dados!;
-      expect([d['resposta'], d['valor'], d['data']], ['emprestimo', 800, _hoje()]);
+      expect([d['resposta'], d['valor'], d['data'], d['pessoa']], ['emprestimo', 800, _hoje(), 'Pai']);
+    });
+
+    test('perdoar o restante vira gasto na data do perdão; desfazer tira o gasto e devolve o empréstimo', () async {
+      cliente.transacoes = [_tx('e1', 'PIX ENVIADO SANTANDER', -800, data: _hoje()), _tx('d1', 'Pix recebido: Pai', 300, data: _hoje())];
+      cliente.ciclo = {'inicio': _hoje(), 'revisar': [
+        {'id': 'tx:e1', 'tipo': 'envio_santander', 'tx_id': 'e1', 'data': _hoje(), 'descricao': 'PIX ENVIADO SANTANDER', 'valor': 800},
+        {'id': 'tx:d1', 'tipo': 'pix_recebido', 'tx_id': 'd1', 'data': _hoje(), 'descricao': 'Pix recebido: Pai', 'valor': 300}]};
+      await sync();
+      await mbResponderRevisao(meuBancoRevisar.value.firstWhere((i) => i.txId == 'e1'), 'emprestimo', pessoa: 'Pai', clienteParaTeste: cliente);
+      await mbResponderRevisao(meuBancoRevisar.value.single, 'devolucao', emprestimoId: 'e1', clienteParaTeste: cliente);
+      final dia = DateTime.now();
+      await mbPerdoarEmprestimo('e1', hoje: dia, clienteParaTeste: cliente);
+      expect(meuBancoEmprestimos.value.abertos, isEmpty);
+      expect(meuBancoEmprestimos.value.quitados.single.perdoado, 500);
+      final gasto = await tx('mb:perdao:e1');
+      expect([gasto.amount, gasto.income, gasto.name], [-500, false, 'Perdão de empréstimo · Pai']);
+      expect(gasto.dateCreated.day, dia.day);
+      await mbDesfazerPerdao('e1', clienteParaTeste: cliente);
+      expect(meuBancoEmprestimos.value.devido, 500);
+      expect((await database.select(database.transactions).get()).where((t) => t.transactionPk == 'mb:perdao:e1'), isEmpty);
+    });
+
+    test('desfazer o empréstimo solta o pagamento: ele não abate mais nada e volta a pedir escolha', () async {
+      cliente.transacoes = [_tx('e1', 'PIX ENVIADO SANTANDER', -800, data: _hoje()), _tx('d1', 'Pix recebido: Pai', 300, data: _hoje())];
+      cliente.ciclo = {'inicio': _hoje(), 'revisar': [
+        {'id': 'tx:e1', 'tipo': 'envio_santander', 'tx_id': 'e1', 'data': _hoje(), 'descricao': 'PIX ENVIADO SANTANDER', 'valor': 800},
+        {'id': 'tx:d1', 'tipo': 'pix_recebido', 'tx_id': 'd1', 'data': _hoje(), 'descricao': 'Pix recebido: Pai', 'valor': 300}]};
+      await sync();
+      await mbResponderRevisao(meuBancoRevisar.value.firstWhere((i) => i.txId == 'e1'), 'emprestimo', pessoa: 'Pai', clienteParaTeste: cliente);
+      await mbResponderRevisao(meuBancoRevisar.value.single, 'devolucao', emprestimoId: 'e1', clienteParaTeste: cliente);
+      expect(meuBancoEmprestimos.value.devido, 500);
+      await mbDesfazerRevisao('e1', clienteParaTeste: cliente);
+      expect(meuBancoEmprestimos.value.abertos, isEmpty);
+    });
+
+    test('"Me pagou um empréstimo" só é oferecido com empréstimo em aberto', () {
+      final item = MbItemRevisao('tx:d1', 'pix_recebido', txId: 'd1', data: _hoje(), valor: 300);
+      expect(item.respostasCom(const MbEmprestimos()), ['reembolso', 'renda']);
+      final aberto = mbCalcularEmprestimos([{'tipo': 'decisao', 'tx_id': 'e1', 'resposta': 'emprestimo', 'valor': 800, 'data': _hoje(), 'pessoa': 'Pai'}]);
+      expect(item.respostasCom(aberto), ['devolucao', 'reembolso', 'renda']);
     });
   });
 }

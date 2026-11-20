@@ -35,6 +35,7 @@ import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart' show abrirTransacao;
 import 'package:budget/widgets/globalSnackbar.dart';
 import 'package:budget/functions.dart';
+import 'package:budget/pages/settingsPage.dart' show SettingsPageFramework;
 import 'package:budget/widgets/navigationFramework.dart' show runAllCloudFunctions;
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
@@ -195,6 +196,9 @@ class _InicioEditorialState extends State<InicioEditorial> {
               meuBancoEmprestimos.value.abertos.isNotEmpty)
             MetasEmprestimosInicio(metas: widget._metas),
           UltimasInicio(transacoes: _transacoes),
+          // Configurações saiu da barra: é o último item do fim da Início.
+          const SizedBox(height: 24),
+          BotaoConfiguracoesInicio(onTap: _real ? () => pushRoute(context, SettingsPageFramework()) : null),
         ],
       );
       corpo = _real ? RefreshIndicator(onRefresh: _puxar, child: lista) : lista;
@@ -640,23 +644,17 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
         if (abertos.isNotEmpty)
           _Secao(
             titulo: 'Empréstimos',
-            divisores: true,
+            divisores: false,
             filhos: [
-              for (final e in abertos.take(n))
-                _LinhaProgresso(
-                  titulo: switch (DateTime.tryParse(e.data ?? '')) {
-                    final d? => 'Empréstimo de ${diaMes(d)}',
-                    null => 'Empréstimo',
-                  },
-                  valor: 'Falta ${brl(e.restante)}',
-                  fracao: e.original > 0 ? 1 - e.restante / e.original : 0,
-                ),
-              if (abertos.length > n)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text('mais ${abertos.length - n}',
-                      style: EdTexto.rotulo(context)),
-                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(children: [
+                  Expanded(child: Text('Emprestado em aberto', style: EdTexto.corpo(context))),
+                  Text(brl(emprestimos.devido),
+                      key: const Key('inicio_emprestado_em_aberto'),
+                      style: EdTexto.mono(context).copyWith(fontWeight: FontWeight.w700)),
+                ]),
+              ),
             ],
           ),
       ],
@@ -726,6 +724,32 @@ class _LinhaProgresso extends StatelessWidget {
 }
 
 /// Título de bloco (h2) com ação opcional à direita e os filhos separados por linha.
+/// "Configurações": último item do fim da Início (a barra de baixo não a tem mais).
+class BotaoConfiguracoesInicio extends StatelessWidget {
+  const BotaoConfiguracoesInicio({super.key, this.onTap});
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton.icon(
+        key: const Key('botao_configuracoes'),
+        onPressed: onTap ?? () {},
+        icon: const Icon(Icons.settings_outlined, size: 20),
+        label: const Text('Configurações', style: TextStyle(fontWeight: FontWeight.w600)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: e.tx,
+          backgroundColor: e.surf,
+          side: BorderSide(color: e.line),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    );
+  }
+}
+
 class _Secao extends StatelessWidget {
   const _Secao(
       {required this.titulo,

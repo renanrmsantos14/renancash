@@ -13,6 +13,8 @@ import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/editObjectivesPage.dart';
 import 'package:budget/pages/homePage/homePageNetWorth.dart';
 import 'package:budget/pages/objectivesListPage.dart';
+import 'package:budget/pages/pendenciasPage.dart' show PendenciasPage;
+import 'package:budget/struct/meuBancoSync.dart' show meuBancoPareado;
 import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
@@ -112,7 +114,8 @@ class MorePages extends StatelessWidget {
           icon: navBarIconsData[chave]!.iconData,
           iconScale: navBarIconsData[chave]!.iconScale,
         );
-    bool budgetsNaBarra = [
+    bool budgetsNaBarra = meuBancoPareado.value ||
+        [
       appStateSettings["customNavBarShortcut0"],
       appStateSettings["customNavBarShortcut1"],
       appStateSettings["customNavBarShortcut2"],
@@ -302,6 +305,25 @@ List<Widget> configuracoesItens(BuildContext context) {
       description: "Estilo, formatos, contas, orçamentos e widgets",
       icon: contorno ? Icons.tune_outlined : Icons.tune_rounded,
     ),
+    // Saíram da barra: continuam a um toque daqui.
+    if (meuBancoPareado.value) ...[
+      SettingsHeader(title: "Atalhos"),
+      SettingsContainerOpenPage(
+        openPage: const PendenciasPage(),
+        title: "Pendências",
+        icon: navBarIconsData["pendencias"]!.iconData,
+      ),
+      SettingsContainerOpenPage(
+        openPage: ObjectivesListPage(backButton: true),
+        title: "Metas",
+        icon: navBarIconsData["goals"]!.iconData,
+      ),
+      SettingsContainerOpenPage(
+        openPage: SubscriptionsPage(),
+        title: "Assinaturas",
+        icon: navBarIconsData["subscriptions"]!.iconData,
+      ),
+    ],
     SettingsHeader(title: "Sobre"),
     SettingsContainerOpenPage(
       openPage: AboutPage(),

@@ -5,6 +5,7 @@ import 'package:budget/pages/addWalletPage.dart'
     show initializeBalanceCorrectionCategory;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/mbSync/armazem.dart';
+import 'package:budget/struct/mbSync/emprestimos.dart' show meuBancoEmprestimos;
 import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoApagadas, mbEspelhoCarregarEstado;
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/contextoLocal.dart';
@@ -399,6 +400,11 @@ Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
           ..where((t) => t.transactionPk.isIn(alvos)))
         .go();
   }
+  // Perdão desfeito (neste ou em outro aparelho): o gasto sintético dele sai.
+  final perdoesAtuais = {for (final t in r.transacoes) if (t.pk.startsWith('mb:perdao:')) t.pk};
+  await (database.delete(database.transactions)
+        ..where((t) => t.transactionPk.like('mb:perdao:%') & t.transactionPk.isNotIn(perdoesAtuais)))
+      .go();
   // Conta ignorada importada antes desta regra: apaga a carteira e os lançamentos dela.
   for (final pk in r.contasIgnoradasPks) {
     if (await database.getWalletInstanceOrNull(pk) == null) continue;
@@ -436,7 +442,9 @@ Future<({List<MbCompra> compras, List<MbCompra> abatimentos})>
   final compras = <MbCompra>[], abatimentos = <MbCompra>[];
   final linhas = await (database.select(database.transactions)
         ..where((t) =>
-            t.transactionPk.like('mb:%') & t.income.equals(false)))
+            t.transactionPk.like('mb:%') &
+            t.transactionPk.like('mb:perdao:%').not() &
+            t.income.equals(false)))
       .get();
   for (final t in linhas) {
     final c = MbCompra(t.transactionPk, mbNormalizarEstabelecimento(t.name),
@@ -504,14 +512,58 @@ Future<void> _aplicarInvestimentos(List<MbInvestimento> lista) async {
 // (a fila some na hora), manda ao servidor e remapeia as transações. `categoriaPk` só para resposta "categoria".
 // Offline ou com falha, a decisão fica pendente e vai na próxima sincronização.
 Future<void> mbResponderRevisao(MbItemRevisao item, String resposta,
-    {String? categoriaPk, String? reembolsoDe, String? trocoDe, MbCliente? clienteParaTeste}) async {
+    {String? categoriaPk,
+    String? reembolsoDe,
+    String? trocoDe,
+    String? pessoa,
+    String? emprestimoId,
+    double? sobra,
+    String? sobraPara,
+    String? sobraId,
+    bool recategorizado = false,
+    MbCliente? clienteParaTeste}) async {
   if (item.txId == null || !mbRespostasRevisao.contains(resposta)) return;
   if (resposta == 'categoria' && categoriaPk == null) return;
   if (resposta == 'troco' && trocoDe == null) return; // troco sem o reembolso que ele abate não existe
+  if (resposta == 'emprestimo' && (pessoa == null || pessoa.trim().isEmpty)) return; // todo empréstimo tem pessoa
+  if (resposta == 'devolucao' && emprestimoId == null) return; // pagamento sempre abate um empréstimo escolhido
   await mbCriarTabelas();
   await mbGravarRevisoes(mbRegistrosDeResposta(item, resposta,
-      categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, trocoDe: trocoDe, agora: isoMs(DateTime.now())));
+      categoriaPk: categoriaPk,
+      reembolsoDe: reembolsoDe,
+      trocoDe: trocoDe,
+      pessoa: pessoa,
+      emprestimoId: emprestimoId,
+      sobra: sobra,
+      sobraPara: sobraPara,
+      sobraId: sobraId,
+      recategorizado: recategorizado,
+      agora: isoMs(DateTime.now())));
   await mbGravarEstado({_chaveRepuxar: isoMs(DateTime.now())});
+  await mbAtualizarRevisar();
+  await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
+}
+
+// Perdoa o saldo restante de um empréstimo: o valor de hoje fica fixo no registro `perdao:<id>` e vira gasto na data do perdão
+// (ver meuBancoMapping); o empréstimo sai do aberto. Desfazer apaga o registro e o gasto.
+Future<void> mbPerdoarEmprestimo(String emprestimoId, {DateTime? hoje, MbCliente? clienteParaTeste}) async {
+  final e = meuBancoEmprestimos.value.porId(emprestimoId);
+  if (e == null || !e.aberto) return;
+  await mbCriarTabelas();
+  final agora = DateTime.now();
+  await mbGravarRevisoes([
+    mbRegistroDePerdao(emprestimoId, e.restante, DateFormat('yyyy-MM-dd').format(hoje ?? agora), isoMs(agora))
+  ]);
+  await mbGravarEstado({_chaveRepuxar: isoMs(agora)});
+  await mbAtualizarRevisar();
+  await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
+}
+
+Future<void> mbDesfazerPerdao(String emprestimoId, {MbCliente? clienteParaTeste}) async {
+  await mbCriarTabelas();
+  final agora = isoMs(DateTime.now());
+  await mbGravarRevisoes([Registro('revisoes', 'perdao:$emprestimoId', null, agora, agora)]);
+  await mbGravarEstado({_chaveRepuxar: agora});
   await mbAtualizarRevisar();
   await sincronizarMeuBanco(clienteParaTeste: clienteParaTeste);
 }

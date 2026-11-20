@@ -65,3 +65,7 @@ description: "Verifica a aba Pendências e a fila Para validar: toda transação
    - Editar transação de uma entrada do Meu Banco sem vínculo: "Conta rachada › É a parte de uma conta que eu paguei" abre a mesma lista.
    - No outro aparelho, após sincronizar, a categoria confirmada aparece (ajuste); título, sub e vínculo são locais deste aparelho.
 4. Claro e escuro, fonte grande do sistema: nada estourado, botões com 44 px de altura, leitor de tela lê a pergunta (liveRegion) e os chips como botões.
+
+## Fila: empréstimos
+- Pix recebido: "Me pagou um empréstimo" só aparece com empréstimo em aberto (`MbItemRevisao.respostasCom`) e exige escolher o empréstimo (os da pessoa primeiro, depois "Outros empréstimos"); pagamento maior que o saldo pergunta o destino da sobra. Pix enviado marcado Empréstimo liga a um da pessoa ou cria um novo pedindo só a pessoa (nome pré-preenchido).
+- Empréstimo antigo sem pessoa volta à fila (`emprestimo_sem_pessoa`) pedindo a pessoa; some ao informar a pessoa ou recategorizar. Prova: `flutter test test/mb_revisao_test.dart` e `node --test test/revisao.test.mjs` em `apps/worker`; print `fila_me_pagou_*.png` de `prints_emprestimos_test.dart`.

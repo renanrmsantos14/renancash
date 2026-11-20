@@ -27,7 +27,12 @@ async function ambiente(transacoes, espelho = false) {
   const ciclo = async (auth) => (await (await amb.pedir("/api/sync", { headers: auth })).json()).ciclo;
   const enviar = async (auth, registros) => {
     if (espelho) {
-      const linhas = registros.map((r) => ({ tabela: "mb_revisoes", pk: r.id, dados: r.dados == null ? null : { pk: r.id, dados: JSON.stringify(r.dados) }, updated_at: r.updated_at, deleted_at: r.deleted_at }));
+      // Categorias e ajustes de categoria vão como o app manda: linhas `categories` e `transactions` (mb:<id>); as revisões como `mb_revisoes`.
+      const linhas = registros.map((r) => r.tabela === "categorias"
+        ? { tabela: "categories", pk: r.id, dados: { name: r.dados.nome, income: r.dados.tipo === "receita" ? 1 : 0 }, updated_at: r.updated_at, deleted_at: r.deleted_at }
+        : r.tabela === "ajustes"
+          ? { tabela: "transactions", pk: `mb:${r.id}`, dados: { category_fk: r.dados.categoria_id, type: 0 }, updated_at: r.updated_at, deleted_at: r.deleted_at }
+          : { tabela: `mb_${r.tabela}`, pk: r.id, dados: r.dados == null ? null : { pk: r.id, dados: JSON.stringify(r.dados) }, updated_at: r.updated_at, deleted_at: r.deleted_at });
       const r = await amb.pedir("/api/espelho", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ linhas }) });
       const corpo = await r.json();
       assert.deepEqual(corpo.rejeitados ?? [], [], JSON.stringify(corpo));
@@ -76,7 +81,7 @@ for (const espelho of MODOS) test(`não conta até responder: Santander fica for
   assert.equal((await ciclo(A)).gasto, 50);
   await enviar(A, [decisao("e1", "ajuda")]);
   assert.equal((await ciclo(A)).gasto, 850);
-  await enviar(A, [{ ...decisao("e1", "emprestimo", { valor: 800, data: dia(4) }), updated_at: new Date(Date.now() + 1000).toISOString() }]);
+  await enviar(A, [{ ...decisao("e1", "emprestimo", { valor: 800, data: dia(4), pessoa: "Pai" }), updated_at: new Date(Date.now() + 1000).toISOString() }]);
   const c = await ciclo(A);
   assert.equal(c.gasto, 50);
   assert.deepEqual(c.revisar.map((i) => i.tx_id), ["p1"]);
@@ -150,6 +155,39 @@ for (const espelho of MODOS) test(`troco de reembolso desligado do gasto volta p
   await enviar(A, [decisao("r1", "reembolso"), decisao("t1", "troco", { troco_de: "r1" })]); // reembolso sem `reembolso_de`
   const c = await ciclo(A);
   assert.equal(c.revisar.some((i) => i.tx_id === "t1"), true);
+});
+
+const categoriaEmprestimo = { tabela: "categorias", id: "cat-emp", updated_at: new Date().toISOString(), deleted_at: null, dados: { tipo: "despesa", nome: "Empréstimo", pluggy: [] } };
+const perdao = (emprestimo, valor, data) => ({ tabela: "revisoes", id: `perdao:${emprestimo}`, updated_at: new Date().toISOString(), deleted_at: null, dados: { tipo: "perdao", emprestimo_id: emprestimo, valor, data } });
+
+for (const espelho of MODOS) test(`empréstimo com pessoa sai do Geral em Pix enviado e em compra de débito; o perdão vira gasto na data ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente([...salarios, ["p1", 6, "Pix enviado: Isabel Souza", -250], ["u1", 5, "UBER *TRIP", -15.95], ["m1", 3, "MERCADO", -100]], espelho);
+  assert.equal((await ciclo(A)).gasto, 365.95);
+  await enviar(A, [decisao("p1", "emprestimo", { pessoa: "Isabel", valor: 250, data: dia(6) }), decisao("u1", "emprestimo", { pessoa: "Isabel", valor: 15.95, data: dia(5) })]);
+  const c = await ciclo(A);
+  assert.equal(c.gasto, 100);
+  assert.equal(c.revisar.length, 0);
+  await enviar(A, [perdao("p1", 40, dia(1))]);
+  assert.equal((await ciclo(A)).gasto, 140);
+});
+
+for (const espelho of MODOS) test(`empréstimo antigo sem pessoa (categoria Empréstimo ou decisão sem pessoa) volta à fila e some ao informar a pessoa ou recategorizar ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente([...salarios, ["p1", 6, "Pix enviado: Isabel Souza", -250], ["u1", 5, "UBER *TRIP", -15.95], ["e1", 4, "PIX ENVIADO SANTANDER", -60]], espelho);
+  await enviar(A, [categoriaEmprestimo, decisao("p1", "categoria", { categoria_id: espelho ? "cashew:cat-emp" : "cat-emp", destinatario: "ISABEL SOUZA" }), decisao("e1", "emprestimo", { valor: 60, data: dia(4) }),
+    { tabela: "ajustes", id: "u1", updated_at: new Date().toISOString(), deleted_at: null, dados: { categoria_id: "cat-emp" } }]);
+  let c = await ciclo(A);
+  assert.deepEqual(c.revisar.filter((i) => i.tipo === "emprestimo_sem_pessoa").map((i) => i.tx_id).sort(), ["e1", "p1", "u1"]);
+  assert.equal(c.revisar.find((i) => i.tx_id === "p1").destinatario, "ISABEL SOUZA");
+  await enviar(A, [decisao("p1", "emprestimo", { pessoa: "Isabel", valor: 250, data: dia(6) }), decisao("e1", "emprestimo", { pessoa: "Pai", valor: 60, data: dia(4) }),
+    decisao("u1", "categoria", { categoria_id: "cat-outra", recategorizado: 1 })]);
+  c = await ciclo(A);
+  assert.deepEqual(c.revisar.filter((i) => i.tipo === "emprestimo_sem_pessoa"), []);
+});
+
+for (const espelho of MODOS) test(`Pix que paga empréstimo e passa do saldo: a sobra para reembolso abate só ela do gasto ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente([...salarios, ["g1", 6, "MERCADO", -200], ["r1", 3, "Pix recebido: Maria", 100]], espelho);
+  await enviar(A, [decisao("r1", "devolucao", { emprestimo_id: "x", sobra: 30, sobra_para: "reembolso", reembolso_de: "g1" })]);
+  assert.equal((await ciclo(A)).gasto, 170);
 });
 
 for (const espelho of MODOS) test(`salário não detectado em 35 dias vira item com candidatas; PUT /api/config por token marca o salário ${nomeDoModo(espelho)}`, async () => {

@@ -1,6 +1,7 @@
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/movimento.dart' show ToqueEscala;
+import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/classificar.dart' show MbLancamentoIa, mbChavePadrao;
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/struct/mbSync/reembolso.dart';
@@ -15,6 +16,7 @@ import 'package:budget/widgets/openBottomSheet.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart' show nomeSemEspacosRepetidos;
 import 'package:budget/widgets/util/keepAliveClientMixin.dart';
+import 'package:budget/widgets/editorial/escolherEmprestimo.dart';
 import 'package:budget/widgets/editorial/itemClassificar.dart' show ParteDeConta;
 import 'package:budget/widgets/editorial/reembolsoConta.dart'
     show mbEscolherGastoRachado, mbNomeDoPagador, semGastoReembolso;
@@ -24,7 +26,7 @@ const _rotulos = {
   'emprestimo': 'Empréstimo',
   'investimento': 'Investimento',
   'ajuda': 'Ajuda',
-  'devolucao': 'Devolução',
+  'devolucao': 'Me pagou um empréstimo',
   'reembolso': 'Reembolso',
   'renda': 'Renda',
 };
@@ -168,12 +170,29 @@ class ItemParaRevisar extends StatefulWidget {
 class _ItemParaRevisarState extends State<ItemParaRevisar> {
   bool _enviando = false, _escolhendo = false;
 
-  Future<void> _responder(String resposta, {String? categoriaPk, String? reembolsoDe, String? trocoDe}) async {
+  Future<void> _responder(String resposta,
+      {String? categoriaPk,
+      String? reembolsoDe,
+      String? trocoDe,
+      String? pessoa,
+      String? emprestimoId,
+      double? sobra,
+      String? sobraPara,
+      String? sobraId,
+      bool recategorizado = false}) async {
     if (_enviando) return;
     if (mounted) setState(() => _enviando = true);
     try {
       await mbResponderRevisao(widget.item, resposta,
-          categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, trocoDe: trocoDe);
+          categoriaPk: categoriaPk,
+          reembolsoDe: reembolsoDe,
+          trocoDe: trocoDe,
+          pessoa: pessoa,
+          emprestimoId: emprestimoId,
+          sobra: sobra,
+          sobraPara: sobraPara,
+          sobraId: sobraId,
+          recategorizado: recategorizado);
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -197,7 +216,80 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
       ),
     );
     if (nome is String) {
-      await _responder('categoria', categoriaPk: await _pkDaCategoria(nome));
+      // Empréstimo que não era empréstimo (ex.: o Uber de R$ 15,95): a categoria nova vale e ele sai da fila.
+      await _responder('categoria', categoriaPk: await _pkDaCategoria(nome), recategorizado: widget.item.semPessoa);
+    }
+  }
+
+  String get _nomeSugerido {
+    final i = widget.item;
+    final chave = mbChavePadrao(i.destinatario ?? (i.semPessoa ? '' : i.descricao ?? ''));
+    return chave.isEmpty ? '' : mbNomeDoPagador(chave);
+  }
+
+  // Empréstimo: soma o valor a um que a pessoa já tem ou cria um novo, pedindo só a pessoa (nome do destinatário pré-preenchido).
+  Future<void> _escolherEmprestimo() async {
+    if (_enviando || _escolhendo) return;
+    _escolhendo = true;
+    try {
+      final sugestao = _nomeSugerido;
+      final daPessoa = [
+        for (final e in meuBancoEmprestimos.value.paraPagamento(sugestao).daPessoa)
+          if (e.txId != widget.item.txId) e
+      ];
+      final r = await mbEscolherPessoaDoEmprestimo(context,
+          sugestao: sugestao, valor: widget.item.valor, daPessoa: daPessoa);
+      if (r != null) await _responder('emprestimo', pessoa: r.pessoa, emprestimoId: r.emprestimoId);
+    } finally {
+      _escolhendo = false;
+    }
+  }
+
+  // "Me pagou um empréstimo": escolhe qual abater; passou do saldo, pergunta o destino da sobra.
+  Future<void> _escolherPagamento() async {
+    if (_enviando || _escolhendo) return;
+    _escolhendo = true;
+    try {
+      final i = widget.item;
+      final lista = meuBancoEmprestimos.value;
+      final e = await mbEscolherEmprestimo(context,
+          emprestimos: lista, pessoa: _nomeSugerido, valor: i.valor);
+      if (e == null || !mounted) return;
+      final sobra = ((i.valor.abs() - e.restante) * 100).round() / 100;
+      if (sobra <= 0) {
+        await _responder('devolucao', emprestimoId: e.txId);
+        return;
+      }
+      final outros = [for (final o in lista.abertos) if (o.txId != e.txId) o];
+      final destino = await mbEscolherDestinoDaSobra(context, sobra: sobra, temOutroEmprestimo: outros.isNotEmpty);
+      if (destino == null || !mounted) return;
+      switch (destino) {
+        case 'emprestimo':
+          final outro = await mbEscolherEmprestimo(context,
+              emprestimos: MbEmprestimos(outros), pessoa: e.pessoa, valor: sobra, titulo: 'Qual outro empréstimo abater?');
+          if (outro != null) {
+            await _responder('devolucao',
+                emprestimoId: e.txId, sobra: sobra, sobraPara: 'emprestimo', sobraId: outro.txId);
+          }
+        case 'reembolso':
+          final sugestoes = await mbSugestoesDoItem(i);
+          if (!mounted) return;
+          final escolha = await mbEscolherGastoRachado(context,
+              sugestoes: sugestoes,
+              valor: sobra,
+              data: DateTime.tryParse(i.data ?? '') ?? DateTime.now());
+          if (escolha is MbGastoCandidato) {
+            await _responder('devolucao',
+                emprestimoId: e.txId,
+                sobra: sobra,
+                sobraPara: 'reembolso',
+                reembolsoDe: escolha.pk.substring(mbPrefixo.length));
+          }
+        default:
+          await _responder('devolucao', emprestimoId: e.txId, sobra: sobra, sobraPara: 'renda');
+      }
+    } finally {
+      _escolhendo = false;
     }
   }
 
@@ -250,7 +342,9 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
         : nomeSemEspacosRepetidos(i.destinatario!.trim());
     final titulo = i.ehSalario
         ? 'Salário não detectado'
-        : switch (i.tipo) {
+        : i.semPessoa
+            ? (destBruto.isEmpty ? 'Empréstimo sem pessoa' : 'Empréstimo a $destBruto')
+            : switch (i.tipo) {
             'pix_enviado' => dest.isNotEmpty
                 ? 'Pix enviado a ${mbNomeDoPagador(dest)}'
                 : 'Pix enviado${destBruto.isEmpty ? '' : ' a $destBruto'}',
@@ -261,9 +355,11 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
           };
     final detalhe = i.ehSalario
         ? 'Há ${i.dias} dias sem salário no Inter. Qual entrada é o salário?'
-        : '${brl(i.valor.abs())}${data == null ? '' : ' · ${diaMes(data)}'}';
+        : '${brl(i.valor.abs())}${data == null ? '' : ' · ${diaMes(data)}'}${i.semPessoa ? ' · de quem é?' : ''}';
     // Pix enviado é gasto; recebido é receita; o envio ao Santander ainda não tem tipo até responder.
-    final tipoItem = i.tipo == 'pix_enviado'
+    final tipoItem = i.semPessoa
+        ? TipoMov.emprestimo
+        : i.tipo == 'pix_enviado'
         ? TipoMov.gasto
         : i.tipo == 'envio_santander'
             ? TipoMov.aClassificar
@@ -307,12 +403,21 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
             _botao('Devolvi parte do reembolso de ${mbNomeDoPagador(troco.pagador)}',
                 () => _responder('troco', trocoDe: troco.reembolsoPk.substring(mbPrefixo.length)),
                 tipo: TipoMov.gasto),
-          if (i.tipo == 'pix_enviado')
+          if (i.tipo == 'pix_enviado') ...[
             _botao('Escolher categoria', _escolherCategoria, tipo: TipoMov.gasto),
-          for (final r in i.respostas)
-            _botao(_rotulos[r]!,
-                r == 'reembolso' ? _escolherReembolso : () => _responder(r),
-                tipo: _tipoDaResposta[r]),
+            _botao(_rotulos['emprestimo']!, _escolherEmprestimo, tipo: TipoMov.emprestimo),
+          ],
+          if (i.semPessoa) ...[
+            _botao('Informar a pessoa', _escolherEmprestimo, tipo: TipoMov.emprestimo),
+            _botao('Não é empréstimo', _escolherCategoria, tipo: TipoMov.gasto),
+          ],
+          for (final r in i.respostasCom(meuBancoEmprestimos.value))
+            _botao(_rotulos[r]!, switch (r) {
+              'reembolso' => _escolherReembolso,
+              'emprestimo' => _escolherEmprestimo,
+              'devolucao' => _escolherPagamento,
+              _ => () => _responder(r),
+            }, tipo: _tipoDaResposta[r]),
           for (final c in i.candidatos)
             _botao(
                 '${brl(c.valor)} · ${diaMes(DateTime.tryParse(c.data) ?? DateTime.now())}',

@@ -3,7 +3,7 @@ import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, mapearEmprestimos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
-import { lerRevisoes, aplicarRevisoes, filaRevisar } from "./revisao.js";
+import { lerRevisoes, aplicarRevisoes, filaRevisar, transacoesDePerdao } from "./revisao.js";
 import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasEmprestimos, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido, apagarTransacoes, idsRemovidos } from "./pluggy.js";
 import { enviarPush } from "./push.js";
@@ -304,9 +304,9 @@ async function baseCiclo(env) {
   const revisoes = lerRevisoes(registros);
   const cartoes = new Set(contasUsadas.filter((c) => c.type === "CREDIT").map((c) => c.id));
   const { inicio } = resumoCiclo({ transacoes: aplicarRevisoes(semIgnorar, revisoes, { cartoes }), contas: contasUsadas, config, hoje });
-  const transacoes = aplicarRevisoes(semIgnorar, revisoes, { cartoes, inicio });
+  const transacoes = [...aplicarRevisoes(semIgnorar, revisoes, { cartoes, inicio }), ...transacoesDePerdao(revisoes.perdoes, contasUsadas)];
   const resumo = resumoCiclo({ transacoes, contas: contasUsadas, config, hoje });
-  return { hoje, transacoes, contas: contasUsadas, config, registros, ctx: contextoDeRegistros(registros), resumo, revisar: filaRevisar({ transacoes, contas: contasUsadas, config, resumo, hoje }) };
+  return { hoje, transacoes, contas: contasUsadas, config, registros, ctx: contextoDeRegistros(registros), resumo, revisar: filaRevisar({ transacoes, contas: contasUsadas, config, resumo, hoje, revisoes, registros }) };
 }
 
 async function ciclo(env) {
