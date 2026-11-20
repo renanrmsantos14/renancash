@@ -8,7 +8,7 @@
 import 'package:budget/struct/mbSync/mapeamento.dart' show CatLocal;
 import 'package:budget/struct/mbSync/revisao.dart'
     show MbItemRevisao, mbNormalizarRevisao;
-import 'package:budget/struct/meuBancoMapping.dart' show mbPkInvestimento;
+import 'package:budget/struct/meuBancoMapping.dart' show mbDescricaoDelivery, mbPkInvestimento;
 
 /// Categoria de ajuste de saldo (também a dos investimentos): nunca entra na fila nem vira opção.
 const String mbCategoriaAjuste = '0';
@@ -292,6 +292,13 @@ MbSugestao? mbSugestaoLocal(MbLancamentoIa l, List<MbPadrao> padroes, MbOpcoes o
         vinculoPk: op.vinculo(p.vinculoPk)?.pk,
         confianca: p.vezes > 1 ? 0.9 : 0.8,
         fonte: MbFonteSugestao.padrao);
+  }
+  if (l.valor < 0 && mbDescricaoDelivery.hasMatch(l.descricao)) {
+    final alimentacao = op.categorias.where((c) => !c.receita && c.nome.toLowerCase() == 'alimentação').firstOrNull;
+    final delivery = alimentacao?.subs.where((s) => s.nome.toLowerCase() == 'delivery').firstOrNull;
+    if (alimentacao != null && delivery != null) {
+      return MbSugestao(l.pk, alimentacao.pk, subPk: delivery.pk, confianca: 0.7, fonte: MbFonteSugestao.atual);
+    }
   }
   final atual = op.categoria(l.categoriaPk);
   if (atual == null || mbSemCategoriaUtil(l.categoriaNome)) return null;

@@ -282,6 +282,9 @@ Map<String, MbDestino> mbResolverDestinos(Iterable<CatLocal> categorias,
   return out;
 }
 
+// Compra em app de delivery chega da Pluggy como "Shopping"; a descrição manda para Alimentação › Delivery.
+final RegExp mbDescricaoDelivery = RegExp(r"ifood|\bifd\*|99 ?food|rappi|z[eé] delivery", caseSensitive: false);
+
 String mbTraduzirCategoria(String? c) {
   if (c == null || c.isEmpty) return "Sem categoria";
   return mbCategorias[c] ?? c;
@@ -652,7 +655,10 @@ MbResultado mbMapearPull(Map<String, dynamic> json, MbContextoCategoria ctx,
         !(especial && categoriaId != null);
     final destino = !peloMapa
         ? null
-        : (especial ? null : destinos[mbChaveDestino(receita, mbTraduzirCategoria(categoria))]) ??
+        : (especial
+                ? null
+                : (!receita && mbDescricaoDelivery.hasMatch(descricao) ? destinos["d:Delivery"] : null) ??
+                    destinos[mbChaveDestino(receita, mbTraduzirCategoria(categoria))]) ??
             destinos[mbChaveDestino(receita, nomeCategoria)];
     final pendente = t["status"] == "PENDING";
     // Título e nota editados em outro aparelho (ajuste `nome`/`nota`) valem também para a transação que chega agora.
