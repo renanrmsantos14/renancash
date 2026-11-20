@@ -139,7 +139,9 @@ class _PendenciasPageState extends State<PendenciasPage> {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    return ColoredBox(
+    // Material (não ColoredBox): aberta via pushRoute não há Scaffold acima, e sem
+    // Material os textos saem com o sublinhado amarelo de erro do Flutter.
+    return Material(
       color: e.bg,
       child: SafeArea(
         bottom: false,
