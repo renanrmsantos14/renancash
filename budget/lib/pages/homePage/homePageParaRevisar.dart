@@ -233,12 +233,16 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     _escolhendo = true;
     try {
       final sugestao = _nomeSugerido;
-      final daPessoa = [
-        for (final e in meuBancoEmprestimos.value.paraPagamento(sugestao).daPessoa)
-          if (e.txId != widget.item.txId) e
+      final grupos = meuBancoEmprestimos.value.paraPagamento(sugestao);
+      final daPessoa = [for (final e in grupos.daPessoa) if (e.txId != widget.item.txId) e];
+      // Os outros abertos também: o nome sugerido pode não bater (ou faltar, no empréstimo sem pessoa). Sem pessoa não entra:
+      // somar a ele não diz de quem é.
+      final outros = [
+        for (final e in grupos.outros)
+          if (e.txId != widget.item.txId && (e.pessoa ?? '').trim().isNotEmpty) e
       ];
       final r = await mbEscolherPessoaDoEmprestimo(context,
-          sugestao: sugestao, valor: widget.item.valor, daPessoa: daPessoa);
+          sugestao: sugestao, valor: widget.item.valor, daPessoa: daPessoa, outros: outros);
       if (r != null) await _responder('emprestimo', pessoa: r.pessoa, emprestimoId: r.emprestimoId);
     } finally {
       _escolhendo = false;
