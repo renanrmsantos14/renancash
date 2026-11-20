@@ -130,10 +130,12 @@ void main() {
     expect(find.text('Novembro de 2026'), findsOneWidget);
     expect(find.text('Outubro de 2026'), findsOneWidget);
     expect(find.text('Setembro de 2026'), findsOneWidget);
-    expect(find.text(' sobre outubro de 2026'), findsOneWidget);
-    expect(find.text('set/26'), findsOneWidget);
-    expect(find.text('out/26'), findsOneWidget);
-    expect(find.text('nov/26'), findsOneWidget);
+    expect(find.textContaining('sobre outubro de 2026'), findsOneWidget);
+    // Eixo do gráfico só com o mês; o ano aparece no rótulo "nov/26 · até agora".
+    expect(find.text('set'), findsOneWidget);
+    expect(find.text('out'), findsOneWidget);
+    expect(find.text('nov'), findsOneWidget);
+    expect(find.textContaining('nov/26'), findsOneWidget);
   });
 
   testWidgets('InvestimentosConteudo vazio tem botão com alvo de toque >= 44 px',

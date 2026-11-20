@@ -55,7 +55,7 @@ MbExtraTransacao? mbExtraDe(Map<String, Map<String, String>> extras, String idPl
 Future<MbExtraTransacao?> mbLerExtraTransacao(String idPluggy) async =>
     mbExtraDe(mbExtrasDeTexto(await mbLerEstado(chaveExtrasTransacao)), idPluggy);
 
-const _meses = [
+const mbMesesPt = [
   'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'
 ];
@@ -65,7 +65,7 @@ String? mbRotuloFaturaMes(String? aaaaMm) {
   final m = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(aaaaMm ?? '');
   final mes = m == null ? null : int.parse(m.group(2)!);
   if (mes == null || mes < 1 || mes > 12) return null;
-  final nome = _meses[mes - 1];
+  final nome = mbMesesPt[mes - 1];
   return '${nome[0].toUpperCase()}${nome.substring(1)} de ${m!.group(1)}';
 }
 
