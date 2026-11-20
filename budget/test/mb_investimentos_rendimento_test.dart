@@ -117,8 +117,8 @@ void main() {
       ),
     ));
     await t.pump(const Duration(seconds: 2));
-    expect(find.text('Total investido'), findsOneWidget);
-    expect(find.text('Investido'), findsOneWidget);
+    expect(find.text('Saldo total'), findsOneWidget);
+    expect(find.text('Aplicado'), findsOneWidget);
     expect(find.text('Rendeu'), findsOneWidget);
     expect(find.text('+10,00%'), findsOneWidget);
     expect(find.text('110% CDI'), findsOneWidget);

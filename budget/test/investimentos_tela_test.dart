@@ -116,7 +116,7 @@ void main() {
     expect(find.text('Fundo DI'), findsOneWidget);
     expect(find.text('CDB Inter 110%'), findsOneWidget);
     expect(find.text('Cofrinho sem banco'), findsOneWidget);
-    final topo = t.getTopLeft(find.text('Total investido'));
+    final topo = t.getTopLeft(find.text('Saldo total'));
     final banco = t.getTopLeft(find.text('Por banco'));
     expect(banco.dx, greaterThan(topo.dx + 300));
   });
@@ -127,7 +127,7 @@ void main() {
     for (var i = 0; i < 20; i++) {
       await t.pump(const Duration(milliseconds: 50));
     }
-    expect(find.text('Aplicado'), findsOneWidget);
+    expect(find.text('Aplicado'), findsNWidgets(2)); // topo e folha
     expect(find.text('Rendeu'), findsWidgets);
     expect(find.text('+R\$ 500,00 (+11,11%)'), findsOneWidget);
     expect(find.text('Impostos'), findsOneWidget);

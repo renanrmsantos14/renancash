@@ -152,7 +152,7 @@ class TopoInvestimentos extends StatelessWidget {
     final faltam = aplicacoes.length - comAplicado.length;
     final e = cores(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('Total investido', style: EdTexto.rotulo(context)),
+      Text('Saldo total', style: EdTexto.rotulo(context)),
       const SizedBox(height: 8),
       ContagemValor(
           valor: total,
@@ -173,7 +173,7 @@ class TopoInvestimentos extends StatelessWidget {
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(
                 child: _Caixa(
-                    rotulo: 'Investido',
+                    rotulo: 'Aplicado',
                     valor: brl(investido),
                     cor: e.tx)),
             const SizedBox(width: 10),
@@ -292,6 +292,8 @@ class GraficoInvestimentos extends StatelessWidget {
           // Só o mês no eixo (com o ano os rótulos se sobrepõem no celular).
           rotulosX: [for (final m in serie) mbRotuloCurtoMes(m.mes).split('/').first],
           color: e.acc,
+          // Diferente de zero faz o eixo Y partir do menor saldo, não de 0 (senão a curva fica achatada).
+          amountBefore: serie.first.total == 0 ? 0 : serie.first.total,
         ),
       ]),
     );
@@ -688,7 +690,7 @@ class DetalheInvestimento extends StatelessWidget {
   }
 }
 
-/// Saldo da aplicação nos últimos meses (até 6), com barra proporcional ao maior saldo.
+/// Saldo da aplicação nos últimos meses (até 6); a barra mostra a variação entre o menor e o maior saldo.
 class _MiniEvolucao extends StatelessWidget {
   const _MiniEvolucao({required this.pontos});
   final List<(String, double)> pontos;
@@ -697,7 +699,9 @@ class _MiniEvolucao extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     final ultimos = pontos.length > 6 ? pontos.sublist(pontos.length - 6) : pontos;
-    final maior = ultimos.fold(1.0, (m, p) => p.$2 > m ? p.$2 : m);
+    final maior = ultimos.fold(double.negativeInfinity, (m, p) => p.$2 > m ? p.$2 : m);
+    final menor = ultimos.fold(double.infinity, (m, p) => p.$2 < m ? p.$2 : m);
+    final faixa = maior - menor;
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -714,7 +718,7 @@ class _MiniEvolucao extends StatelessWidget {
                 child: Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: FractionallySizedBox(
-                    widthFactor: (p.$2 / maior).clamp(0.02, 1.0),
+                    widthFactor: faixa <= 0 ? 1.0 : 0.2 + 0.8 * (p.$2 - menor) / faixa,
                     child: Container(
                       height: 8,
                       decoration: BoxDecoration(
