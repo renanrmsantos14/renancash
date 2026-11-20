@@ -4,6 +4,8 @@
 //   id `tx:<transação>`  { tipo: "decisao", tx_id, resposta, categoria_id?, valor, data, descricao }
 //   id `dest:<nome>`     { tipo: "destinatario", destinatario, categoria_id }   (memória do Pix enviado a essa pessoa)
 // Quem lê empréstimos, devoluções e reembolsos (PR 4) filtra `revisoes` com tipo "decisao" e resposta "emprestimo" | "devolucao" | "reembolso".
+// "troco" (Pix enviado à pessoa que mandou um reembolso, `troco_de` = id desse Pix recebido) devolve parte do reembolso: no Worker
+// segue como um Pix enviado respondido (gasto normal), então o ciclo dá reembolso − troco abatidos do gasto.
 import { normalizar, entradasCandidatas, salariosDetectados, somarDias } from "./ciclo.js";
 import { regraAuto, DESC_FORA } from "../public/regras.js";
 
@@ -37,6 +39,11 @@ export function lerRevisoes(registros) {
     if (r.tabela !== "revisoes" || !d) continue;
     if (d.tipo === "decisao" && d.tx_id && d.resposta) decisoes.set(d.tx_id, d);
     else if (d.tipo === "destinatario" && d.destinatario && d.categoria_id) destinos.set(d.destinatario, d);
+  }
+  // Troco de um reembolso que não está mais ligado a um gasto vale como Pix enviado sem resposta (igual ao app).
+  for (const [id, d] of decisoes) {
+    const r = d.resposta === "troco" ? decisoes.get(d.troco_de) : null;
+    if (d.resposta === "troco" && !(r?.resposta === "reembolso" && r.reembolso_de)) decisoes.delete(id);
   }
   return { decisoes, destinos };
 }

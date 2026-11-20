@@ -13,6 +13,7 @@ import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:budget/widgets/viewAllTransactionsButton.dart';
+import 'package:budget/struct/mbSync/rachadas.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/noResults.dart';
@@ -176,6 +177,7 @@ class _TransactionEntriesState extends State<TransactionEntries> {
       allowOpenIntoObjectiveLoanPage: widget.allowOpenIntoObjectiveLoanPage,
       showExcludedBudgetTag: widget.showExcludedBudgetTag,
       enableFutureTransactionsDivider: enableFutureTransactionsDivider,
+      busca: widget.search,
     );
     return EntradaSuave(
       key: ValueKey(item.transaction.transactionPk),
@@ -186,7 +188,15 @@ class _TransactionEntriesState extends State<TransactionEntries> {
     );
   }
 
+  // Conta rachada: os Pix de rachar (reembolsos e trocos) ficam só dentro do gasto, e o dia soma a minha parte dele.
   Widget transactionEntryListBuilder(double? initialNetValue) {
+    return ValueListenableBuilder<MbRachadas>(
+      valueListenable: meuBancoRachadas,
+      builder: (context, rachadas, _) => _listaDeTransacoes(initialNetValue, rachadas),
+    );
+  }
+
+  Widget _listaDeTransacoes(double? initialNetValue, MbRachadas rachadas) {
     return StreamBuilder<List<TransactionWithCategory>>(
       stream: database.getTransactionCategoryWithDay(
         widget.startDay,
@@ -206,7 +216,12 @@ class _TransactionEntriesState extends State<TransactionEntries> {
       ),
       builder: (context, snapshot) {
         if (snapshot.data != null && snapshot.hasData) {
-          List<TransactionWithCategory> data = snapshot.data ?? [];
+          List<TransactionWithCategory> data = rachadas.ocultos.isEmpty
+              ? snapshot.data ?? []
+              : [
+                  for (final t in snapshot.data ?? <TransactionWithCategory>[])
+                    if (!rachadas.ocultos.contains(t.transaction.transactionPk)) t
+                ];
           _ordemEntrada = 0;
           _primeiraCarga ??= DateTime.now();
           int totalNumberTransactionsAll = data.length;
@@ -311,7 +326,7 @@ class _TransactionEntriesState extends State<TransactionEntries> {
               if (transactionWithCategory.transaction.paid) {
                 // Include balance correction when calculating the net
                 totalSpentForDayWithBalanceCorrection +=
-                    transactionWithCategory.transaction.amount *
+                    rachadas.valorNaLista(transactionWithCategory.transaction) *
                         (amountRatioToPrimaryCurrencyGivenPk(
                             Provider.of<AllWallets>(context),
                             transactionWithCategory.transaction.walletFk));
@@ -319,7 +334,7 @@ class _TransactionEntriesState extends State<TransactionEntries> {
               if (transactionWithCategory.transaction.paid &&
                   transactionWithCategory.transaction.categoryFk != "0") {
                 double amountForDay =
-                    transactionWithCategory.transaction.amount *
+                    rachadas.valorNaLista(transactionWithCategory.transaction) *
                         (amountRatioToPrimaryCurrencyGivenPk(
                             Provider.of<AllWallets>(context),
                             transactionWithCategory.transaction.walletFk));

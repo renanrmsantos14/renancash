@@ -168,12 +168,12 @@ class ItemParaRevisar extends StatefulWidget {
 class _ItemParaRevisarState extends State<ItemParaRevisar> {
   bool _enviando = false, _escolhendo = false;
 
-  Future<void> _responder(String resposta, {String? categoriaPk, String? reembolsoDe}) async {
+  Future<void> _responder(String resposta, {String? categoriaPk, String? reembolsoDe, String? trocoDe}) async {
     if (_enviando) return;
     if (mounted) setState(() => _enviando = true);
     try {
       await mbResponderRevisao(widget.item, resposta,
-          categoriaPk: categoriaPk, reembolsoDe: reembolsoDe);
+          categoriaPk: categoriaPk, reembolsoDe: reembolsoDe, trocoDe: trocoDe);
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -272,6 +272,11 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     final recorrente = i.tipo == 'pix_recebido' &&
         i.txId != null &&
         mbVezesQueRachou(meuBancoReembolsos.value, mbChavePadrao(i.descricao ?? '')) >= 2;
+    // Pix enviado à pessoa que mandou um reembolso há até 3 dias: pode ser o troco (a decisão é do usuário; recusar mantém a categoria).
+    final troco = i.tipo == 'pix_enviado' && data != null
+        ? mbSugerirTroco(meuBancoReembolsos.value, meuBancoTrocos.value,
+            descricao: i.descricao ?? '', valor: i.valor, data: data)
+        : null;
     return Opacity(
       opacity: _enviando ? 0.5 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -298,6 +303,10 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
           const SizedBox(height: 12),
         ],
         Wrap(spacing: 8, runSpacing: 8, children: [
+          if (troco != null)
+            _botao('Devolvi parte do reembolso de ${mbNomeDoPagador(troco.pagador)}',
+                () => _responder('troco', trocoDe: troco.reembolsoPk.substring(mbPrefixo.length)),
+                tipo: TipoMov.gasto),
           if (i.tipo == 'pix_enviado')
             _botao('Escolher categoria', _escolherCategoria, tipo: TipoMov.gasto),
           for (final r in i.respostas)

@@ -1,6 +1,7 @@
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/rachadas.dart';
 import 'package:budget/struct/navBarIconsData.dart';
 import 'package:budget/widgets/editorial/lateralEditorial.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
@@ -21,11 +22,16 @@ const int _limiteBusca = 20;
 
 Future<List<ResultadoBusca>> mbBuscarTransacoes(String q) async {
   final t = database.transactions;
+  // Conta rachada: os Pix de rachar ficam dentro do gasto, que mostra a minha parte e o que inclui. Saem na consulta
+  // (antes do limite), senão eles ocupam as vagas e o gasto achado pela pessoa fica de fora.
+  final rachadas = meuBancoRachadas.value;
   final linhas = await (database.select(t)
-        ..where((x) => database.onlyShowTransactionBasedOnSearchQuery(x, q,
-            withCategories: false,
-            joinedWithSubcategoriesTable: null,
-            joinedWithObjectiveLoans: null))
+        ..where((x) =>
+            database.onlyShowTransactionBasedOnSearchQuery(x, q,
+                withCategories: false,
+                joinedWithSubcategoriesTable: null,
+                joinedWithObjectiveLoans: null) &
+            x.transactionPk.isNotIn(rachadas.ocultos))
         ..orderBy([(x) => OrderingTerm.desc(x.dateCreated)])
         ..limit(_limiteBusca))
       .get();
@@ -35,8 +41,11 @@ Future<List<ResultadoBusca>> mbBuscarTransacoes(String q) async {
       (
         pk: x.transactionPk,
         nome: x.name,
-        quando: quandoRelativo(x.dateCreated, agora),
-        valor: x.amount,
+        quando: [
+          quandoRelativo(x.dateCreated, agora),
+          if (x.amount < 0) rachadas.porGasto[x.transactionPk]?.indicacao ?? ''
+        ].where((p) => p.isNotEmpty).join(' · '),
+        valor: rachadas.valorNaLista(x),
         receita: x.income
       )
   ];

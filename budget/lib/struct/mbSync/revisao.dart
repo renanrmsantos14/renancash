@@ -11,7 +11,9 @@ import 'package:budget/struct/mbSync/classificarDados.dart'
 import 'package:budget/struct/mbSync/orcamentos.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/mapeamento.dart';
-import 'package:budget/struct/mbSync/reembolso.dart' show mbVinculosReembolso, meuBancoReembolsos;
+import 'package:budget/struct/mbSync/rachadas.dart' show mbAtualizarRachadas;
+import 'package:budget/struct/mbSync/reembolso.dart'
+    show mbTrocosLigados, mbVinculosReembolso, meuBancoReembolsos, meuBancoTrocos;
 import 'package:budget/struct/mbSync/registro.dart';
 import 'package:budget/struct/meuBancoMapping.dart';
 import 'package:flutter/foundation.dart';
@@ -22,7 +24,8 @@ import 'package:flutter/foundation.dart';
 //   id `tx:<transação>`  { tipo: "decisao", tx_id, resposta, categoria_id?, valor, data, descricao }
 //   id `dest:<nome>`     { tipo: "destinatario", destinatario, categoria_id }
 // Empréstimos e devoluções (emprestimos.dart) e reembolsos (`reembolso_de` = id do gasto reembolsado) saem das decisões
-// com resposta "emprestimo" | "devolucao" | "reembolso". A regra de tipo é a mesma de apps/worker/src/revisao.js (tipoDeRevisao).
+// com resposta "emprestimo" | "devolucao" | "reembolso"; "troco" (Pix enviado, `troco_de` = id do reembolso que ele abate)
+// devolve parte de um reembolso (reembolso.dart). A regra de tipo é a mesma de apps/worker/src/revisao.js (tipoDeRevisao).
 
 const String mbCategoriaAClassificar = "A classificar";
 
@@ -34,6 +37,7 @@ const List<String> mbRespostasRevisao = [
   'devolucao',
   'reembolso',
   'renda',
+  'troco',
 ];
 
 class MbTipoRevisao {
@@ -100,6 +104,12 @@ class MbRevisoes {
         destinos[d['destinatario'] as String] = d['categoria_id'] as String;
       }
     }
+    // Troco de um reembolso que não está mais ligado (ou nunca foi): vale como se não tivesse resposta, igual ao Worker.
+    decisoes.removeWhere((_, d) {
+      if (d['resposta'] != 'troco') return false;
+      final r = decisoes[d['troco_de']];
+      return r == null || r['resposta'] != 'reembolso' || r['reembolso_de'] is! String;
+    });
     return MbRevisoes(decisoes, destinos);
   }
 
@@ -215,6 +225,8 @@ Future<void> mbAtualizarRevisar() async {
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
     meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values);
     meuBancoReembolsos.value = mbVinculosReembolso(revisoes.decisoes.values);
+    meuBancoTrocos.value = mbTrocosLigados(revisoes.decisoes.values, meuBancoReembolsos.value);
+    await mbAtualizarRachadas(meuBancoReembolsos.value, meuBancoTrocos.value);
   } catch (e) {
     if (kDebugMode) debugPrint('Meu Banco: falha ao ler a fila Para revisar: $e');
   }
@@ -225,7 +237,7 @@ Future<void> mbAtualizarRevisar() async {
 
 /// Registros a gravar ao responder: a decisão da transação e, no Pix enviado com categoria, a memória do destinatário.
 List<Registro> mbRegistrosDeResposta(MbItemRevisao item, String resposta,
-    {String? categoriaPk, String? reembolsoDe, required String agora}) {
+    {String? categoriaPk, String? reembolsoDe, String? trocoDe, required String agora}) {
   final descricao = item.descricao ?? '';
   return [
     Registro(
@@ -242,6 +254,8 @@ List<Registro> mbRegistrosDeResposta(MbItemRevisao item, String resposta,
           if (item.destinatario != null) 'destinatario': item.destinatario,
           // Reembolso: id (sem prefixo "mb:") do gasto que o usuário confirmou como reembolsado.
           if (resposta == 'reembolso' && reembolsoDe != null) 'reembolso_de': reembolsoDe,
+          // Troco: id (sem prefixo "mb:") do Pix recebido, ligado como reembolso, que este Pix enviado abate.
+          if (resposta == 'troco' && trocoDe != null) 'troco_de': trocoDe,
         },
         agora,
         null),

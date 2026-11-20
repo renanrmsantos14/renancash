@@ -28,8 +28,9 @@ export const TABELAS: Readonly<Record<Tabela, Esquema>> = {
   // nome/nota: título e nota editados numa transação do banco (`mb:`); sem eles vale o texto do banco.
   ajustes: { "category?": "texto", "gasto?": [0, 1], "categoria_id?": "texto", "nota?": "texto", "nome?": "texto" },
   // Fila "Para revisar": tipo "decisao" (id `tx:<transação>`) guarda a resposta do usuário; tipo "destinatario" (id `dest:<nome>`)
-  // lembra a categoria do Pix enviado a essa pessoa. valor/data/descricao ficam na decisão para a lista de empréstimos não depender da transação.
-  revisoes: { tipo: ["decisao", "destinatario"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda"], "categoria_id?": "texto", "valor?": "numero", "data?": "data", "descricao?": "texto" },
+  // lembra a categoria do Pix enviado a essa pessoa. "reembolso" liga o Pix recebido ao gasto (`reembolso_de`); "troco" liga o Pix enviado
+  // à mesma pessoa ao reembolso que ele abate (`troco_de` = id do Pix recebido). valor/data/descricao ficam na decisão para a lista de empréstimos não depender da transação.
+  revisoes: { tipo: ["decisao", "destinatario"], "tx_id?": "texto", "destinatario?": "texto", "resposta?": ["categoria", "emprestimo", "investimento", "ajuda", "devolucao", "reembolso", "renda", "troco"], "categoria_id?": "texto", "reembolso_de?": "texto", "troco_de?": "texto", "valor?": "numero", "data?": "data", "descricao?": "texto" },
   // Uma configuração do app que afeta dados e cálculos (id = nome da chave); `valor` é o JSON do valor.
   configuracoes: { valor: "json" },
   carteiras: { nome: "texto", "cor?": "texto", "icone?": "texto", "ordem?": "numero", "moeda?": "texto", "decimais?": "numero" },

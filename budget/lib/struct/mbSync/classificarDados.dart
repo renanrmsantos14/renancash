@@ -276,3 +276,11 @@ Future<void> mbConfirmarReembolso(MbLancamentoIa l, String gastoPk) async {
   unawaited(mbResponderRevisao(mbItemDeEntrada(l.pk, l.valor, l.data, l.descricao), 'reembolso',
       reembolsoDe: gastoPk.substring(mbPrefixo.length)));
 }
+
+/// "Devolvi parte do reembolso de <pessoa>": liga o Pix enviado ao reembolso que ele abate (decisão "troco", sincronizada;
+/// o pull põe a saída na categoria do gasto, sem contar gasto novo) e tira da fila.
+Future<void> mbConfirmarTroco(MbLancamentoIa l, String reembolsoPk) async {
+  await _tirarDaFila(l.pk);
+  unawaited(mbResponderRevisao(mbItemDeEntrada(l.pk, l.valor, l.data, l.descricao, tipo: 'pix_enviado'), 'troco',
+      trocoDe: reembolsoPk.substring(mbPrefixo.length)));
+}

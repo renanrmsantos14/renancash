@@ -116,7 +116,7 @@ class _LinhaGasto extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     final g = s.gasto;
-    final maior = s.motivos.any((m) => m.startsWith('maior'));
+    final maior = s.motivos.any((m) => m.startsWith('maior') || m == mbMotivoTroco);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: () => popRoute(context, g),
@@ -162,29 +162,36 @@ class VinculoReembolso extends StatelessWidget {
     if (!pk.startsWith(mbPrefixo)) return const SizedBox.shrink();
     return ValueListenableBuilder<List<MbVinculoReembolso>>(
       valueListenable: meuBancoReembolsos,
-      builder: (context, vinculos, _) {
-        final ligado = vinculos.where((v) => v.reembolsoPk == pk).firstOrNull;
-        final partes = [
-          for (final v in vinculos)
-            if (v.gastoPk == pk) v
-        ];
-        final Widget? conteudo = ligado != null
-            ? _ReembolsoLigado(ligado)
-            : partes.isNotEmpty
-                ? _PartesDoGasto(gasto: transacao, partes: partes)
-                : transacao.amount > 0
-                    ? _LigarEntrada(transacao)
-                    : null;
-        if (conteudo == null) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(17, 14, 17, 0),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Conta rachada', style: EdTexto.h2(context)),
-            const SizedBox(height: 6),
-            conteudo,
-          ]),
-        );
-      },
+      builder: (context, vinculos, _) => ValueListenableBuilder<List<MbTroco>>(
+        valueListenable: meuBancoTrocos,
+        builder: (context, trocos, _) {
+          final ligado = vinculos.where((v) => v.reembolsoPk == pk).firstOrNull;
+          final partes = [
+            for (final v in vinculos)
+              if (v.gastoPk == pk) v
+          ];
+          final troco = trocos.where((t) => t.trocoPk == pk).firstOrNull;
+          final deTroco = troco == null ? null : vinculos.where((v) => v.reembolsoPk == troco.reembolsoPk).firstOrNull;
+          final Widget? conteudo = deTroco != null
+              ? _TrocoLigado(deTroco, troco!)
+              : ligado != null
+                  ? _ReembolsoLigado(ligado)
+                  : partes.isNotEmpty
+                      ? _PartesDoGasto(gasto: transacao, partes: partes, trocos: trocos)
+                      : transacao.amount > 0
+                          ? _LigarEntrada(transacao)
+                          : null;
+          if (conteudo == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(17, 14, 17, 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Conta rachada', style: EdTexto.h2(context)),
+              const SizedBox(height: 6),
+              conteudo,
+            ]),
+          );
+        },
+      ),
     );
   }
 }
@@ -231,23 +238,54 @@ class _ReembolsoLigadoState extends State<_ReembolsoLigado> {
   }
 }
 
+/// O Pix enviado que devolveu parte de um reembolso: conta dentro do gasto, não como gasto novo.
+class _TrocoLigado extends StatelessWidget {
+  const _TrocoLigado(this.v, this.troco);
+  final MbVinculoReembolso v;
+  final MbTroco troco;
+
+  @override
+  Widget build(BuildContext context) => _LinhaVinculo(
+        texto: 'Troco do reembolso de ${mbNomeDoPagador(v.pagador)} · ${brl(troco.centavos / 100)}',
+        detalhe: 'Abate o reembolso na mesma categoria do gasto, não conta como gasto novo.',
+        aoDesligar: () => _desligar(troco.trocoPk),
+      );
+}
+
 class _PartesDoGasto extends StatelessWidget {
-  const _PartesDoGasto({required this.gasto, required this.partes});
+  const _PartesDoGasto({required this.gasto, required this.partes, this.trocos = const []});
   final Transaction gasto;
   final List<MbVinculoReembolso> partes;
+  final List<MbTroco> trocos;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
     final total = (gasto.amount.abs() * 100).round();
-    final minha = mbMinhaParte(total, partes.map((p) => p.centavos));
+    final dosPix = {for (final p in partes) p.reembolsoPk};
+    final meusTrocos = [
+      for (final t in trocos)
+        if (dosPix.contains(t.reembolsoPk)) t
+    ];
+    final minha = mbMinhaParte(total, partes.map((p) => p.centavos), meusTrocos.map((t) => t.centavos));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final p in partes)
         _LinhaVinculo(
           texto: 'Parte de ${mbNomeDoPagador(p.pagador)} · −${brl(p.centavos / 100)} de ${brl(total / 100)}',
           aoDesligar: () => _desligar(p.reembolsoPk),
         ),
+      for (final t in meusTrocos)
+        _LinhaVinculo(
+          texto: 'Troco devolvido · +${brl(t.centavos / 100)}',
+          aoDesligar: () => _desligar(t.trocoPk),
+        ),
       const SizedBox(height: 4),
+      // 76,23 − 50 (Valentina) + 11,88 (troco) = 38,11
+      if (meusTrocos.isNotEmpty)
+        Text(
+            '${brl(total / 100)}${[for (final p in partes) ' − ${brl(p.centavos / 100)} (${mbNomeDoPagador(p.pagador).split(' ').first})'].join()}'
+            '${[for (final t in meusTrocos) ' + ${brl(t.centavos / 100)} (troco)'].join()} = ${brl(minha.parte / 100)}',
+            style: EdTexto.rotulo(context)),
       Text('Sua parte: ${brl(minha.parte / 100)}',
           style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
       if (minha.excesso > 0)

@@ -25,6 +25,7 @@ import 'package:budget/pages/activityPage.dart';
 
 import 'package:flutter/material.dart' show RangeValues;
 import 'package:budget/struct/mbSync/armazem.dart' show mbDdlOrcamentoTx;
+import 'package:budget/struct/mbSync/rachadas.dart' show meuBancoRachadas;
 import 'package:budget/struct/mbSync/espelhoTriggers.dart' show mbEspelhoDerrubarTriggers, mbEspelhoPrepararBanco;
 import 'package:budget/struct/mbSync/orcamentos.dart'
     show mbCarteirasDoOrcamento, mbPertenceAoOrcamento;
@@ -6037,7 +6038,9 @@ class FinanceDatabase extends _$FinanceDatabase {
             tbl.name.collate(Collate.noCase).like("%" + searchQuery + "%") |
             tbl.note.collate(Collate.noCase).like("%" + searchQuery + "%") |
             onlyShowIfSearchQueryDateIsDate(searchQuery, tbl) |
-            onlyShowIfSearchQueryAmount(searchQuery, tbl.amount);
+            onlyShowIfSearchQueryAmount(searchQuery, tbl.amount) |
+            // Conta rachada: o gasto também é achado pela pessoa ou pelo valor dos Pix de rachar dele.
+            tbl.transactionPk.isIn(meuBancoRachadas.value.gastosDaBusca(searchQuery));
   }
 
   Expression<bool> onlyShowIfSearchQueryAmount(
