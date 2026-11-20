@@ -98,7 +98,7 @@ for (const espelho of MODOS) test(`item "Para revisar" some da notificação dep
   assert.equal(antes.notificacoes[0].item.tx_id, "p1");
   const decisao = { tipo: "decisao", tx_id: "p1", resposta: "categoria", categoria_id: "cashew:c1" };
   if (espelho) {
-    const r = await requisitar("/api/espelho", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ linhas: [{ tabela: "mb_revisoes", pk: "tx:p1", dados: decisao, updated_at: new Date(agora).toISOString(), deleted_at: null }] }) });
+    const r = await requisitar("/api/espelho", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ linhas: [{ tabela: "mb_revisoes", pk: "tx:p1", dados: { pk: "tx:p1", dados: JSON.stringify(decisao) }, updated_at: new Date(agora).toISOString(), deleted_at: null }] }) });
     assert.equal((await r.json()).aceitos, 1);
   } else {
     await env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('revisoes', 'tx:p1', ?1, ?2, ?2)").bind(JSON.stringify(decisao), new Date(agora).toISOString()).run();

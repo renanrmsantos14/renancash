@@ -9,7 +9,7 @@ import { tipoDeRevisao } from "../src/revisao.js";
 const hoje = new Date().toLocaleDateString("sv", { timeZone: "America/Sao_Paulo" });
 const dia = (d) => somarDias(hoje, -d);
 
-// espelho = true: a flag ESPELHO liga e as respostas chegam como linhas `mb_revisoes` em POST /api/espelho (o que o app faz),
+// espelho = true: a flag ESPELHO liga e as respostas chegam como linhas `mb_revisoes` ({pk, dados: texto JSON}) em POST /api/espelho (o que o app faz),
 // não como registros em POST /api/sync; o Worker lê as decisões do espelho.
 async function ambiente(transacoes, espelho = false) {
   const amb = criarAmbiente(extraDoModo(espelho));
@@ -27,7 +27,7 @@ async function ambiente(transacoes, espelho = false) {
   const ciclo = async (auth) => (await (await amb.pedir("/api/sync", { headers: auth })).json()).ciclo;
   const enviar = async (auth, registros) => {
     if (espelho) {
-      const linhas = registros.map((r) => ({ tabela: "mb_revisoes", pk: r.id, dados: r.dados, updated_at: r.updated_at, deleted_at: r.deleted_at }));
+      const linhas = registros.map((r) => ({ tabela: "mb_revisoes", pk: r.id, dados: r.dados == null ? null : { pk: r.id, dados: JSON.stringify(r.dados) }, updated_at: r.updated_at, deleted_at: r.deleted_at }));
       const r = await amb.pedir("/api/espelho", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ linhas }) });
       const corpo = await r.json();
       assert.deepEqual(corpo.rejeitados ?? [], [], JSON.stringify(corpo));
@@ -103,7 +103,7 @@ for (const espelho of MODOS) test(`sincroniza entre dois aparelhos: resposta do 
   assert.deepEqual((await ciclo(B)).revisar.map((i) => i.tx_id), ["e1"]);
   if (espelho) { // o computador recebe a decisão pelo pull do espelho
     const puxado = await (await amb.pedir("/api/espelho", { headers: B })).json();
-    assert.equal(puxado.linhas.find((l) => l.tabela === "mb_revisoes").dados.resposta, "devolucao");
+    assert.equal(JSON.parse(puxado.linhas.find((l) => l.tabela === "mb_revisoes").dados.dados).resposta, "devolucao");
     return;
   }
   const puxado = await (await amb.pedir("/api/sync", { headers: B })).json();
