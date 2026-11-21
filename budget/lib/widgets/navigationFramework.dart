@@ -69,6 +69,7 @@ import 'package:budget/struct/upcomingTransactionsFunctions.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:budget/widgets/transactionEntry/transactionLabel.dart';
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -499,11 +500,13 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
         body: FadeIndexedStack(
           children: [...pages, ...pagesExtended],
           index: currentPage,
-          duration: !kIsWeb || !_animarTroca
+          // Fade curto na troca de aba; parado com economia de bateria ou
+          // "reduzir movimento".
+          duration: !_animarTroca ||
+                  appStateSettings["batterySaver"] == true ||
+                  semMovimento(context)
               ? Duration.zero
-              : appStateSettings["batterySaver"]
-                  ? Duration.zero
-                  : Duration(milliseconds: 300),
+              : Duration(milliseconds: 180),
         ),
         extendBody: false,
         bottomNavigationBar: Column(
@@ -1017,9 +1020,10 @@ class AnimateFAB extends StatelessWidget {
     //   ),
     // );
     return AnimatedSwitcher(
-      duration: Duration(milliseconds: 500),
-      switchInCurve: Curves.easeInOutCubicEmphasized,
-      switchOutCurve: Curves.ease,
+      duration: Duration(milliseconds: 260),
+      reverseDuration: Duration(milliseconds: 160),
+      switchInCurve: curvaEditorial,
+      switchOutCurve: Curves.easeIn,
       transitionBuilder: (Widget child, Animation<double> animation) {
         return FadeScaleTransitionButton(
           animation: animation,
@@ -1131,6 +1135,8 @@ class FadeIndexedStackState extends State<FadeIndexedStack>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller =
       AnimationController(vsync: this, duration: widget.duration);
+  late final Animation<double> _opacidade =
+      _controller.drive(CurveTween(curve: Curves.easeOut));
 
   @override
   void didUpdateWidget(FadeIndexedStack oldWidget) {
@@ -1156,7 +1162,7 @@ class FadeIndexedStackState extends State<FadeIndexedStack>
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: _controller,
+      opacity: _opacidade,
       child: LazyIndexedStack(
         index: (widget.index >= 0 && widget.index < widget.children.length)
             ? widget.index

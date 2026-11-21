@@ -290,7 +290,7 @@ class BottomNavBarState extends State<BottomNavBar> {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         ),
         child: NavigationBar(
-          animationDuration: Duration(milliseconds: 1000),
+          animationDuration: Duration(milliseconds: 400),
           destinations: [
             CustomizableNavigationBarIcon(
               shortcutAppSettingKey: "customNavBarShortcut0",
@@ -685,28 +685,15 @@ class _BarraEditorial extends StatelessWidget {
                 selected: i == ativo,
                 label: _rotuloAba(atalhos[i]),
                 child: ToqueEscala(
-                  onTap: () => aoTocar(i),
-                  child: SizedBox(
-                    height: 60,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _IconeAba(
-                            atalho: atalhos[i],
-                            cor: i == ativo ? e.tx : e.mu),
-                        // Rótulo só na aba ativa.
-                        if (i == ativo) ...[
-                          const SizedBox(height: 4),
-                          Text(_rotuloAba(atalhos[i]),
-                              style: TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: e.tx)),
-                        ],
-                      ],
-                    ),
-                  ),
+                  onTap: () {
+                    // Toque leve só ao trocar de aba; o háptico configurável
+                    // do app (changePage) continua valendo quando ligado.
+                    if (i != ativo &&
+                        appStateSettings["tabNavigationHapticFeedback"] != true)
+                      HapticFeedback.selectionClick();
+                    aoTocar(i);
+                  },
+                  child: _AbaEditorial(atalho: atalhos[i], ativa: i == ativo),
                 ),
               ),
             ),
@@ -718,6 +705,55 @@ class _BarraEditorial extends StatelessWidget {
 
 String _rotuloAba(String atalho) =>
     _rotulosEditorial[atalho] ?? (navBarIconsData[atalho]?.label ?? "").tr();
+
+/// Uma aba da barra: o ícone sobe e o rótulo aparece em 240 ms quando a aba
+/// fica ativa (e o inverso ao sair), em vez de pular. O rótulo só existe na
+/// árvore enquanto visível.
+class _AbaEditorial extends StatelessWidget {
+  const _AbaEditorial({required this.atalho, required this.ativa});
+  final String atalho;
+  final bool ativa;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: ativa ? 1 : 0),
+      duration: Duration(milliseconds: semMovimento(context) ? 0 : 240),
+      curve: curvaEditorial,
+      builder: (context, t, _) => SizedBox(
+        height: 60,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            Transform.translate(
+              offset: Offset(0, -9 * t),
+              child: _IconeAba(
+                  atalho: atalho, cor: Color.lerp(e.mu, e.tx, t)!),
+            ),
+            if (t > 0)
+              Positioned(
+                bottom: 10 - 4 * (1 - t),
+                child: Opacity(
+                  opacity: t,
+                  child: Text(_rotuloAba(atalho),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 11,
+                          height: 14 / 11,
+                          fontWeight: FontWeight.w600,
+                          color: e.tx)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Ícone da aba; em Pendências leva a bolinha com o total, que some em zero.
 class _IconeAba extends StatelessWidget {
