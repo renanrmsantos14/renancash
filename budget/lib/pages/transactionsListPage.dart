@@ -6,6 +6,8 @@ import 'package:budget/widgets/button.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart'
     show abrirTransacao;
 import 'package:budget/widgets/editorial/resumoTransacoes.dart';
+import 'package:budget/widgets/editorial/transacoesBento.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/navigationSidebar.dart';
 import 'package:budget/widgets/openBottomSheet.dart';
@@ -43,6 +45,36 @@ class TransactionsListPageState extends State<TransactionsListPage>
   List<int> selectedTransactionIDs = [];
   GlobalKey<MonthSelectorState> monthSelectorStateKey = GlobalKey();
   SearchFilters searchFilters = SearchFilters();
+  FiltroRapido _filtro = FiltroRapido.tudo;
+
+  // A lista "para validar" encolhe assim que um item é validado.
+  void _filaMudou() {
+    if (_filtro == FiltroRapido.validar) setState(() {});
+  }
+
+  void _ajusteDoResumo() {
+    openBottomSheet(
+      context,
+      PopupFramework(
+        hasPadding: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.symmetric(horizontal: 8),
+              child: TextFont(
+                text: "enabled-in-settings-at-any-time".tr(),
+                fontSize: 14,
+                maxLines: 5,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(height: 5),
+            ShowTransactionsMonthlySpendingSummarySettingToggle(),
+          ],
+        ),
+      ),
+    );
+  }
 
   void refreshState() {
     setState(() {});
@@ -67,6 +99,7 @@ class TransactionsListPageState extends State<TransactionsListPage>
   @override
   void initState() {
     super.initState();
+    filaParaValidar.addListener(_filaMudou);
     searchFilters.loadFilterString(
       appStateSettings["transactionsListPageSetFiltersString"],
       skipDateTimeRange: true,
@@ -76,7 +109,8 @@ class TransactionsListPageState extends State<TransactionsListPage>
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    filaParaValidar.removeListener(_filaMudou);
+    // O _scrollController é descartado pelo PageFramework, que o recebe.
     _pageController.dispose();
     super.dispose();
   }
@@ -129,6 +163,9 @@ class TransactionsListPageState extends State<TransactionsListPage>
     return PageFramework(
       title: "transactions".tr(),
       listID: pageId,
+      backgroundColor: fundoBento(context),
+      appBarBackgroundColor: fundoBento(context),
+      appBarBackgroundColorStart: fundoBento(context),
       scrollController: _scrollController,
       selectedTransactionsAppBar: SelectedTransactionsAppBar(pageID: pageId),
       scrollbar: false,
@@ -178,6 +215,7 @@ class TransactionsListPageState extends State<TransactionsListPage>
                         SliverStickyHeaderIfTall(
                           child: MonthSelector(
                             key: monthSelectorStateKey,
+                            corFundo: fundoBento(context),
                             setSelectedDateStart:
                                 (DateTime currentDateTime, int index) {
                               if (((_pageController.page ?? 0) -
@@ -243,6 +281,8 @@ class TransactionsListPageState extends State<TransactionsListPage>
                         DateTime startDate = DateTime.now()
                             .firstDayOfMonth()
                             .justDay(monthOffset: pageOffset);
+                        final fimDoMes = DateTime(startDate.year,
+                            startDate.month + 1, startDate.day - 1);
 
                         return ScrollbarWrap(
                           child: CustomScrollView(
@@ -252,8 +292,28 @@ class TransactionsListPageState extends State<TransactionsListPage>
                                     .sliverOverlapAbsorberHandleFor(
                                         contextPageView),
                               ),
+                              SliverToBoxAdapter(
+                                child: ResumoMesBento(
+                                  inicio: startDate,
+                                  fim: fimDoMes,
+                                  searchFilters: searchFilters,
+                                  filtro: _filtro,
+                                  onFiltro: (f) => setState(() => _filtro = f),
+                                  mostrarResumo: appStateSettings[
+                                          "showTransactionsMonthlySpendingSummary"] ==
+                                      true,
+                                  onLongPress: _ajusteDoResumo,
+                                ),
+                              ),
                               TransactionEntries(
-                                searchFilters: searchFilters,
+                                searchFilters: switch (_filtro) {
+                                  FiltroRapido.gastos => searchFilters.copyWith(
+                                      expenseIncome: [ExpenseIncome.expense]),
+                                  FiltroRapido.entradas =>
+                                    searchFilters.copyWith(
+                                        expenseIncome: [ExpenseIncome.income]),
+                                  _ => searchFilters,
+                                },
                                 renderType: appStateSettings["appAnimations"] !=
                                         AppAnimations.all.index
                                     ? TransactionEntriesRenderType
@@ -261,8 +321,7 @@ class TransactionsListPageState extends State<TransactionsListPage>
                                     : TransactionEntriesRenderType
                                         .implicitlyAnimatedSlivers,
                                 startDate,
-                                new DateTime(startDate.year,
-                                    startDate.month + 1, startDate.day - 1),
+                                fimDoMes,
                                 listID: pageId,
                                 noResultsMessage: "Nenhuma transação em " +
                                     getMonth(startDate,
@@ -279,35 +338,11 @@ class TransactionsListPageState extends State<TransactionsListPage>
                                 showTotalCashFlow: appStateSettings[
                                         "showTransactionsMonthlySpendingSummary"] !=
                                     true,
-                                enableSpendingSummary: true,
-                                showSpendingSummary: appStateSettings[
-                                    "showTransactionsMonthlySpendingSummary"],
-                                onLongPressSpendingSummary: () {
-                                  openBottomSheet(
-                                    context,
-                                    PopupFramework(
-                                      hasPadding: false,
-                                      child: Column(
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsetsDirectional
-                                                .symmetric(horizontal: 8),
-                                            child: TextFont(
-                                              text:
-                                                  "enabled-in-settings-at-any-time"
-                                                      .tr(),
-                                              fontSize: 14,
-                                              maxLines: 5,
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          SizedBox(height: 5),
-                                          ShowTransactionsMonthlySpendingSummarySettingToggle(),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
+                                emCartoes: true,
+                                dateDividerColor: fundoBento(context),
+                                soPks: _filtro == FiltroRapido.validar
+                                    ? pksParaValidar()
+                                    : null,
                               ),
                               // O "+" da barra fica sobre o fim da lista.
                               SliverToBoxAdapter(

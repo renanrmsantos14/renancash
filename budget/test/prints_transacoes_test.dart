@@ -13,6 +13,7 @@ import 'package:budget/pages/creditDebtTransactionsPage.dart';
 import 'package:budget/pages/subscriptionsPage.dart';
 import 'package:budget/pages/transacoesDesktop.dart';
 import 'package:budget/pages/transactionFilters.dart';
+import 'package:budget/pages/transactionsListPage.dart';
 import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/struct/currencyFunctions.dart';
 import 'package:budget/struct/databaseGlobal.dart';
@@ -27,6 +28,9 @@ import 'package:budget/widgets/editorial/lateralEditorial.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:budget/widgets/editorial/painelTransacao.dart';
 import 'package:budget/widgets/editorial/resumoTransacoes.dart';
+import 'package:budget/widgets/editorial/transacoesBento.dart';
+import 'package:budget/struct/editorial.dart';
+import 'package:budget/functions.dart' show convertToMoney;
 import 'package:budget/widgets/editorial/versaoCanto.dart';
 import 'package:budget/widgets/framework/popupFramework.dart';
 import 'package:budget/widgets/noResults.dart';
@@ -358,47 +362,48 @@ void main() {
         t,
         modo,
         'lista',
-        ListView(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(13, 8, 13, 8),
-            child:
-                ResumoPeriodo(entradas: 6500, saidas: -2871.15, onTap: () {}),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(children: [
-              AppliedFilterChip(
-                  label: 'Limpar',
-                  icon: Icons.close_rounded,
-                  openFiltersSelection: () {}),
-              AppliedFilterChip(
-                  label: 'Mercado',
-                  customBorderColor: const Color(0xff4caf50),
-                  openFiltersSelection: () {}),
-              AppliedFilterChip(label: 'Despesa', openFiltersSelection: () {}),
+        Builder(builder: (context) {
+          Widget linha(Transaction tx) => TransactionEntry(
+                openPage: const SizedBox(),
+                transaction: tx,
+                category: _cats[tx.categoryFk],
+                containerColor: corCartaoBento(context),
+                listID: 'print',
+              );
+          return ColoredBox(
+            color: fundoBento(context),
+            child: ListView(children: [
+              ResumoMesCartoes(
+                mes: 'novembro',
+                transacoes: 47,
+                categorias: const [
+                  (nome: 'Mercado', cor: Color(0xff4caf50), v: 1120.4),
+                  (nome: 'Transporte', cor: Color(0xff2196f3), v: 640.25),
+                  (nome: 'Restaurantes', cor: Color(0xffff9800), v: 512.8),
+                  (nome: 'Casa', cor: Color(0xff9c27b0), v: 398.7),
+                  (nome: 'Lazer', cor: Color(0xff607d8b), v: 199),
+                ],
+                entradas: 6500,
+                paraValidar: 3,
+                brl: (v) => convertToMoney(
+                    Provider.of<AllWallets>(context, listen: false), v),
+                filtro: FiltroRapido.tudo,
+                onFiltro: (_) {},
+              ),
+              DateDivider(
+                  date: hoje, info: '−210,20', color: fundoBento(context)),
+              CartaoDoDia(filhos: [
+                linha(_tx('a', 'Pão de Açúcar', -182.3, hoje)),
+                linha(_tx('b', 'Uber', -27.9, hoje, cat: 'c2')),
+              ]),
+              DateDivider(date: ontem, color: fundoBento(context)),
+              CartaoDoDia(filhos: [
+                linha(_tx('c', 'Salário', 6500, ontem,
+                    receita: true, cat: 'c3')),
+              ]),
             ]),
-          ),
-          DateDivider(date: hoje, info: '−210,20'),
-          for (final tx in [
-            _tx('a', 'Pão de Açúcar', -182.3, hoje),
-            _tx('b', 'Uber', -27.9, hoje, cat: 'c2'),
-          ])
-            TransactionEntry(
-              openPage: const SizedBox(),
-              transaction: tx,
-              category: _cats[tx.categoryFk],
-              listID: 'print',
-            ),
-          DateDivider(date: ontem),
-          TransactionEntry(
-            openPage: const SizedBox(),
-            transaction:
-                _tx('c', 'Salário', 6500, ontem, receita: true, cat: 'c3'),
-            category: _cats['c3'],
-            listID: 'print',
-          ),
-        ]),
+          );
+        }),
       );
     });
 
@@ -435,6 +440,12 @@ void main() {
             ),
         ]),
       );
+    });
+
+    testWidgets('print TransactionsListPage $modo', skip: _pular, (t) async {
+      await t.runAsync(() => _prepararBanco(comDados: true));
+      await _print(t, modo, 'pagina', const TransactionsListPage(),
+          scaffold: false);
     });
 
     testWidgets('print vazio $modo', skip: _pular, (t) async {
