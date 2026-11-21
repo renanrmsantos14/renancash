@@ -670,47 +670,62 @@ class _BarraEditorial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
+    // Barra solta na cor do cartão; a aba ativa vira pílula com ícone e nome.
     return Container(
-      decoration: BoxDecoration(
-        color: e.bg,
-        border: Border(top: BorderSide(color: e.line)),
-      ),
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-      child: Row(
-        children: [
-          for (var i = 0; i < atalhos.length; i++)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: i == ativo,
-                label: _rotuloAba(atalhos[i]),
-                child: ToqueEscala(
-                  onTap: () => aoTocar(i),
-                  child: SizedBox(
-                    height: 60,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _IconeAba(
-                            atalho: atalhos[i],
-                            cor: i == ativo ? e.tx : e.mu),
-                        // Rótulo só na aba ativa.
-                        if (i == ativo) ...[
-                          const SizedBox(height: 4),
-                          Text(_rotuloAba(atalhos[i]),
-                              style: TextStyle(
-                                  fontFamily: 'Geist',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: e.tx)),
+      color: fundoBento(context),
+      padding: EdgeInsets.fromLTRB(
+          12, 6, 12, 10 + MediaQuery.paddingOf(context).bottom),
+      child: Container(
+        height: 60,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: corCartaoBento(context),
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < atalhos.length; i++)
+              Flexible(
+                flex: i == ativo ? 0 : 1,
+                fit: FlexFit.tight,
+                child: Semantics(
+                  button: true,
+                  selected: i == ativo,
+                  label: _rotuloAba(atalhos[i]),
+                  child: ToqueEscala(
+                    onTap: () => aoTocar(i),
+                    child: Container(
+                      height: 44,
+                      alignment: Alignment.center,
+                      padding: EdgeInsets.symmetric(
+                          horizontal: i == ativo ? 16 : 0),
+                      decoration: BoxDecoration(
+                        color: i == ativo ? e.chip : null,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _IconeAba(
+                              atalho: atalhos[i],
+                              cor: i == ativo ? e.tx : e.mu),
+                          if (i == ativo) ...[
+                            const SizedBox(width: 8),
+                            Text(_rotuloAba(atalhos[i]),
+                                style: TextStyle(
+                                    fontFamily: 'Geist',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: e.tx)),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
