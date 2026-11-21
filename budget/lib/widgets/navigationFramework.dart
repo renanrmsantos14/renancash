@@ -513,11 +513,14 @@ class PageNavigationFrameworkState extends State<PageNavigationFramework> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (!getIsFullScreen(context)) const FaixaVersao(),
-            BottomNavBar(
-              currentNavigationStackedIndex: currentPage,
-              onChanged: (index) {
-                changePage(index);
-              },
+            // A animação da barra não repinta a página atrás dela.
+            RepaintBoundary(
+              child: BottomNavBar(
+                currentNavigationStackedIndex: currentPage,
+                onChanged: (index) {
+                  changePage(index);
+                },
+              ),
             ),
           ],
         ),
@@ -1142,7 +1145,16 @@ class FadeIndexedStackState extends State<FadeIndexedStack>
   void didUpdateWidget(FadeIndexedStack oldWidget) {
     if (widget.index != oldWidget.index) {
       _controller.duration = widget.duration;
-      _controller.forward(from: 0.0);
+      // O fade começa depois do quadro que monta a aba: se começasse junto, a
+      // montagem (pesada na primeira visita) engolia a animação inteira.
+      if (widget.duration == Duration.zero) {
+        _controller.value = 1;
+      } else {
+        _controller.value = 0;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _controller.forward();
+        });
+      }
     }
     super.didUpdateWidget(oldWidget);
   }
