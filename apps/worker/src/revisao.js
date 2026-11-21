@@ -66,7 +66,8 @@ export function aplicarRevisoes(transacoes, { decisoes, destinos }, { cartoes = 
     if (cartoes.has(t.account_id) || (inicio && t.date < inicio && !dec)) return t;
     if (dec?.resposta === "emprestimo" && t.amount < 0 && !t.scheduled) return { ...t, revisada: true, ajuste_gasto: 0 };
     const r = tipoDeRevisao(t);
-    if (!r) return t;
+    // Reembolso ligado a uma entrada que não é Pix recebido (estorno de compra no débito, pela aba Pendências): abate igual ao app.
+    if (!r) return dec?.resposta === "reembolso" && t.amount > 0 && !t.scheduled ? { ...t, revisada: true, reembolso: true } : t;
     const resposta = dec?.resposta ?? (r.tipo === "pix_enviado" && r.destinatario && destinos.has(r.destinatario) ? "categoria" : null);
     if (r.tipo === "envio_santander") {
       return { ...t, revisada: !!resposta, ajuste_gasto: resposta === "ajuda" ? 1 : 0 };
@@ -74,7 +75,7 @@ export function aplicarRevisoes(transacoes, { decisoes, destinos }, { cartoes = 
     // Pix recebido que pagou um empréstimo e passou do saldo: a sobra que o usuário mandou para um reembolso abate o gasto (só ela).
     const sobra = resposta === "devolucao" && dec.sobra_para === "reembolso" && dec.sobra > 0 ? Math.min(dec.sobra, t.amount) : 0;
     if (sobra) return { ...t, revisada: true, reembolso: true, reembolso_valor: sobra };
-    return { ...t, revisada: !!resposta, reembolso: resposta === "reembolso" };
+    return { ...t, revisada: !!resposta, reembolso: resposta === "reembolso", ...(resposta === "renda" ? { renda: true } : {}) };
   });
 }
 

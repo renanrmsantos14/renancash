@@ -357,7 +357,7 @@ test("registrosDoEspelho projeta o mesmo que a tabela registros e o ciclo/revis�
     esp("objectives", "m1", { type: 0, name: "Viagem", amount: 5000, end_date: dia("2027-06-30T15:00:00Z") }),
     esp("objectives", "emp", { type: 1, name: "Empréstimo", amount: 100 }),
     esp("mb_meta_aplicacao", "ap1", { aplicacao_pk: "ap1", meta_pk: "m1" }),
-    esp("mb_meta_aplicacao", "ap2", { aplicacao_pk: "ap2", meta_pk: "m1" }),
+    esp("mb_meta_aplicacao", "ap2", { aplicacao_pk: "mb:inv:ap2", meta_pk: "m1" }), // formato real do app: o id do Pluggy vem com o prefixo
     esp("mb_orcamento_tx", '["mb:g1","o1"]', { tx_pk: "mb:g1", orcamento_pk: "o1" }),
     esp("transactions", "mb:g1", { transaction_pk: "mb:g1", category_fk: "c1", name: "IFOOD", note: "Pendente" }),
     esp("transactions", "mb:g2", { transaction_pk: "mb:g2", category_fk: "c9", name: "  Almoço com cliente  ", note: "reembolsável", objective_loan_fk: "emp", date_time_modified: dia("2026-11-12T12:00:00Z") }),
@@ -569,4 +569,16 @@ test("review 6: transação ligada a empréstimo não conta no gasto do ciclo, c
   const ts = new Date().toISOString();
   await antigo.env.DB.prepare("INSERT INTO registros (tabela, id, dados, updated_at, server_at) VALUES ('ajustes', 'emp', '{\"divida_id\":\"cashew:o1\"}', ?1, ?1)").bind(ts).run();
   assert.equal(await gastoDoCiclo(antigo.pedir, authAntigo), 100, "desligada: o empréstimo fica fora");
+});
+
+test("registrosDoEspelho com `desde` só lê os ajustes das transações do banco da janela", async () => {
+  const { env } = criarAmbiente();
+  const db = env.DB;
+  const esp = (pk) => db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, server_at, aparelho) VALUES ('transactions', ?1, ?2, ?3, ?3, 'celular')").bind(pk, JSON.stringify({ transaction_pk: pk, objective_loan_fk: "emp" }), T1);
+  await db.batch([
+    esp("mb:nova"), esp("mb:velha"),
+    db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, updated_at) VALUES ('nova', 'inter', '2026-11-10', 'A', -1, ''), ('velha', 'inter', '2025-01-10', 'B', -1, '')"),
+  ]);
+  assert.deepEqual((await registrosDoEspelho(db, "2026-05-01")).registros.map((r) => r.id), ["nova"]);
+  assert.deepEqual((await registrosDoEspelho(db)).registros.map((r) => r.id).sort(), ["nova", "velha"]);
 });

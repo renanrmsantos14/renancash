@@ -72,7 +72,7 @@ Custo: o uso pessoal com o conector **MeuPluggy** é gratuito segundo https://pl
 
 ## Pluggy: webhook e conexões
 
-O Pluggy avisa o Worker quando uma conexão muda (`item/updated`, `item/error`, `item/waiting_user_input`, `item/login_succeeded`), quando é criada e quando é apagada. O Worker responde na hora e sincroniza em segundo plano.
+O Pluggy avisa o Worker quando uma conexão muda (`item/updated`, `item/error`, `item/waiting_user_input`, `item/login_succeeded`), quando é criada e quando é apagada. O Worker responde na hora e sincroniza em segundo plano. A sincronização roda no alarme do Durable Object (`EspelhoHub`), que não tem o corte de ~30 s do `waitUntil`; se outra estiver em andamento, ele tenta de novo a cada minuto (até 12 vezes), então o aviso do segundo banco não se perde até o cron.
 
 1. Crie um segredo aleatório e guarde como secret: `node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | pnpm --filter @meu-banco/worker exec wrangler secret put PLUGGY_WEBHOOK_SECRET`.
 2. Logado no painel, registre o webhook (uma vez): `POST /api/pluggy/webhooks`. Ele aponta para `https://<seu-worker>/api/pluggy/webhook` e o Pluggy envia o segredo no cabeçalho `x-webhook-secret`. Sem `PLUGGY_WEBHOOK_SECRET` essa rota responde **500** ("PLUGGY_WEBHOOK_SECRET ausente"), e o webhook recusa tudo com 401.
@@ -95,11 +95,11 @@ O botão **Atualizar** do painel e `POST /api/sync/atualizar` (apps) pedem ao ba
 
 ## Backup diário do D1 (R2)
 
-Todo dia, no tick das 06h07 UTC (03h07 BRT) do cron, o Worker grava o D1 inteiro em `d1/AAAA-MM-DD.json.gz` no bucket R2 `meu-banco-backups` (binding `BACKUP`). Uma falha no backup só é registrada no log e não impede a sincronização.
+Todo dia, no tick das 07h07 UTC (04h07 BRT) do cron, o Worker grava o D1 inteiro em `d1/AAAA-MM-DD.json.gz` no bucket R2 `meu-banco-backups` (binding `BACKUP`). Uma falha no backup só é registrada no log e não impede a sincronização.
 
 - Crie o bucket **privado** (sem domínio público nem acesso `r2.dev`): `pnpm --filter @meu-banco/worker exec wrangler r2 bucket create meu-banco-backups`. O backup contém os hashes de `app_tokens` e as conexões de `pluggy_items`, além de todas as transações.
 - Retenção de 30 dias: regra de ciclo de vida do bucket (Dashboard da Cloudflare → R2 → bucket → Configurações → Regras de objeto), prefixo `d1/`. Não é código.
-- Testar local: `pnpm dev` e `curl "localhost:8787/cdn-cgi/handler/scheduled?cron=7+*/3+*+*+*&time=1794204420000"` (06:07 UTC). O R2 local fica em `apps/worker/.wrangler/state`.
+- Testar local: `pnpm dev` e `curl "localhost:8787/cdn-cgi/handler/scheduled?cron=7+1,4,7,10,13,16,19,22+*+*+*&time=1794208020000"` (07:07 UTC). O R2 local fica em `apps/worker/.wrangler/state`.
 
 ## Importar o Cashew (uma vez)
 

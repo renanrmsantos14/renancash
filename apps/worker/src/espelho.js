@@ -119,7 +119,8 @@ export async function puxarEspelho(db, desde, limite, aparelho) {
   if (!Number.isInteger(n) || n < 1 || n > MAX_PAGINA) return { status: 400, corpo: { erro: `limite deve ser de 1 a ${MAX_PAGINA}` } };
   const c = desde ? CURSOR.exec(desde) : null;
   if (desde && !c) return { status: 400, corpo: { erro: "desde inválido (use server_at|tabela|pk)" } };
-  if (!(await semeado(db))) return { status: 200, corpo: { linhas: [], cursor: desde || null, mais: false, semeado: false, aparelho } };
+  const meta = await metaDo(db);
+  if (meta.semeado !== "1") return { status: 200, corpo: { linhas: [], cursor: desde || null, mais: false, semeado: false, aparelho } };
   const { results } = await db
     .prepare("SELECT tabela, pk, dados, updated_at, deleted_at, server_at, aparelho FROM espelho WHERE ?1 IS NULL OR (server_at, tabela, pk) > (?1, ?2, ?3) ORDER BY server_at, tabela, pk LIMIT ?4")
     .bind(c?.[1] ?? null, c?.[2] ?? null, c?.[3] ?? null, n + 1)
@@ -127,7 +128,7 @@ export async function puxarEspelho(db, desde, limite, aparelho) {
   const mais = results.length > n;
   const linhas = results.slice(0, n).map((r) => ({ ...r, dados: r.dados == null ? null : JSON.parse(r.dados) }));
   const ultima = linhas.at(-1);
-  return { status: 200, corpo: { linhas, cursor: ultima ? `${ultima.server_at}|${ultima.tabela}|${ultima.pk}` : desde || null, mais, semeado: true, aparelho } };
+  return { status: 200, corpo: { linhas, cursor: ultima ? `${ultima.server_at}|${ultima.tabela}|${ultima.pk}` : desde || null, mais, semeado: true, semeado_por: meta.semeado_por ?? null, aparelho } };
 }
 
 // Semeio em lotes, só pelo celular (aparelho = id do token). O lote 0 abre o semeio ("semeando") sem apagar nada; o `fim` grava
@@ -179,14 +180,18 @@ export function configDe(linhas) {
 // pelo banco", então a categoria do próprio mapeador também vira ajuste: o efeito no ciclo é o mesmo); excluída vira {gasto: 0}.
 // Nome e nota só entram se a linha foi editada (date_time_modified depois de 2000, como `mbEditadoEm` do app); sem edição o texto
 // é o do banco. As categorias não têm `pluggy` (o Cashew não tem a coluna e o vínculo foi aposentado na F5): a do Pluggy resolve pelo nome traduzido.
+// A aplicação ligada à meta é a transação `mb:inv:<id do Pluggy>` do app; os saldos do Worker (snapshot de investimentos) usam o id puro.
+const idAplicacao = (pk) => String(pk ?? "").replace(/^mb:inv:/, "");
 const editada = (v) => { const ms = msDe(v); return ms != null && new Date(ms).getUTCFullYear() >= 2001; };
-export async function registrosDoEspelho(db) {
+// `desde` (AAAA-MM-DD): só os ajustes das transações do banco dessa data em diante (a janela que o ciclo lê). Sem ele, todos.
+// Sem o corte, cada pull e cada consulta de notificações reliam as transações espelhadas desde sempre.
+export async function registrosDoEspelho(db, desde = null) {
   // Duas leituras independentes num batch só. `_config` vem com as exclusões: o tombstone tem de apagar o valor antigo da tabela `config`.
   const [{ results }, { results: antiga }] = await db.batch([
     db.prepare(
       "SELECT tabela, pk, dados, deleted_at FROM espelho WHERE tabela IN ('categories', 'associated_titles', 'budgets', 'objectives', 'mb_orcamento_tx', 'mb_meta_aplicacao', 'mb_revisoes', '_config') " +
-        "OR (tabela = 'transactions' AND (pk LIKE 'mb:%' OR (deleted_at IS NULL AND json_extract(dados, '$.type') = 1)))"
-    ),
+        "OR (tabela = 'transactions' AND ((pk LIKE 'mb:%' AND (?1 IS NULL OR pk IN (SELECT 'mb:' || id FROM transactions WHERE date >= ?1))) OR (deleted_at IS NULL AND json_extract(dados, '$.type') = 1)))"
+    ).bind(desde),
     db.prepare("SELECT chave, valor FROM config"),
   ]);
   const vivas = results.filter((r) => r.deleted_at == null && r.dados != null).map((r) => ({ ...r, d: JSON.parse(r.dados) }));
@@ -212,7 +217,7 @@ export async function registrosDoEspelho(db) {
   const aplicacoes = Map.groupBy(daTabela("mb_meta_aplicacao"), (r) => r.d.meta_pk);
   for (const { pk, d } of daTabela("objectives")) {
     if (d.type !== 0) { novo("dividas", ID(pk), { tipo: "emprestimo", nome: d.name, sentido: d.income ? "me_devem" : "devo", valor_total: d.amount }); continue; } // dívida não entra no ciclo
-    novo("metas", ID(pk), { nome: d.name, valor_alvo: d.amount, prazo: dia(d.end_date), aplicacao_ids: (aplicacoes.get(pk) ?? []).map((a) => a.d.aplicacao_pk).sort() });
+    novo("metas", ID(pk), { nome: d.name, valor_alvo: d.amount, prazo: dia(d.end_date), aplicacao_ids: (aplicacoes.get(pk) ?? []).map((a) => idAplicacao(a.d.aplicacao_pk)).sort(), ...(d.archived ? { arquivado: 1 } : {}) });
   }
   for (const { pk, d } of daTabela("transactions")) {
     if (d.type === 1 && !pk.startsWith("mb:")) novo("assinaturas", ID(pk), { nome: d.name?.trim() || "Sem nome", valor: Math.abs(d.amount), dia: Number(dia(d.date_created)?.slice(8)), categoria_id: ID(d.category_fk) });

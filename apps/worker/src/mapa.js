@@ -7,6 +7,17 @@ const ROTULO = { CREDIT: "Cartão", BANK: "Conta" };
 const num = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 const dia = (v) => (v ? String(v).slice(0, 10) : null);
 
+// Dia da transação no fuso de São Paulo. O Pluggy manda ISO em UTC: com hora real (Pix das 22h30 chega como 01h30Z do dia
+// seguinte), cortar os 10 primeiros caracteres jogaria a transação para amanhã. Só data, ou meia-noite UTC exata (data sem
+// hora), vale como veio; 03h00Z é meia-noite de Brasília e cai no mesmo dia pelas duas contas.
+const diaSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
+export function diaDaTransacao(v) {
+  if (!v) return null;
+  const texto = String(v);
+  const ms = /T\d{2}:\d{2}/.test(texto) && !/T00:00(:00(\.0+)?)?(Z|[+-]00:?00)?$/.test(texto) ? Date.parse(texto) : NaN;
+  return Number.isNaN(ms) ? texto.slice(0, 10) : diaSP.format(new Date(ms));
+}
+
 // Banco da conexão. No Meu Pluggy o connector é sempre "Meu Pluggy" (não é um banco): fica sem banco
 // e o nome da conta (ex.: "Cartão Santander") é usado como veio.
 export function bancoDoItem(item) {
@@ -82,7 +93,7 @@ export function contraparteDe(t, docTitular) {
 export function mapearTransacao(t, conta, hoje, ts, docTitular = null) {
   const abs = Math.abs(num(t.amount) ?? 0);
   const saida = t.type === "DEBIT";
-  const date = dia(t.date);
+  const date = diaDaTransacao(t.date);
   const m = t.creditCardMetadata;
   const parcela = m?.totalInstallments > 1 && m.installmentNumber ? `${m.installmentNumber}/${m.totalInstallments}` : "";
   const descricao = t.description ?? "";
