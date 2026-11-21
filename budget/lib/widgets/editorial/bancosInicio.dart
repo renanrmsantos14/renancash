@@ -87,15 +87,34 @@ class BancosInicio extends StatelessWidget {
               Expanded(child: _Total('Investido', formatar(p.investimentos))),
             ]),
           ),
-          for (final b in dados.bancos)
-            Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: _BlocoBanco(
-                    key: ValueKey(b.id),
-                    banco: b,
-                    formatar: formatar,
-                    onAbrir: onAbrir,
-                    recolher: recolher)),
+          // Um cartão só para todos os bancos, separados por linha.
+          if (dados.bancos.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                  color: cores(context).surf,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: cores(context).line)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (i, b) in dados.bancos.indexed) ...[
+                    if (i > 0)
+                      Divider(
+                          height: 1,
+                          thickness: 1,
+                          indent: 66,
+                          color: cores(context).line),
+                    _BlocoBanco(
+                        key: ValueKey(b.id),
+                        banco: b,
+                        formatar: formatar,
+                        onAbrir: onAbrir,
+                        recolher: recolher),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -203,12 +222,8 @@ class _BlocoBancoState extends State<_BlocoBanco> {
         ],
       ]),
     );
-    return Container(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-      decoration: BoxDecoration(
-          color: e.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: e.line)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -652,7 +652,7 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
                   Expanded(child: Text('Emprestado em aberto', style: EdTexto.corpo(context))),
                   Text(brl(emprestimos.devido),
                       key: const Key('inicio_emprestado_em_aberto'),
-                      style: EdTexto.mono(context).copyWith(fontWeight: FontWeight.w700)),
+                      style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
                 ]),
               ),
             ],
