@@ -244,5 +244,80 @@ class CartaoEscuro extends StatelessWidget {
   }
 }
 
+bool _modoEscuro(BuildContext c) => Theme.of(c).brightness == Brightness.dark;
+
+/// Início em cartões. Claro: tela cinza bem claro e cartão branco; escuro: tela preta e cartão um tom acima.
+Color fundoBento(BuildContext c) => _modoEscuro(c) ? cores(c).bg : cores(c).surf;
+Color corCartaoBento(BuildContext c) => _modoEscuro(c) ? cores(c).surf : cores(c).bg;
+
+/// Cartão da Início: sem borda nem sombra, só a diferença para o fundo da tela.
+class CartaoBento extends StatelessWidget {
+  const CartaoBento(
+      {super.key,
+      required this.child,
+      this.padding = const EdgeInsets.all(16),
+      this.cor});
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color? cor;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: padding,
+        decoration: BoxDecoration(
+            color: cor ?? corCartaoBento(context),
+            borderRadius: BorderRadius.circular(22)),
+        child: child,
+      );
+}
+
+/// Título de bloco da Início em cartões, com um total ou uma ação à direita.
+class TituloBento extends StatelessWidget {
+  const TituloBento(this.titulo, {super.key, this.fim});
+  final String titulo;
+  final Widget? fim;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+        child: SizedBox(
+          height: 44,
+          child: Row(children: [
+            Expanded(
+                child: Text(titulo,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontSize: 17, fontWeight: FontWeight.w600))),
+            if (fim != null) fim!,
+          ]),
+        ),
+      );
+}
+
+/// Cartões em duas colunas, com a mesma altura em cada linha.
+class GradeBento extends StatelessWidget {
+  const GradeBento({super.key, required this.filhos});
+  final List<Widget> filhos;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        for (var i = 0; i < filhos.length; i += 2)
+          Padding(
+            padding: EdgeInsets.only(top: i > 0 ? 10 : 0),
+            child: IntrinsicHeight(
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: filhos[i]),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: i + 1 < filhos.length
+                            ? filhos[i + 1]
+                            : const SizedBox.shrink()),
+                  ]),
+            ),
+          ),
+      ]);
+}
+
 ThemeData temaEditorial(Brightness b) => temaFlutter(
     temaPorId(b == Brightness.light ? 'padrao-claro' : 'padrao-escuro'));

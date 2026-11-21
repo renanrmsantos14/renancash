@@ -3,7 +3,6 @@
 //   PRINTS=1 flutter test test/prints_inicio_test.dart --update-goldens
 import 'dart:io';
 
-import 'package:budget/database/tables.dart';
 import 'package:budget/pages/homePage/homePageFaturaPatrimonio.dart';
 import 'package:budget/pages/homePage/inicioEditorial.dart';
 import 'package:budget/pages/homePage/painelDesktop.dart';
@@ -19,6 +18,7 @@ import 'package:budget/struct/meuBancoSync.dart'
     show meuBancoPareado, meuBancoPareadoConferido, meuBancoUltimaSync;
 import 'package:budget/struct/settings.dart';
 import 'package:budget/struct/temas.dart';
+import 'package:budget/widgets/editorial/bancosInicio.dart';
 import 'package:budget/widgets/editorial/lateralEditorial.dart';
 import 'package:budget/widgets/editorial/layoutDesktop.dart';
 import 'package:flutter/material.dart';
@@ -147,16 +147,6 @@ void _limparPendencias() {
   meuBancoUltimaSync.value = null;
 }
 
-final _ultimasExemplo = [
-  _ultima('u1', 'Pão de Açúcar', 'Mercado', -182.30, DateTime.now()),
-  _ultima('u2', 'Almoço Betinhos', 'Alimentação', -20.98,
-      DateTime.now().subtract(const Duration(days: 1))),
-  _ultima('u3', 'Uber', 'Transporte', -27.90,
-      DateTime.now().subtract(const Duration(days: 1))),
-  _ultima('u4', 'Salário', 'Receita', 6500.0, DateTime(2026, 11, 5)),
-  _ultima('u5', 'Compra avulsa', 'Sem categoria', -49.90, DateTime(2026, 11, 4)),
-];
-
 const _emprestimosExemplo = MbEmprestimos([
   MbEmprestimo('e1', '2026-10-18', 80000, 35000),
   MbEmprestimo('e2', '2026-11-03', 50000, 50000),
@@ -274,49 +264,6 @@ ModeloInicio _modeloVazio() => montarModeloInicio(
       agora: _agora,
     );
 
-TransacaoInicio _ultima(String pk, String nome, String categoria, double valor,
-        DateTime data) =>
-    (
-      category: TransactionCategory(
-          categoryPk: 'c-$categoria',
-          name: categoria,
-          dateCreated: DateTime(2026),
-          dateTimeModified: null,
-          order: 0,
-          income: valor > 0,
-          methodAdded: null),
-      transaction: Transaction(
-          transactionPk: pk,
-          name: nome,
-          amount: valor,
-          note: '',
-          categoryFk: 'c-$categoria',
-          walletFk: '0',
-          dateCreated: data,
-          income: valor > 0,
-          paid: true,
-          skipPaid: false,
-          createdAnotherFutureTransaction: false,
-          type: null,
-          methodAdded: null,
-          reoccurrence: null,
-          endDate: null,
-          periodLength: null,
-          dateTimeModified: null,
-          originalDateDue: null,
-          sharedKey: null,
-          sharedOldKey: null,
-          sharedDateUpdated: null,
-          sharedReferenceBudgetPk: null,
-          sharedStatus: null,
-          objectiveFk: null,
-          objectiveLoanFk: null,
-          upcomingTransactionNotification: null,
-          subCategoryFk: null,
-          transactionOwnerEmail: null,
-          transactionOriginalOwnerEmail: null),
-    );
-
 void main() {
   setUpAll(() async {
     _padroes = await getDefaultPreferences();
@@ -359,7 +306,6 @@ void main() {
             metas: _metasExemplo,
             patrimonio: _patrimonioExemplo,
             limites: _limitesExemplo,
-            transacoes: _ultimasExemplo,
           ),
         ),
       ));
@@ -391,7 +337,6 @@ void main() {
           body: InicioEditorial.comModelo(
             _modeloSemLimite(),
             patrimonio: _patrimonioExemplo,
-            transacoes: _ultimasExemplo,
           ),
         ),
       ));
@@ -470,18 +415,19 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => ColoredBox(
-              color: cores(context).bg,
+              color: fundoBento(context),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
-                  CartaoSaldoCiclo(
+                  CicloBento(
                     modelo: semLimite,
                     onDefinirLimite: () {},
                   ),
-                  const SizedBox(height: 16),
-                  CartaoSaldoCiclo(modelo: estourado),
-                  const MetasEmprestimosInicio(metas: []),
-                  BancosPorBanco(fixo: _patrimonioSemInvestimentos),
+                  const SizedBox(height: 10),
+                  CicloBento(modelo: estourado),
+                  const MetasEmprestimosInicio(metas: [], bento: true),
+                  BancosGrade(
+                      dados: _patrimonioSemInvestimentos, formatar: brl),
                 ],
               ),
             ),
@@ -695,7 +641,6 @@ void main() {
             metas: _metasExemplo,
             patrimonio: _patrimonioExemplo,
             limites: _limitesExemplo,
-            transacoes: _ultimasExemplo,
           ),
         ),
       ));

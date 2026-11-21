@@ -53,21 +53,14 @@ class LogoBanco extends StatelessWidget {
   }
 }
 
-/// "Seu dinheiro": os totais Nas contas e Investido e um bloco por banco, com conta, aplicações e fatura.
-/// [recolher] (celular): cada banco começa só com o cabeçalho e abre ao toque; o banco com fatura em
-/// destaque já começa aberto. No desktop fica tudo aberto. [onAbrir] recebe as carteiras do item tocado
-/// (`mb:<id>`, separadas por '|').
+/// "Seu dinheiro" no desktop: os totais Nas contas e Investido e um bloco por banco, com conta,
+/// aplicações e fatura. [onAbrir] recebe as carteiras do item tocado (`mb:<id>`, separadas por '|').
 class BancosInicio extends StatelessWidget {
   const BancosInicio(
-      {super.key,
-      required this.dados,
-      required this.formatar,
-      this.onAbrir,
-      this.recolher = true});
+      {super.key, required this.dados, required this.formatar, this.onAbrir});
   final PatrimonioInicio dados;
   final String Function(double) formatar;
   final void Function(String carteiras)? onAbrir;
-  final bool recolher;
 
   @override
   Widget build(BuildContext context) {
@@ -90,119 +83,233 @@ class BancosInicio extends StatelessWidget {
           for (final b in dados.bancos)
             Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: _BlocoBanco(
-                    key: ValueKey(b.id),
-                    banco: b,
-                    formatar: formatar,
-                    onAbrir: onAbrir,
-                    recolher: recolher)),
+                child: _BlocoBanco(banco: b, formatar: formatar, onAbrir: onAbrir)),
         ],
       ),
+    );
+  }
+}
+
+/// "Seu dinheiro" no celular: total à direita do título, Nas contas e Investido e um cartão por banco
+/// em duas colunas. Banco com um item só abre a conta no toque; com mais, abre a lista dos itens.
+class BancosGrade extends StatelessWidget {
+  const BancosGrade(
+      {super.key, required this.dados, required this.formatar, this.onAbrir});
+  final PatrimonioInicio dados;
+  final String Function(double) formatar;
+  final void Function(String carteiras)? onAbrir;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final p = dados.patrimonio;
+    final contas = p.correntes + p.poupancas;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TituloBento('Seu dinheiro',
+            fim: Text(formatar(contas + p.investimentos),
+                style: EdTexto.corpo(context)
+                    .copyWith(fontWeight: FontWeight.w500, color: e.acc))),
+        GradeBento(filhos: [
+          _Total('Nas contas', formatar(contas), bento: true),
+          _Total('Investido', formatar(p.investimentos), bento: true),
+          for (final b in dados.bancos)
+            _CartaoBanco(
+                key: ValueKey(b.id),
+                banco: b,
+                formatar: formatar,
+                onAbrir: onAbrir),
+        ]),
+      ],
     );
   }
 }
 
 class _Total extends StatelessWidget {
-  const _Total(this.rotulo, this.valor);
+  const _Total(this.rotulo, this.valor, {this.bento = false});
   final String rotulo, valor;
+  final bool bento;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
+    final conteudo = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(rotulo,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EdTexto.rotulo(context).copyWith(fontSize: bento ? 13 : 11.5)),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(valor,
+              maxLines: 1,
+              style: EdTexto.corpo(context).copyWith(
+                  fontSize: bento ? 19 : 17, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
     return Semantics(
       label: '$rotulo $valor',
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-            color: e.surf,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: e.line)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(rotulo,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: EdTexto.rotulo(context).copyWith(fontSize: 11.5)),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(valor,
-                  maxLines: 1,
-                  style: EdTexto.corpo(context)
-                      .copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+      child: bento
+          ? CartaoBento(child: conteudo)
+          : Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: e.surf,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: e.line)),
+              child: conteudo,
             ),
-          ],
+    );
+  }
+}
+
+class _CartaoBanco extends StatelessWidget {
+  const _CartaoBanco(
+      {super.key, required this.banco, required this.formatar, this.onAbrir});
+  final BancoInicio banco;
+  final String Function(double) formatar;
+  final void Function(String carteiras)? onAbrir;
+
+  void _abrir(BuildContext context) {
+    if (banco.itens.length == 1) {
+      onAbrir?.call(banco.itens.first.carteiras);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: corCartaoBento(context),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (folha) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _CabecalhoBanco(banco: banco, total: formatar(banco.total)),
+              for (final i in banco.itens)
+                _LinhaItem(
+                    item: i,
+                    formatar: formatar,
+                    onAbrir: onAbrir == null
+                        ? null
+                        : (c) {
+                            Navigator.pop(folha);
+                            onAbrir!(c);
+                          }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    // Fatura que vence em até 3 dias toma o lugar do subtítulo, em vermelho.
+    final urgente = banco.itens.where((i) => i.destaque).firstOrNull;
+    final sub = urgente?.rotulo ?? banco.subtitulo;
+    final total = formatar(banco.total);
+    return Semantics(
+      button: true,
+      label: '${banco.nome}, $sub, total $total',
+      excludeSemantics: true,
+      onTap: () => _abrir(context),
+      child: ToqueEscala(
+        onTap: () => _abrir(context),
+        child: CartaoBento(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                LogoBanco(banco: banco, tamanho: 30),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(banco.nome,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: EdTexto.corpo(context)
+                          .copyWith(fontWeight: FontWeight.w500)),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(total,
+                    maxLines: 1,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 2),
+              Text(sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.rotulo(context)
+                      .copyWith(color: urgente != null ? e.warn : null)),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _BlocoBanco extends StatefulWidget {
-  const _BlocoBanco(
-      {super.key,
-      required this.banco,
-      required this.formatar,
-      required this.recolher,
-      this.onAbrir});
+class _CabecalhoBanco extends StatelessWidget {
+  const _CabecalhoBanco({required this.banco, required this.total});
   final BancoInicio banco;
-  final String Function(double) formatar;
-  final bool recolher;
-  final void Function(String carteiras)? onAbrir;
+  final String total;
 
   @override
-  State<_BlocoBanco> createState() => _BlocoBancoState();
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          LogoBanco(banco: banco),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(banco.nome,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontWeight: FontWeight.w600)),
+                Text(banco.subtitulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.rotulo(context)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(total,
+              style: EdTexto.corpo(context)
+                  .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+      );
 }
 
-class _BlocoBancoState extends State<_BlocoBanco> {
-  late bool _aberto =
-      !widget.recolher || widget.banco.itens.any((i) => i.destaque);
-
-  void _alternar() => setState(() => _aberto = !_aberto);
+class _BlocoBanco extends StatelessWidget {
+  const _BlocoBanco({required this.banco, required this.formatar, this.onAbrir});
+  final BancoInicio banco;
+  final String Function(double) formatar;
+  final void Function(String carteiras)? onAbrir;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final banco = widget.banco, formatar = widget.formatar;
-    final aberto = !widget.recolher || _aberto;
-    final cabecalho = Container(
-      constraints: const BoxConstraints(minHeight: 44),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(children: [
-        LogoBanco(banco: banco),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(banco.nome,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: EdTexto.corpo(context)
-                      .copyWith(fontWeight: FontWeight.w600)),
-              Text(banco.subtitulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: EdTexto.rotulo(context)),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(formatar(banco.total),
-            style: EdTexto.corpo(context)
-                .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-        if (widget.recolher) ...[
-          const SizedBox(width: 4),
-          AnimatedRotation(
-              turns: _aberto ? .5 : 0,
-              duration: const Duration(milliseconds: 180),
-              child: Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: e.mu)),
-        ],
-      ]),
-    );
+    final total = formatar(banco.total);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
       decoration: BoxDecoration(
@@ -214,32 +321,14 @@ class _BlocoBancoState extends State<_BlocoBanco> {
         children: [
           Semantics(
             container: true,
-            button: widget.recolher,
-            expanded: widget.recolher ? _aberto : null,
-            onTap: widget.recolher ? _alternar : null,
-            label: '${banco.nome}, ${banco.subtitulo}, total ${formatar(banco.total)}',
+            label: '${banco.nome}, ${banco.subtitulo}, total $total',
             excludeSemantics: true,
-            child: widget.recolher
-                ? ToqueEscala(onTap: _alternar, child: cabecalho)
-                : cabecalho,
+            child: _CabecalhoBanco(banco: banco, total: total),
           ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: aberto
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 2),
-                      Divider(height: 1, thickness: 1, color: e.line),
-                      for (final i in banco.itens)
-                        _LinhaItem(
-                            item: i, formatar: formatar, onAbrir: widget.onAbrir),
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+          const SizedBox(height: 2),
+          Divider(height: 1, thickness: 1, color: e.line),
+          for (final i in banco.itens)
+            _LinhaItem(item: i, formatar: formatar, onAbrir: onAbrir),
         ],
       ),
     );

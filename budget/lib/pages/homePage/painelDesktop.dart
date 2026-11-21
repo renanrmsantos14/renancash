@@ -183,7 +183,6 @@ class _PainelDesktopState extends State<PainelDesktop> {
                           if (!m.semDados && (real || widget._patrimonio != null))
                             BancosPorBanco(
                                 fixo: widget._patrimonio,
-                                recolher: false,
                                 onAbrir: real
                                     ? (c) => mbAbrirCarteiras(context, c)
                                     : null),
