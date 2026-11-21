@@ -316,6 +316,16 @@ Future<void> _criarCarteiraSeFaltar(String pk, String nome) async {
   ));
 }
 
+/// Exclusão feita pelo próprio mapeador (virou "não é gasto", perdão desfeito, pendente que sumiu) não é exclusão do
+/// usuário: com os triggers do espelho ligados ela iria para `mb_apagados` e subiria como apagada, e a transação nunca
+/// mais seria recriada (desfazer um "empréstimo" não a traria de volta, em nenhum aparelho). `aplicando = 1` cala os
+/// triggers só dentro desta transação, como no pull do espelho.
+Future<void> _apagarSemEspelho(Future<void> Function() acao) => database.transaction(() async {
+      await database.customStatement('UPDATE mb_espelho_ctl SET aplicando = 1 WHERE id = 0');
+      await acao();
+      await database.customStatement('UPDATE mb_espelho_ctl SET aplicando = 0 WHERE id = 0');
+    });
+
 Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
   final apagadas = await mbEspelhoApagadas('transactions');
   final transacoes = [for (final t in r.transacoes) if (!apagadas.contains(t.pk)) t];
@@ -391,20 +401,25 @@ Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
             dateTimeModified: Value(_semEdicao),
             subCategoryFk: Value(t.subcategoriaPk)),
         onConflict: DoUpdate((_) => atualizacao));
+    // Pendente editada que foi lançada com o mesmo id: a nota "Pendente" tem de sair, senão a limpeza abaixo a apagaria.
+    if (manter) {
+      await database.customStatement(
+          "UPDATE transactions SET note = ? WHERE transaction_pk = ? AND note = 'Pendente'", [t.nota, t.pk]);
+    }
   }
   // Importada antes de virar "não é gasto" (transferência): sai do app, sem ajuste para o servidor.
   if (r.naoGastoPks.isNotEmpty) {
     final alvos = r.naoGastoPks.toList();
     // Direto no Drift, como nas contas ignoradas: sem "apagados recentemente".
-    await (database.delete(database.transactions)
+    await _apagarSemEspelho(() => (database.delete(database.transactions)
           ..where((t) => t.transactionPk.isIn(alvos)))
-        .go();
+        .go());
   }
   // Perdão desfeito (neste ou em outro aparelho): o gasto sintético dele sai.
   final perdoesAtuais = {for (final t in r.transacoes) if (t.pk.startsWith('mb:perdao:')) t.pk};
-  await (database.delete(database.transactions)
+  await _apagarSemEspelho(() => (database.delete(database.transactions)
         ..where((t) => t.transactionPk.like('mb:perdao:%') & t.transactionPk.isNotIn(perdoesAtuais)))
-      .go();
+      .go());
   // Conta ignorada importada antes desta regra: apaga a carteira e os lançamentos dela.
   for (final pk in r.contasIgnoradasPks) {
     if (await database.getWalletInstanceOrNull(pk) == null) continue;
@@ -428,8 +443,8 @@ Future<void> _aplicar(MbResultado r, Set<String> editadas) async {
       if (t.transactionPk.startsWith(mbPrefixo) &&
           t.note == "Pendente" &&
           !r.pendentesPks.contains(t.transactionPk)) {
-        await database.deleteTransaction(t.transactionPk,
-            updateSharedEntry: false);
+        await _apagarSemEspelho(() => database.deleteTransaction(t.transactionPk,
+            updateSharedEntry: false));
       }
     }
   }

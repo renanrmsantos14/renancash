@@ -1,5 +1,6 @@
 import 'package:budget/struct/mbSync/armazem.dart';
 import 'package:budget/struct/mbSync/cliente.dart';
+import 'package:budget/struct/mbSync/espelho.dart' show mbEspelhoCarregarEstado;
 import 'package:budget/struct/meuBancoSync.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/globalSnackbar.dart';
@@ -67,7 +68,18 @@ MbPareamento? mbLerLinkPareamento(Uri uri) {
 Future<void> mbTrocarConta() async {
   (await SharedPreferences.getInstance()).remove('mbNotifCursor');
   await mbCriarTabelas();
+  // O espelho da conta anterior: sem calar os triggers, apagar as transações `mb:` enfileiraria uma exclusão para cada
+  // uma e elas subiriam para a conta nova. A fila e os apagados também são da conta antiga.
+  final espelho = {
+    for (final l in await database
+        .customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('mb_espelho_ctl', 'mb_saida', 'mb_apagados')")
+        .get())
+      l.read<String>('name')
+  };
+  final temCtl = espelho.contains('mb_espelho_ctl');
   await database.transaction(() async {
+    if (temCtl) await database.customStatement('UPDATE mb_espelho_ctl SET aplicando = 1 WHERE id = 0');
     await database.customStatement('DELETE FROM mb_registros');
     await database.customStatement('DELETE FROM mb_aplicado');
     await database.customStatement('DELETE FROM mb_meta_aplicacao');
@@ -87,7 +99,14 @@ Future<void> mbTrocarConta() async {
         AND category_pk NOT IN (SELECT sub_category_fk FROM transactions WHERE sub_category_fk IS NOT NULL)
         AND category_pk NOT IN (SELECT category_fk FROM category_budget_limits)
         AND category_pk NOT IN (SELECT main_category_pk FROM categories WHERE main_category_pk IS NOT NULL)''');
+    for (final t in const ['mb_saida', 'mb_apagados']) {
+      if (espelho.contains(t)) await database.customStatement('DELETE FROM $t');
+    }
+    // `ativo = 0`: o aparelho volta a não ser espelho até semear ou baixar a conta nova.
+    if (temCtl) await database.customStatement('UPDATE mb_espelho_ctl SET aplicando = 0, ativo = 0 WHERE id = 0');
   });
+  // `espelho_pronto` saiu com `mb_estado`: sem recarregar, o agendador seguiria sincronizando com a conta nova como "pronto".
+  await mbEspelhoCarregarEstado(forcar: true);
 }
 
 Future<bool> _contaDiferente(String base) async =>

@@ -60,6 +60,11 @@ final ValueNotifier<bool> mbEspelhoPronto = ValueNotifier(false);
 const String mbChaveProntoEspelho = 'espelho_pronto';
 const String mbChaveSemeioEspelho = 'espelho_semeio';
 const String _chaveSemeio = mbChaveSemeioEspelho;
+
+/// Gravada antes de enviar o último lote do semeio e apagada quando o aparelho fica pronto. Se a resposta desse lote
+/// se perder, o servidor já está semeado por este aparelho: a próxima rodada conclui o semeio em vez de trocar os
+/// dados locais pelos da nuvem (o que descartaria a fila e o que o servidor rejeitou).
+const String _chaveSemeioFim = 'espelho_semeio_fim';
 const int _loteSemeio = 500;
 
 /// `mbEspelho` nas configurações é só o desligamento de emergência (`false`); `true` força (desenvolvimento e
@@ -499,7 +504,16 @@ class MbEspelho {
       return fase(MbFaseEspelho.confirmarTroca);
     }
 
-    if (r['semeado'] == true) return trocarOuConfirmar();
+    if (r['semeado'] == true) {
+      final quem = r['semeado_por'];
+      if (podeSemear && quem is String && quem.isNotEmpty && quem == r['aparelho'] &&
+          await mbLerEstado(_chaveSemeioFim, db) != null) {
+        // Sem cursor: o primeiro pull relê tudo (LWW, idempotente) e a fila sobe normalmente.
+        await _marcarPronto(null);
+        return fase(MbFaseEspelho.pronto);
+      }
+      return trocarOuConfirmar();
+    }
     if (!podeSemear) return fase(MbFaseEspelho.aguardando);
     final emAndamento = await mbLerEstado(_chaveSemeio, db) != null;
     if (!confirmado && !emAndamento) return fase(MbFaseEspelho.confirmar);
@@ -553,6 +567,7 @@ class MbEspelho {
         i += fatia.length;
         final fim = i >= pendentes.length;
         mbProgressoEspelho.value = 'Enviando ${enviadas + fatia.length} de ${todas.length}';
+        if (fim) await _gravarEstado(_chaveSemeioFim, em);
         resposta = await cliente.espelhoSemear(lote, [for (final l in fatia) l.linha], fim: fim);
         enviadas += fatia.length;
         lote++;
@@ -607,7 +622,7 @@ class MbEspelho {
   Future<void> _marcarPronto(String? cursor) => db.transaction(() async {
         if (cursor != null) await _gravarEstado('espelho_cursor', cursor);
         await _gravarEstado(mbChaveProntoEspelho, '1');
-        await db.customStatement('DELETE FROM mb_estado WHERE chave = ?', [_chaveSemeio]);
+        await db.customStatement('DELETE FROM mb_estado WHERE chave IN (?, ?)', [_chaveSemeio, _chaveSemeioFim]);
         await db.customStatement('UPDATE mb_espelho_ctl SET ativo = 1 WHERE id = 0');
       }).then((_) {
         mbEspelhoPronto.value = true;
@@ -642,7 +657,7 @@ class MbEspelho {
         await db.customStatement('DELETE FROM ${a.read<String>('name')}');
       }
       await db.customStatement(
-          "DELETE FROM mb_estado WHERE chave NOT LIKE 'espelho\\_%' ESCAPE '\\' OR chave IN ('espelho_cursor', 'espelho_semeio', 'espelho_falhas', 'espelho_rejeitados', ?)",
+          "DELETE FROM mb_estado WHERE chave NOT LIKE 'espelho\\_%' ESCAPE '\\' OR chave IN ('espelho_cursor', 'espelho_semeio', 'espelho_semeio_fim', 'espelho_falhas', 'espelho_rejeitados', ?)",
           [mbChaveProntoEspelho]);
       await db.customStatement('UPDATE mb_espelho_ctl SET aplicando = 0 WHERE id = 0');
     });

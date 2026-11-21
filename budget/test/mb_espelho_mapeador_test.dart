@@ -19,6 +19,8 @@ import 'espelho_servidor_falso.dart';
 class ClienteBanco extends MbCliente {
   ClienteBanco() : super(base: 'https://teste');
   double valor = -10.0;
+  String status = 'POSTED';
+  bool semTransacoes = false;
   List<Map<String, dynamic>> registros = [];
 
   @override
@@ -29,6 +31,7 @@ class ClienteBanco extends MbCliente {
           {'id': 'a1', 'type': 'BANK', 'name': 'Conta'}
         ],
         'transacoes': [
+          if (!semTransacoes)
           {
             'id': '55',
             'account_id': 'a1',
@@ -36,10 +39,10 @@ class ClienteBanco extends MbCliente {
             'description': 'Padaria',
             'amount': valor,
             'category': 'Bakeries',
-            'status': 'POSTED',
+            'status': status,
           }
         ],
-        'pendentes': [],
+        'pendentes': [if (status == 'PENDING' && !semTransacoes) '55'],
       };
 
   @override
@@ -111,6 +114,19 @@ void main() {
     cliente.valor = -12.0; // o banco mudou a transação: o mapeador teria motivo para recriá-la
     await bancoSync();
     expect(await tx(), isNull);
+  });
+
+  test('pendente que o mapeador limpou não vira "apagada": volta se o banco a mandar de novo com o mesmo id', () async {
+    cliente.status = 'PENDING';
+    await bancoSync();
+    expect((await tx())!.note, 'Pendente');
+    cliente.semTransacoes = true; // sumiu de um sync (o banco a regrava)
+    await bancoSync();
+    expect(await tx(), isNull);
+    expect(await mbEspelhoApagadas('transactions'), isEmpty);
+    cliente.semTransacoes = false;
+    await bancoSync();
+    expect(await tx(), isNotNull);
   });
 
   test('transação mb: apagada em outro aparelho não é recriada', () async {

@@ -767,6 +767,9 @@ function abrirDetalhe(t, gatilho) {
   const cancelar = h("button", { type: "button", class: "sec" }, "Cancelar");
   const sujo = () => sel.value !== catIni || chk.checked !== gastoIni;
   const campos = [salvar, cancelar, sel, chk, $("sheetX")];
+  // Com o app como fonte dos ajustes (espelho ligado) o painel só mostra: categoria e "não é gasto" são editados no app.
+  const soLeitura = !!D.ajustesNoApp;
+  if (soLeitura) { sel.disabled = true; chk.disabled = true; salvar.hidden = true; cancelar.textContent = "Fechar"; }
   const ehSalario = !cartao && t.amount > 0 && !t.scheduled;
   const marcarSalario = ehSalario ? h("button", { type: "button", class: "ghost" }, "Este é o meu salário") : null;
   marcarSalario?.addEventListener("click", async () => {
@@ -814,6 +817,7 @@ function abrirDetalhe(t, gatilho) {
         linha("Categoria original", traduzir(t.cat_orig)), linha("ID", t.id)),
       h("label", { class: "campo", for: "detCategoria" }, "Categoria", sel),
       h("label", { class: "marca", for: "detNaoGasto" }, chk, "Não é gasto (fora dos gráficos e do total)"),
+      soLeitura ? h("p", { class: "aviso" }, "Categoria e \"não é gasto\" são editados no app.") : null,
       erro,
       h("div", { class: "botoes" }, salvar, cancelar, marcarSalario)),
   });
