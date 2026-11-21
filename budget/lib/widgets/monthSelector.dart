@@ -16,9 +16,13 @@ class MonthSelector extends StatefulWidget {
     Key? key,
     required this.setSelectedDateStart,
     this.width,
+    this.corFundo,
   }) : super(key: key);
   final Function(DateTime, int) setSelectedDateStart;
   final double? width;
+
+  /// Fundo da faixa; por padrão o da página.
+  final Color? corFundo;
   @override
   State<MonthSelector> createState() => MonthSelectorState();
 }
@@ -131,7 +135,8 @@ class MonthSelectorState extends State<MonthSelector> {
                         DateTime.now().firstDayOfMonth();
                     double spacePadding = measureWidth() / 2 - monthWidth / 2;
                     return Container(
-                      color: Theme.of(context).colorScheme.background,
+                      color: widget.corFundo ??
+                          Theme.of(context).colorScheme.background,
                       padding: EdgeInsetsDirectional.only(
                         start: isFirst &&
                                 getDateFromIndex(index)
@@ -154,6 +159,7 @@ class MonthSelectorState extends State<MonthSelector> {
                                     currentDateTime, index);
                               },
                               borderRadius: 10,
+                              color: widget.corFundo,
                               child: Container(
                                 width: monthWidth,
                                 padding: EdgeInsetsDirectional.symmetric(

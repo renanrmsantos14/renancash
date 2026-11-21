@@ -7,12 +7,14 @@ import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/dateDivider.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/widgets/editorial/resumoTransacoes.dart';
+import 'package:budget/widgets/editorial/transacoesBento.dart';
 import 'package:budget/widgets/openContainerNavigation.dart';
 import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/tappable.dart';
 import 'package:budget/widgets/textWidgets.dart';
 import 'package:budget/widgets/transactionEntry/transactionEntry.dart';
 import 'package:budget/widgets/viewAllTransactionsButton.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/rachadas.dart';
 import 'package:flutter/material.dart';
 import 'package:budget/struct/settings.dart';
@@ -58,6 +60,8 @@ class TransactionEntries extends StatefulWidget {
     this.budget,
     this.dateDividerColor,
     this.transactionBackgroundColor,
+    this.emCartoes = false,
+    this.soPks,
     this.categoryTintColor,
     this.useHorizontalPaddingConstrained = true,
     this.showNoResults = true,
@@ -100,6 +104,12 @@ class TransactionEntries extends StatefulWidget {
   final Budget? budget;
   final Color? dateDividerColor;
   final Color? transactionBackgroundColor;
+
+  /// Cada dia num cartão (tela de Transações do celular).
+  final bool emCartoes;
+
+  /// Quando informado, lista só estas transações (filtro "Para validar").
+  final Set<String>? soPks;
   final Color? categoryTintColor;
   final bool useHorizontalPaddingConstrained;
   final int limit;
@@ -156,7 +166,9 @@ class _TransactionEntriesState extends State<TransactionEntries> {
           nullIfIndexOutOfRange(transactionListForDay, index + 1)?.transaction,
       categoryTintColor: widget.categoryTintColor,
       useHorizontalPaddingConstrained: widget.useHorizontalPaddingConstrained,
-      containerColor: widget.transactionBackgroundColor,
+      containerColor: widget.emCartoes
+          ? corCartaoBento(context)
+          : widget.transactionBackgroundColor,
       key: ValueKey(item.transaction.transactionPk),
       category: item.category,
       subCategory: item.subCategory,
@@ -222,6 +234,11 @@ class _TransactionEntriesState extends State<TransactionEntries> {
                   for (final t in snapshot.data ?? <TransactionWithCategory>[])
                     if (!rachadas.ocultos.contains(t.transaction.transactionPk)) t
                 ];
+          if (widget.soPks case final pks?)
+            data = [
+              for (final t in data)
+                if (pks.contains(t.transaction.transactionPk)) t
+            ];
           _ordemEntrada = 0;
           _primeiraCarga ??= DateTime.now();
           int totalNumberTransactionsAll = data.length;
@@ -413,7 +430,24 @@ class _TransactionEntriesState extends State<TransactionEntries> {
                                         : ""),
                       );
 
-                if (widget.renderType == TransactionEntriesRenderType.slivers) {
+                if (widget.emCartoes) {
+                  final doDia = transactionListForDay;
+                  widgetsOut.addAll([
+                    if (pastTransactionsDivider != null) pastTransactionsDivider,
+                    dateDividerWidget,
+                    CollapseFutureTransactions(
+                      alwaysExpanded: enableFutureTransactionsDivider == false,
+                      dateToCompare: currentTransactionDate,
+                      listID: widget.listID,
+                      child: CartaoDoDia(filhos: [
+                        for (var i = 0; i < doDia.length; i++)
+                          createTransactionEntry(doDia, doDia[i], i,
+                              enableFutureTransactionsDivider),
+                      ]),
+                    ),
+                  ]);
+                } else if (widget.renderType ==
+                    TransactionEntriesRenderType.slivers) {
                   if (pastTransactionsDivider != null) {
                     sectionsOut.add(
                       Section()
