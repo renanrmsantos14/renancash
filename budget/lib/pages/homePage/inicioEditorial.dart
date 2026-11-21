@@ -85,6 +85,9 @@ class _InicioEditorialState extends State<InicioEditorial> {
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
   bool get _real => widget._modelo == null;
 
+  // Entrada em cascata só na primeira vez que a tela aparece com dados.
+  bool _entrou = false;
+
   @override
   void initState() {
     super.initState();
@@ -161,10 +164,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
               height: 24,
               child: CircularProgressIndicator(strokeWidth: 2, color: e.mu)));
     } else {
-      final lista = ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-        children: [
+      final filhos = <Widget>[
           const PreviewDemoWarning(),
           _Topo(modelo: m),
           const SizedBox(height: 16),
@@ -199,6 +199,15 @@ class _InicioEditorialState extends State<InicioEditorial> {
           // Configurações saiu da barra: é o último item do fim da Início.
           const SizedBox(height: 24),
           BotaoConfiguracoesInicio(onTap: _real ? () => pushRoute(context, SettingsPageFramework()) : null),
+      ];
+      final animar = !_entrou;
+      _entrou = true;
+      final lista = ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+        children: [
+          for (final (i, f) in filhos.indexed)
+            EntradaSuave(indice: i, animar: animar, child: f),
         ],
       );
       corpo = _real ? RefreshIndicator(onRefresh: _puxar, child: lista) : lista;
@@ -535,7 +544,7 @@ class _Restante extends StatelessWidget {
           hoje: modelo.fracaoHoje,
           formatar: formatar),
       rodape: !estourou && AjustesInicio.ritmoDiario
-          ? '${modelo.periodo} · ${brl(restante / dias)}/dia'
+          ? '${brl(restante / dias)}/dia'
           : modelo.periodo,
     );
   }
@@ -767,12 +776,12 @@ class _Secao extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.only(top: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            Expanded(child: Text(titulo, style: EdTexto.h2(context))),
+            Expanded(child: Text(titulo, style: EdTexto.secao(context))),
             if (acao != null && onAcao != null)
               TextButton(
                 onPressed: onAcao,

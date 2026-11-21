@@ -73,11 +73,11 @@ class BancosInicio extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = dados.patrimonio;
     return Padding(
-      padding: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.only(top: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Seu dinheiro', style: EdTexto.h2(context)),
+          Text('Seu dinheiro', style: EdTexto.secao(context)),
           const SizedBox(height: 10),
           IntrinsicHeight(
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

@@ -174,7 +174,7 @@ void main() {
     expect(find.textContaining('abaixo do ritmo'), findsOneWidget);
     // Hoje conta: 16 dias depois de hoje + hoje. 3.700 / 17 dias.
     expect(find.text('17 dias'), findsOneWidget);
-    expect(find.text('26 out – 25 nov · R\$ 217,65/dia'), findsOneWidget);
+    expect(find.text('R\$ 217,65/dia'), findsOneWidget);
     // Saiu: "Gasto X de Y", "Ideal até hoje" e "Nas contas" duplicado.
     expect(find.textContaining('Gasto R\$'), findsNothing);
     expect(find.textContaining('Ideal até hoje'), findsNothing);

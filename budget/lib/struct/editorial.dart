@@ -164,6 +164,15 @@ class EdTexto {
         color: cores(c).mu,
       );
 
+  /// Título de seção da Início.
+  static TextStyle secao(BuildContext c) => TextStyle(
+        fontFamily: 'Geist',
+        fontWeight: FontWeight.w600,
+        fontSize: 16,
+        letterSpacing: -0.16,
+        color: cores(c).tx,
+      );
+
   static TextStyle rotulo(BuildContext c) => TextStyle(
         fontFamily: 'Geist',
         fontWeight: FontWeight.w400,
