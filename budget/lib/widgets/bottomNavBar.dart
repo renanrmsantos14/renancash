@@ -675,29 +675,35 @@ class _BarraEditorial extends StatelessWidget {
         color: e.bg,
         border: Border(top: BorderSide(color: e.line)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
-      child: Row(
-        children: [
-          for (var i = 0; i < atalhos.length; i++)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: i == ativo,
-                label: _rotuloAba(atalhos[i]),
-                child: ToqueEscala(
-                  onTap: () {
-                    // Toque leve só ao trocar de aba; o háptico configurável
-                    // do app (changePage) continua valendo quando ligado.
-                    if (i != ativo &&
-                        appStateSettings["tabNavigationHapticFeedback"] != true)
-                      HapticFeedback.selectionClick();
-                    aoTocar(i);
-                  },
-                  child: _AbaEditorial(atalho: atalhos[i], ativa: i == ativo),
+      padding: EdgeInsets.only(
+          left: 8, right: 8, bottom: MediaQuery.paddingOf(context).bottom),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final base =
+              (c.maxWidth - _AbaEditorial.extra) / atalhos.length;
+          return Row(
+            children: [
+              for (var i = 0; i < atalhos.length; i++)
+                Semantics(
+                  button: true,
+                  selected: i == ativo,
+                  label: _rotuloAba(atalhos[i]),
+                  child: ToqueEscala(
+                    onTap: () {
+                      // Toque leve só ao trocar de aba; o háptico configurável
+                      // do app (changePage) continua valendo quando ligado.
+                      if (i != ativo &&
+                          appStateSettings["tabNavigationHapticFeedback"] !=
+                              true) HapticFeedback.selectionClick();
+                      aoTocar(i);
+                    },
+                    child: _AbaEditorial(
+                        atalho: atalhos[i], ativa: i == ativo, base: base),
+                  ),
                 ),
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -706,49 +712,73 @@ class _BarraEditorial extends StatelessWidget {
 String _rotuloAba(String atalho) =>
     _rotulosEditorial[atalho] ?? (navBarIconsData[atalho]?.label ?? "").tr();
 
-/// Uma aba da barra: o ícone sobe e o rótulo aparece em 240 ms quando a aba
-/// fica ativa (e o inverso ao sair), em vez de pular. O rótulo só existe na
-/// árvore enquanto visível.
+/// Uma aba da barra. A aba ativa abre numa pílula com ícone e rótulo lado a
+/// lado e as outras ficam só com o ícone; na troca, uma pílula fecha enquanto
+/// a outra abre (as larguras somam sempre a mesma coisa, então nada salta).
+/// O rótulo só existe na árvore enquanto visível.
 class _AbaEditorial extends StatelessWidget {
-  const _AbaEditorial({required this.atalho, required this.ativa});
+  const _AbaEditorial(
+      {required this.atalho, required this.ativa, required this.base});
   final String atalho;
   final bool ativa;
+
+  /// Largura da aba fechada; aberta, soma [extra].
+  final double base;
+
+  static const double extra = 108;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
     return TweenAnimationBuilder<double>(
       tween: Tween(end: ativa ? 1 : 0),
-      duration: Duration(milliseconds: semMovimento(context) ? 0 : 240),
+      duration: Duration(milliseconds: semMovimento(context) ? 0 : 380),
       curve: curvaEditorial,
       builder: (context, t, _) => SizedBox(
-        height: 60,
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            Transform.translate(
-              offset: Offset(0, -9 * t),
-              child: _IconeAba(
-                  atalho: atalho, cor: Color.lerp(e.mu, e.tx, t)!),
+        width: base + extra * t,
+        height: 64,
+        child: Center(
+          child: Container(
+            height: 40,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: EdgeInsets.symmetric(horizontal: 14 * t),
+            decoration: BoxDecoration(
+              color: e.chip.withOpacity(t),
+              borderRadius: BorderRadius.circular(20),
             ),
-            if (t > 0)
-              Positioned(
-                bottom: 10 - 4 * (1 - t),
-                child: Opacity(
-                  opacity: t,
-                  child: Text(_rotuloAba(atalho),
-                      maxLines: 1,
-                      softWrap: false,
-                      style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 11,
-                          height: 14 / 11,
-                          fontWeight: FontWeight.w600,
-                          color: e.tx)),
-                ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _IconeAba(
+                      atalho: atalho, cor: Color.lerp(e.mu, e.tx, t)!),
+                  if (t > 0)
+                    ClipRect(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        widthFactor: t,
+                        child: Opacity(
+                          opacity: t,
+                          child: Padding(
+                            padding:
+                                const EdgeInsetsDirectional.only(start: 8),
+                            child: Text(_rotuloAba(atalho),
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                    fontFamily: 'Geist',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: e.tx)),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
