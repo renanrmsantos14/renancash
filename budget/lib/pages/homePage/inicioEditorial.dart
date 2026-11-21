@@ -10,7 +10,6 @@ import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/pages/homePage/homePageFaturaPatrimonio.dart' show CarregaPatrimonio;
 import 'package:budget/pages/pendenciasPage.dart' show PendenciasPage;
-import 'package:budget/widgets/editorial/layoutDesktop.dart' show mbIrParaPagina;
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/transactionFilters.dart' show SearchFilters;
@@ -18,7 +17,6 @@ import 'package:budget/pages/transactionsSearchPage.dart';
 import 'package:budget/pages/walletDetailsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
-import 'package:budget/struct/tipoMovimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
@@ -41,38 +39,36 @@ import 'package:budget/widgets/openPopup.dart';
 import 'package:budget/widgets/openSnackbar.dart';
 import 'package:budget/widgets/pullDownToRefreshSync.dart' show enableSwipeDownToRefresh;
 import 'package:budget/widgets/util/checkWidgetLaunch.dart';
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:budget/struct/pendenciasVencidas.dart' show mbVigiarVencidas;
 import 'package:budget/struct/ajustesInicio.dart';
 import 'package:budget/database/generatePreviewData.dart' show PreviewDemoWarning;
+import 'package:budget/struct/ritmoCiclo.dart' show idealAteHoje;
+
+part 'inicioBento.dart';
 
 /// Início do celular: responde "quanto posso gastar neste ciclo".
-/// Layout fixo; blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
+/// Layout fixo, em cartões (inicioBento.dart); blocos sem dados somem. Spec: docs/superpowers/specs/2026-11-13-nova-inicio.md.
 class InicioEditorial extends StatefulWidget {
   const InicioEditorial({super.key})
       : _modelo = null,
         _metas = null,
         _patrimonio = null,
-        _limites = null,
-        _transacoes = const [];
+        _limites = null;
   const InicioEditorial.comModelo(
     ModeloInicio modelo, {
     super.key,
     List<({String nome, double total, double alvo})>? metas,
     PatrimonioInicio? patrimonio,
     List<LimiteInicio>? limites,
-    List<TransacaoInicio> transacoes = const [],
   })  : _modelo = modelo,
         _metas = metas,
         _patrimonio = patrimonio,
-        _limites = limites,
-        _transacoes = transacoes;
+        _limites = limites;
   final ModeloInicio? _modelo;
   final List<({String nome, double total, double alvo})>? _metas;
   final PatrimonioInicio? _patrimonio; // prints: sem banco local
   final List<LimiteInicio>? _limites;
-  final List<TransacaoInicio> _transacoes;
 
   @override
   State<InicioEditorial> createState() => _InicioEditorialState();
@@ -80,7 +76,8 @@ class InicioEditorial extends StatefulWidget {
 
 class _InicioEditorialState extends State<InicioEditorial> {
   ModeloInicio? _modelo;
-  List<TransacaoInicio> _transacoes = const [];
+  // Entrada em cascata só na primeira vez que a tela aparece com dados.
+  bool _entrou = false;
   final _assinaturas = <StreamSubscription<void>>[];
   late final RecargaColapsada _recarga = RecargaColapsada(_carregar);
   bool get _real => widget._modelo == null;
@@ -89,7 +86,6 @@ class _InicioEditorialState extends State<InicioEditorial> {
   void initState() {
     super.initState();
     _modelo = widget._modelo;
-    _transacoes = widget._transacoes;
     if (_real) {
       meuBancoVerificarPareado();
       mbAtualizarRevisar(); // preenche os empréstimos em aberto
@@ -126,14 +122,8 @@ class _InicioEditorialState extends State<InicioEditorial> {
   Future<void> _carregar() async {
     final r = await mbCarregarModeloInicio(
         '${appStateSettings["username"] ?? ""}', DateTime.now());
-    if (!mounted ||
-        (r.modelo == _modelo && listEquals(r.transacoes, _transacoes))) {
-      return;
-    }
-    setState(() {
-      _modelo = r.modelo;
-      _transacoes = r.transacoes;
-    });
+    if (!mounted || r.modelo == _modelo) return;
+    setState(() => _modelo = r.modelo);
   }
 
   // Puxar a tela: o indicador do RefreshIndicator volta na hora; o progresso
@@ -161,50 +151,65 @@ class _InicioEditorialState extends State<InicioEditorial> {
               height: 24,
               child: CircularProgressIndicator(strokeWidth: 2, color: e.mu)));
     } else {
+      void abrir(String c) => mbAbrirCarteiras(context, c);
+      // Avisos e "Seu dinheiro" leem o mesmo patrimônio; os avisos de validar não esperam por ele.
+      Widget dinheiro(PatrimonioInicio? d) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AlertasBento(
+                  bancos: d?.bancos ?? const [], onAbrir: _real ? abrir : null),
+              if (d != null && d.bancos.isNotEmpty)
+                BancosGrade(
+                    dados: d, formatar: brl, onAbrir: _real ? abrir : null),
+            ],
+          );
+      final filhos = [
+        const PreviewDemoWarning(),
+        _Topo(modelo: m),
+        const SizedBox(height: 16),
+        if (m.semDados)
+          const CartaoBento(child: SemDadosInicio())
+        else if (m.soManuais)
+          CartaoBento(child: ContasManuaisInicio(contas: m.manuais))
+        else
+          CicloBento(
+            modelo: m,
+            onTap: _real ? () => mbAbrirOrcamentoCiclo(context, editar: false) : null,
+            onDefinirLimite: () => mbAbrirOrcamentoCiclo(context, editar: true),
+          ),
+        if (!m.semDados)
+          widget._patrimonio != null || !_real
+              ? dinheiro(widget._patrimonio)
+              : CarregaPatrimonio(
+                  construir: (_, d) => dinheiro(d), semDados: dinheiro(null)),
+        // Estado vazio já traz "Nova transação" e "Adicionar conta": os atalhos repetiriam.
+        if (!m.semDados && (_real || meuBancoPareadoConferido.value))
+          const AtalhosInicio(bento: true),
+        if (_real || widget._limites != null)
+          LimitesInicio(fixos: widget._limites, bento: true),
+        if (_real ||
+            widget._metas != null ||
+            meuBancoEmprestimos.value.abertos.isNotEmpty)
+          MetasEmprestimosInicio(metas: widget._metas, bento: true),
+        // Configurações saiu da barra: é o último item do fim da Início.
+        const SizedBox(height: 24),
+        BotaoConfiguracoesInicio(
+            onTap: _real ? () => pushRoute(context, SettingsPageFramework()) : null),
+      ];
+      final animar = !_entrou;
+      _entrou = true;
       final lista = ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
         children: [
-          const PreviewDemoWarning(),
-          _Topo(modelo: m),
-          const SizedBox(height: 16),
-          if (m.semDados)
-            const SemDadosInicio()
-          else if (m.soManuais)
-            ContasManuaisInicio(contas: m.manuais)
-          else
-            CartaoSaldoCiclo(
-              modelo: m,
-              onTap: _real ? () => mbAbrirOrcamentoCiclo(context, editar: false) : null,
-              onDefinirLimite: () => mbAbrirOrcamentoCiclo(context, editar: true),
-            ),
-          if (!m.semDados) ...[
-            const AlertaPendenciasInicio(),
-            if (_real || widget._patrimonio != null)
-              BancosPorBanco(
-                  fixo: widget._patrimonio,
-                  onAbrir: _real ? (c) => mbAbrirCarteiras(context, c) : null),
-          ],
-          // Estado vazio já traz "Nova transação" e "Adicionar conta": os atalhos repetiriam.
-          if (!m.semDados && (_real || meuBancoPareadoConferido.value))
-            const AtalhosInicio(),
-          GastoPorDiaInicio(modelo: m),
-          if (_real || widget._limites != null)
-            LimitesInicio(fixos: widget._limites),
-          if (_real ||
-              widget._metas != null ||
-              meuBancoEmprestimos.value.abertos.isNotEmpty)
-            MetasEmprestimosInicio(metas: widget._metas),
-          UltimasInicio(transacoes: _transacoes),
-          // Configurações saiu da barra: é o último item do fim da Início.
-          const SizedBox(height: 24),
-          BotaoConfiguracoesInicio(onTap: _real ? () => pushRoute(context, SettingsPageFramework()) : null),
+          for (final (i, f) in filhos.indexed)
+            EntradaSuave(indice: i, animar: animar, child: f),
         ],
       );
       corpo = _real ? RefreshIndicator(onRefresh: _puxar, child: lista) : lista;
     }
     return ColoredBox(
-      color: e.bg,
+      color: fundoBento(context),
       child: Stack(
         children: [
           if (_real) const AndroidOnly(child: CheckWidgetLaunch()),
@@ -359,7 +364,10 @@ class ContasManuaisInicio extends StatelessWidget {
 /// Sem banco conectado: atalhos para o uso manual, em grade 2×2.
 /// Some quando o banco é conectado ou com Configurações › Início › Mostrar atalhos sem banco desligado.
 class AtalhosInicio extends StatelessWidget {
-  const AtalhosInicio({super.key});
+  const AtalhosInicio({super.key, this.bento = false});
+
+  /// Início em cartões: os atalhos usam a cor do cartão.
+  final bool bento;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -371,6 +379,7 @@ class AtalhosInicio extends StatelessWidget {
               !AjustesInicio.atalhos) {
             return const SizedBox.shrink();
           }
+          final cor = bento ? corCartaoBento(context) : null;
           Widget linha(_Atalho a, _Atalho b) => IntrinsicHeight(
                 child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -381,13 +390,13 @@ class AtalhosInicio extends StatelessWidget {
                     ]),
               );
           return Padding(
-            padding: const EdgeInsets.only(top: 20),
+            padding: EdgeInsets.only(top: bento ? 10 : 20),
             child: Column(children: [
               linha(
                 _Atalho(Icons.add, 'Nova transação',
-                    () => abrirTransacao(context)),
+                    () => abrirTransacao(context), cor),
                 _Atalho(Icons.account_balance_wallet_outlined, 'Contas',
-                    () => pushRoute(context, EditWalletsPage())),
+                    () => pushRoute(context, EditWalletsPage()), cor),
               ),
               const SizedBox(height: 10),
               linha(
@@ -395,12 +404,14 @@ class AtalhosInicio extends StatelessWidget {
                     Icons.donut_large_outlined,
                     'Orçamentos',
                     () => pushRoute(
-                        context, const BudgetsListPage(enableBackButton: true))),
+                        context, const BudgetsListPage(enableBackButton: true)),
+                    cor),
                 _Atalho(
                     Icons.flag_outlined,
                     'Metas',
                     () => pushRoute(
-                        context, const ObjectivesListPage(backButton: true))),
+                        context, const ObjectivesListPage(backButton: true)),
+                    cor),
               ),
             ]),
           );
@@ -409,7 +420,8 @@ class AtalhosInicio extends StatelessWidget {
 }
 
 class _Atalho extends StatelessWidget {
-  const _Atalho(this.icone, this.rotulo, this.onTap);
+  const _Atalho(this.icone, this.rotulo, this.onTap, this.cor);
+  final Color? cor;
   final IconData icone;
   final String rotulo;
   final VoidCallback onTap;
@@ -428,7 +440,8 @@ class _Atalho extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 64),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-              color: e.chip, borderRadius: BorderRadius.circular(12)),
+              color: cor ?? e.chip,
+              borderRadius: BorderRadius.circular(cor == null ? 12 : 22)),
           child: Row(children: [
             Icon(icone, size: 20, color: e.tx),
             const SizedBox(width: 10),
@@ -450,32 +463,52 @@ class _Topo extends StatelessWidget {
   final ModeloInicio modelo;
 
   @override
-  Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(modelo.periodo, style: EdTexto.rotulo(context)),
-                const SizedBox(height: 6),
-                Text(modelo.saudacao, style: EdTexto.h1(context)),
-              ],
+  Widget build(BuildContext context) {
+    final e = cores(context);
+    final nome = modelo.saudacao.contains(', ')
+        ? modelo.saudacao.split(', ').last.trim()
+        : '';
+    return Row(children: [
+      ExcludeSemantics(
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration:
+              BoxDecoration(color: corCartaoBento(context), shape: BoxShape.circle),
+          child: nome.isEmpty
+              ? Icon(Icons.person_outline, size: 20, color: e.mu)
+              : Text(nome.characters.first.toUpperCase(),
+                  style: EdTexto.corpo(context)
+                      .copyWith(fontWeight: FontWeight.w600)),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(modelo.saudacao,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EdTexto.corpo(context)
+                    .copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+            // "sincronizado" só existe depois da primeira sincronização com o banco.
+            ValueListenableBuilder<DateTime?>(
+              valueListenable: meuBancoUltimaSync,
+              builder: (context, quando, _) => Text(
+                  quando == null
+                      ? modelo.periodo
+                      : '${modelo.periodo} · sincronizado ${haQuanto(quando, DateTime.now())}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdTexto.rotulo(context)),
             ),
-          ),
-          // Só existe depois da primeira sincronização com o banco.
-          ValueListenableBuilder<DateTime?>(
-            valueListenable: meuBancoUltimaSync,
-            builder: (context, quando, _) => quando == null
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text('Sincronizado ${haQuanto(quando, DateTime.now())}',
-                        style: EdTexto.rotulo(context).copyWith(fontSize: 11)),
-                  ),
-          ),
-        ],
-      );
+          ],
+        ),
+      ),
+    ]);
+  }
 }
 
 /// Cartão escuro de saldo: o único bloco pesado da tela.
@@ -589,7 +622,10 @@ class _SemLimite extends StatelessWidget {
 /// Metas (não arquivadas) e empréstimos ao pai em aberto, cada um numa seção com até `linhasMetas` linhas.
 /// Seção sem itens some.
 class MetasEmprestimosInicio extends StatefulWidget {
-  const MetasEmprestimosInicio({super.key, this.metas});
+  const MetasEmprestimosInicio({super.key, this.metas, this.bento = false});
+
+  /// Início em cartões: uma meta por cartão, com anel.
+  final bool bento;
 
   final List<({String nome, double total, double alvo})>? metas;
 
@@ -609,6 +645,54 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
     final abertos = emprestimos.abertos;
     if (!temMetas && abertos.isEmpty) return const SizedBox.shrink();
     final n = AjustesInicio.linhasMetas;
+    void verTodas() =>
+        pushRoute(context, const ObjectivesListPage(backButton: true));
+    final devido = Text(brl(emprestimos.devido),
+        key: const Key('inicio_emprestado_em_aberto'),
+        style: EdTexto.mono(context).copyWith(fontWeight: FontWeight.w700));
+    if (widget.bento) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (temMetas) ...[
+            TituloBento('Metas',
+                fim: _acaoBento(context, 'Ver todas', verTodas)),
+            GradeBento(filhos: [
+              if (fixas != null)
+                for (final m in fixas.take(n))
+                  _MetaBento(
+                      nome: m.nome,
+                      total: m.total,
+                      alvo: m.alvo,
+                      fracao: m.alvo > 0 ? m.total / m.alvo : 0)
+              else
+                for (final o in metasDb.take(n))
+                  WatchTotalAndAmountOfObjective(
+                    objective: o,
+                    builder: (alvo, total, fracao) => _MetaBento(
+                        nome: o.name,
+                        total: total,
+                        alvo: alvo,
+                        fracao: fracao,
+                        onTap: () => pushRoute(context,
+                            ObjectivePage(objectivePk: o.objectivePk))),
+                  ),
+            ]),
+          ],
+          if (abertos.isNotEmpty) ...[
+            const TituloBento('Empréstimos'),
+            CartaoBento(
+              child: Row(children: [
+                Expanded(
+                    child: Text('Emprestado em aberto',
+                        style: EdTexto.corpo(context))),
+                devido,
+              ]),
+            ),
+          ],
+        ],
+      );
+    }
     final bloco = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -616,8 +700,7 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
           _Secao(
             titulo: 'Metas',
             acao: 'Ver todas',
-            onAcao: () =>
-                pushRoute(context, const ObjectivesListPage(backButton: true)),
+            onAcao: verTodas,
             divisores: true,
             filhos: [
               if (fixas != null)
@@ -650,9 +733,7 @@ class _MetasEmprestimosInicioState extends State<MetasEmprestimosInicio> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(children: [
                   Expanded(child: Text('Emprestado em aberto', style: EdTexto.corpo(context))),
-                  Text(brl(emprestimos.devido),
-                      key: const Key('inicio_emprestado_em_aberto'),
-                      style: EdTexto.mono(context).copyWith(fontWeight: FontWeight.w700)),
+                  devido,
                 ]),
               ),
             ],
@@ -741,9 +822,9 @@ class BotaoConfiguracoesInicio extends StatelessWidget {
         label: const Text('Configurações', style: TextStyle(fontWeight: FontWeight.w600)),
         style: OutlinedButton.styleFrom(
           foregroundColor: e.tx,
-          backgroundColor: e.surf,
-          side: BorderSide(color: e.line),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: corCartaoBento(context),
+          side: BorderSide.none,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         ),
       ),
     );
@@ -804,13 +885,12 @@ String _brl0(double v) => _brlInteiro
     .replaceAll(' ', ' ')
     .replaceFirst(RegExp(r'^-'), '−');
 
-/// Seção "Seu dinheiro": lê os saldos do aparelho (`CarregaPatrimonio`); `fixo` só nos prints.
+/// Seção "Seu dinheiro" do desktop: lê os saldos do aparelho (`CarregaPatrimonio`); `fixo` só nos prints.
 /// Sem contas, some.
 class BancosPorBanco extends StatelessWidget {
-  const BancosPorBanco({super.key, this.fixo, this.onAbrir, this.recolher = true});
+  const BancosPorBanco({super.key, this.fixo, this.onAbrir});
   final PatrimonioInicio? fixo;
   final void Function(String carteiras)? onAbrir;
-  final bool recolher;
 
   @override
   Widget build(BuildContext context) => fixo != null
@@ -819,7 +899,18 @@ class BancosPorBanco extends StatelessWidget {
 
   Widget _corpo(BuildContext context, PatrimonioInicio d) => d.bancos.isEmpty
       ? const SizedBox.shrink()
-      : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir, recolher: recolher);
+      : BancosInicio(dados: d, formatar: brl, onAbrir: onAbrir);
+}
+
+/// Fila "Para validar": a mesma contagem do selo, sem bancos desconectados nem contas vencidas.
+({int n, double total}) _paraValidar() {
+  final revisar = meuBancoRevisar.value;
+  final classificar = meuBancoClassificar.value.where((l) => l.revisao == null);
+  return (
+    n: revisar.length + classificar.length,
+    total: revisar.fold<double>(0, (s, i) => s + i.valor.abs()) +
+        classificar.fold<double>(0, (s, l) => s + l.valor.abs()),
+  );
 }
 
 /// "N para validar · R$ total" com atalho para as Pendências. Some sem itens na fila
@@ -832,13 +923,8 @@ class AlertaPendenciasInicio extends StatelessWidget {
         listenable: Listenable.merge([meuBancoRevisar, meuBancoClassificar]),
         builder: (context, _) {
           final e = cores(context);
-          final revisar = meuBancoRevisar.value;
-          final classificar =
-              meuBancoClassificar.value.where((l) => l.revisao == null).toList();
-          final n = revisar.length + classificar.length;
+          final (:n, :total) = _paraValidar();
           if (n == 0) return const SizedBox.shrink();
-          final total = revisar.fold<double>(0, (s, i) => s + i.valor.abs()) +
-              classificar.fold<double>(0, (s, l) => s + l.valor.abs());
           void abrir() => pushRoute(context, const PendenciasPage());
           return Padding(
             padding: const EdgeInsets.only(top: 14),
@@ -915,8 +1001,11 @@ typedef LimiteInicio = ({String nome, double gasto, double limite});
 /// Os 3 orçamentos (fora o Geral e rendas) com maior fração do limite usada; barra vermelha a partir de 90%.
 /// Lê os orçamentos do aparelho; `fixos` só nos prints. Sem orçamentos com limite, some.
 class LimitesInicio extends StatefulWidget {
-  const LimitesInicio({super.key, this.fixos});
+  const LimitesInicio({super.key, this.fixos, this.bento = false});
   final List<LimiteInicio>? fixos;
+
+  /// Início em cartões: um cartão com um anel por limite.
+  final bool bento;
 
   @override
   State<LimitesInicio> createState() => _LimitesInicioState();
@@ -995,6 +1084,7 @@ class _LimitesInicioState extends State<LimitesInicio> {
   @override
   Widget build(BuildContext context) {
     if (_limites.isEmpty) return const SizedBox.shrink();
+    if (widget.bento) return _LimitesBento(_limites);
     return _Secao(
       titulo: 'Limites perto do fim',
       acao: 'Orçamentos',
@@ -1008,58 +1098,6 @@ class _LimitesInicioState extends State<LimitesInicio> {
             valor: '${brl(l.gasto)} de ${brl(l.limite)}',
             fracao: l.gasto / l.limite,
             alerta: l.gasto / l.limite >= .9,
-          ),
-      ],
-    );
-  }
-}
-
-/// As 4 últimas transações, com atalho para a aba Transações. Sem transações, some.
-class UltimasInicio extends StatelessWidget {
-  const UltimasInicio({super.key, required this.transacoes});
-  final List<TransacaoInicio> transacoes;
-
-  @override
-  Widget build(BuildContext context) {
-    if (transacoes.isEmpty) return const SizedBox.shrink();
-    final e = cores(context);
-    final agora = DateTime.now();
-    return _Secao(
-      titulo: 'Últimas transações',
-      acao: 'Ver todas',
-      onAcao: () => mbIrParaPagina(1),
-      filhos: [
-        for (final t in transacoes.take(4))
-          SizedBox(
-            height: 56,
-            child: Row(children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(t.transaction.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.corpo(context)
-                            .copyWith(fontWeight: FontWeight.w500)),
-                    Text(
-                        '${quandoRelativo(t.transaction.dateCreated, agora)} · ${t.category.name}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.rotulo(context)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconeTipo(mbTipoDaTransacao(t.transaction, t.category.name), tamanho: 22),
-              const SizedBox(width: 8),
-              Text(
-                  '${t.transaction.income ? '+' : '−'}${brl(t.transaction.amount.abs())}',
-                  style: EdTexto.corpo(context).copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: mbTipoDaTransacao(t.transaction, t.category.name).cor(context))),
-            ]),
           ),
       ],
     );

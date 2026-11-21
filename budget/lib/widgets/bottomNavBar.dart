@@ -669,15 +669,19 @@ class _BarraEditorial extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final e = cores(context);
+    // Barra solta na cor do cartão, sobre o fundo da tela.
     return Container(
-      decoration: BoxDecoration(
-        color: e.bg,
-        border: Border(top: BorderSide(color: e.line)),
-      ),
-      padding: EdgeInsets.only(
-          left: 8, right: 8, bottom: MediaQuery.paddingOf(context).bottom),
-      child: LayoutBuilder(
+      color: fundoBento(context),
+      padding: EdgeInsets.fromLTRB(
+          12, 6, 12, 10 + MediaQuery.paddingOf(context).bottom),
+      child: Container(
+        height: 60,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: corCartaoBento(context),
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: LayoutBuilder(
         builder: (context, c) {
           final base =
               (c.maxWidth - _AbaEditorial.extra) / atalhos.length;
@@ -704,6 +708,7 @@ class _BarraEditorial extends StatelessWidget {
             ],
           );
         },
+        ),
       ),
     );
   }
@@ -736,7 +741,7 @@ class _AbaEditorial extends StatelessWidget {
       curve: curvaEditorial,
       builder: (context, t, _) => SizedBox(
         width: base + extra * t,
-        height: 64,
+        height: 60,
         child: Center(
           child: Container(
             height: 40,

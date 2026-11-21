@@ -31,12 +31,13 @@ export function consumoGeral({ registros, transacoes, contas, resumo }) {
   if (!g) return null;
   const cartao = idsCartao(contas);
   const escolhas = new Map(doTipo(registros, "ajustes").filter((a) => Array.isArray(a.orcamento_ids)).map((a) => [a.id, a.orcamento_ids]));
-  let consumido = resumo.consumido;
+  // Só o que já aconteceu (`gasto`): o Geral do app não conta parcela futura do cartão antes de ela cair, e o aviso de
+  // 80%/100% tem de bater com o que a tela mostra. As parcelas do ciclo seguem em `resumo.parcelasCiclo`/`consumido`.
+  let consumido = resumo.gasto;
   for (const t of transacoes) {
     const ids = escolhas.get(t.id);
     if (!ids || ids.includes(g.id) || t.date < resumo.inicio || t.date > resumo.fim) continue;
-    const c = cartao.has(t.account_id);
-    consumido -= valorGasto(t, c) + valorParcela(t, c) - abatimento(t);
+    consumido -= valorGasto(t, cartao.has(t.account_id)) - abatimento(t);
   }
   consumido = Math.round(consumido * 100) / 100;
   return { valor: g.valor, consumido, falta: Math.round((g.valor - consumido) * 100) / 100, percentual: (consumido / g.valor) * 100, inicio: resumo.inicio, fim: resumo.fim };
@@ -190,7 +191,7 @@ export function gravarAlertas(db, alertas, base = Date.now()) {
 
 // Linha de cada meta (mesmo texto de mbResumoMetas, no app). Saldo = soma dos saldos das aplicações ligadas à meta.
 export function linhasMetas({ metas, saldos, hoje }) {
-  return metas.filter((m) => m.nome).map((m) => {
+  return metas.filter((m) => m.nome && m.arquivado !== 1).map((m) => { // arquivada no app não entra no resumo
     const saldo = (m.aplicacao_ids || []).reduce((s, id) => s + (saldos.get(id) || 0), 0);
     const alvo = m.valor_alvo > 0 ? m.valor_alvo : 0;
     const falta = Math.max(alvo - saldo, 0);

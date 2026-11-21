@@ -12,9 +12,22 @@ import { autenticarAparelho, puxar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
+import { EspelhoHub as HubBase } from "./hub.js";
 import { avisar, configDe, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
-export { EspelhoHub } from "./hub.js";
+// O Durable Object também roda a sincronização pedida pelo webhook (alarme): fora do limite de ~30 s do waitUntil.
+// Com a trava ocupada tenta de novo a cada minuto, até a trava vencer; um pedido novo no meio reagenda e zera a contagem.
+const MAX_ESPERAS_ALARME = 12;
+export class EspelhoHub extends HubBase {
+  async alarm() {
+    const r = await sincronizar(this.env, "webhook");
+    if (!r.ocupado) return void (await this.ctx.storage.delete("esperas"));
+    const esperas = ((await this.ctx.storage.get("esperas")) ?? 0) + 1;
+    if (esperas > MAX_ESPERAS_ALARME) return void (await this.ctx.storage.delete("esperas"));
+    await this.ctx.storage.put("esperas", esperas);
+    await this.ctx.storage.setAlarm(Date.now() + 60_000);
+  }
+}
 
 const TZ = "America/Sao_Paulo";
 const LINHAS_POR_INSERT = 400; // linhas por comando SQL (via json_each, 1 parâmetro só)
@@ -231,6 +244,7 @@ async function dados(env, url) {
     contas: contas.results,
     transacoes: transacoes.results,
     snapshots,
+    ajustesNoApp: espelhoLigado(env), // PUT /api/ajustes responde 410: o painel mostra a transação sem os campos de edição
     ultimaAtualizacao: ultimaOk.results[0]?.finished_at ?? null,
     ultimaExecucao: ultima.results[0] ?? null,
   });
@@ -284,11 +298,12 @@ async function lerConfig(db) {
 async function baseCiclo(env) {
   const hoje = hojeSP();
   const pronto = await espelhoPronto(env);
+  const desde = somarDias(hoje, -200);
   const [tx, contas, lido] = await Promise.all([
-    env.DB.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE t.date >= ?1`).bind(somarDias(hoje, -200)).all(),
-    env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date FROM accounts").all(),
+    env.DB.prepare(`SELECT ${colunasTx(pronto)} ${deTx(pronto)} WHERE t.date >= ?1`).bind(desde).all(),
+    env.DB.prepare("SELECT id, type, subtype, name, bank, balance, closing_date, due_date, item_id FROM accounts").all(),
     // Com o espelho ligado, configurações, ajustes, revisões, metas e o resto vêm só do espelho (registrosDoEspelho).
-    pronto ? registrosDoEspelho(env.DB) : Promise.all([
+    pronto ? registrosDoEspelho(env.DB, desde) : Promise.all([
       lerConfig(env.DB),
       env.DB.prepare("SELECT tabela, id, dados FROM registros WHERE deleted_at IS NULL AND tabela IN ('categorias','regras','orcamentos','ajustes','assinaturas','revisoes','metas')").all(),
     ]).then(([config, regs]) => ({ config, registros: regs.results.flatMap((r) => { try { return [{ tabela: r.tabela, id: r.id, dados: JSON.parse(r.dados), deleted_at: null }]; } catch { return []; } }) })),
@@ -550,7 +565,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     const itemId = (await request.json().catch(() => null))?.itemId;
     if (!(typeof itemId === "string" && REGEX_ITEM.test(itemId))) return json({ erro: "itemId inválido" }, 400);
     await adicionarItem(env, itemId, ts);
-    ctx.waitUntil(sincronizar(env, "app").catch((e) => console.error("Sincronização após conectar", e?.stack || e)));
+    ctx.waitUntil(sincronizarDepois(env, "app").catch((e) => console.error("Sincronização após conectar", e?.stack || e)));
     return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
@@ -590,10 +605,25 @@ async function webhookPluggy(request, env, url, ctx) {
       ? apagarTransacoes(env.DB, idsRemovidos(ev), ts)
       : acao === "remover"
       ? esquecerItem(env.DB, ev.itemId, ts)
-      : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizar(env, "webhook"));
+      : (acao === "registrar" ? adicionarItem(env, ev.itemId, ts) : Promise.resolve()).then(() => sincronizarDepois(env, "webhook"));
     ctx.waitUntil(tarefa.catch((e) => console.error("Webhook do Pluggy", ev.event, e?.stack || e)));
   }
   return json({ ok: true });
+}
+
+// Sincronização pedida por webhook ou por conexão nova: vai para o alarme do Durable Object, que tem tempo para terminar
+// (o waitUntil é cortado ~30 s depois da resposta e deixaria a trava do sync_log presa por 10 min) e repete quando a trava
+// estava ocupada (o webhook do 2º banco chegando no meio da leitura do 1º não se perde mais até o cron). Sem o binding, roda aqui.
+async function sincronizarDepois(env, origem) {
+  if (env.ESPELHO_HUB) {
+    try {
+      const r = await hubDo(env).fetch("https://hub/sincronizar", { method: "POST" });
+      if (r.status === 202) return;
+    } catch (e) {
+      console.warn("Agendar a sincronização no Durable Object falhou", e?.message || e);
+    }
+  }
+  return sincronizar(env, origem);
 }
 
 // A 1ª linha em pluggy_items desliga o secret e a descoberta via /v2/items: antes de gravá-la, copia as conexões que já
@@ -709,7 +739,7 @@ async function sincronizar(env, origem) {
     )
     .bind(origem, agora(), limite)
     .first();
-  if (!log) return { ok: false, mensagem: MSG_OCUPADO };
+  if (!log) return { ok: false, ocupado: true, mensagem: MSG_OCUPADO };
   const avisos = [];
   let ok = 1;
 
@@ -798,7 +828,8 @@ async function sincronizar(env, origem) {
     .run();
   if (ok) await avaliarAlertas(env).catch((e) => console.error("Alertas falharam", e?.stack || e));
   if (ok && espelhoLigado(env)) await avisar(env, { tipo: "banco" }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e));
-  return { ok: !!ok, mensagem };
+  // `parcial`: terminou, mas alguma conexão, conta ou produto não foi lido (os detalhes estão na mensagem).
+  return { ok: !!ok, parcial: !!ok && avisos.length > 0, mensagem };
 }
 
 async function sincronizarConta(db, api, conta, hoje, diasImport, docTitular) {

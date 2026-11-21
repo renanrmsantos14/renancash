@@ -7,9 +7,9 @@ import { emSilencio, ID_GERAL, orcamentoGeral, consumoGeral, alertasGeral, compr
 const sp = (s) => s.replace(/\u00a0/g, " "); // o Intl usa espaço não separável após R$
 const contas = [{ id: "cc", type: "BANK" }, { id: "cart", type: "CREDIT" }];
 const compra = (id, date, amount, extra = {}) => ({ id, account_id: "cart", date, description: "POSTO SHELL", amount, category: "Gas stations", scheduled: 0, ...extra });
-const resumo = { inicio: "2026-11-05", fim: "2026-12-04", limite: null, consumido: 1000, falta: null, percentual: null, diasRestantes: 14 };
+const resumo = { inicio: "2026-11-05", fim: "2026-12-04", limite: null, gasto: 1000, consumido: 1000, falta: null, percentual: null, diasRestantes: 14 };
 const geralReg = (valor, id = ID_GERAL) => ({ tabela: "orcamentos", id, dados: { nome: "Geral", valor, categoria_ids: [], periodo: "ciclo" } });
-const geralCom = (valor, consumido) => consumoGeral({ registros: [geralReg(valor)], transacoes: [], contas, resumo: { ...resumo, consumido } });
+const geralCom = (valor, consumido) => consumoGeral({ registros: [geralReg(valor)], transacoes: [], contas, resumo: { ...resumo, gasto: consumido, consumido } });
 
 test("silêncio 22h–7h em BRT: bordas 21:59, 22:00, 06:59 e 07:00", () => {
   assert.equal(emSilencio(new Date("2026-11-09T00:59:00Z")), false); // 21:59 BRT
@@ -31,11 +31,11 @@ test("Geral: só o orçamento Geral conta; sem valor definido não há aviso", (
 test("Geral: gasto só em outro orçamento não conta; gasto sem escolha conta", () => {
   const transacoes = [compra("a", "2026-11-06", 300), compra("b", "2026-11-07", 200)];
   const registros = [geralReg(2000), { tabela: "ajustes", id: "b", dados: { orcamento_ids: ["cashew:mb:orc:mercado"] } }];
-  const g = consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, consumido: 500 } });
+  const g = consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, gasto: 500, consumido: 500 } });
   assert.equal(g.consumido, 300);
   assert.equal(g.falta, 1700);
   const dois = [{ tabela: "ajustes", id: "b", dados: { orcamento_ids: ["cashew:mb:orc:mercado", ID_GERAL] } }];
-  assert.equal(consumoGeral({ registros: [geralReg(2000), ...dois], transacoes, contas, resumo: { ...resumo, consumido: 500 } }).consumido, 500);
+  assert.equal(consumoGeral({ registros: [geralReg(2000), ...dois], transacoes, contas, resumo: { ...resumo, gasto: 500, consumido: 500 } }).consumido, 500);
 });
 
 test("Geral: 80% e 100% com chave por ciclo; passou direto de 100% só avisa 100%", () => {
@@ -126,7 +126,7 @@ test("resumo semanal: semana, ciclo, Geral, maiores categorias, fila e metas", (
   const transacoes = [compra("x", "2026-11-18", 100, { category: "Groceries" }), compra("y", "2026-11-19", 300, { category: "Groceries" }), compra("z", "2026-11-20", 50), compra("velha", "2026-11-06", 900)];
   const r = resumoSemanal({
     resumo: { ...resumo, consumido: 1350 }, transacoes, contas, hoje: "2026-11-22", registros, ctx: contextoDeRegistros(registros.map((x) => ({ ...x, deleted_at: null, dados: x.dados }))),
-    geral: consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, consumido: 1350 } }),
+    geral: consumoGeral({ registros, transacoes, contas, resumo: { ...resumo, gasto: 1350, consumido: 1350 } }),
     revisar: [{ id: "tx:1" }, { id: "tx:2" }], metas: ["Reserva: R$ 4.000,00 de R$ 10.000,00 (40%)"],
   });
   assert.equal(r.chave, "semana:2026-11-22");
@@ -138,4 +138,14 @@ test("resumo semanal: semana, ciclo, Geral, maiores categorias, fila e metas", (
   assert.equal(linhas[3], "Para revisar: 2 itens.");
   assert.match(linhas[4], /^Reserva/);
   assert.doesNotMatch(r.corpo, /undefined|null/);
+});
+
+test("Geral: parcela futura do cartão não entra (o app só conta quando ela cai)", () => {
+  const g = consumoGeral({ registros: [geralReg(3000)], transacoes: [compra("p", "2026-11-20", 500, { scheduled: 1 })], contas, resumo: { ...resumo, gasto: 2000, consumido: 2500 } });
+  assert.equal(g.consumido, 2000);
+  assert.deepEqual(alertasGeral(g), []);
+});
+
+test("metas: arquivada fica fora do resumo", () => {
+  assert.deepEqual(linhasMetas({ metas: [{ nome: "Velha", valor_alvo: 100, arquivado: 1 }], saldos: new Map(), hoje: "2026-11-22" }), []);
 });

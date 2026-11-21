@@ -47,6 +47,9 @@ export const naoEhGasto = (t) => (t.ajuste_gasto == null ? regraAuto(t) : !t.aju
 
 // Valor que entra nos totais de gasto. Cartão: compra positiva, estorno negativo. Conta: só saída (amount < 0).
 // Parcela futura (scheduled) fica fora: ela entra pelo valorParcela no ciclo em que cai.
-const valorBruto = (t, cartao) => (cartao ? t.amount : t.amount < 0 ? -t.amount : 0);
+// Crédito no cartão que começa com "pagamento" é a fatura sendo paga, mesmo sem a categoria nem o texto que a regra automática
+// conhece ("PAGAMENTO ON LINE"): não é estorno e não pode abater o gasto do ciclo.
+const PAGAMENTO_NO_CARTAO = /^\s*(pagamento|pagto|pgto)\b/i;
+const valorBruto = (t, cartao) => (cartao ? (t.amount < 0 && PAGAMENTO_NO_CARTAO.test(t.description || "") ? 0 : t.amount) : t.amount < 0 ? -t.amount : 0);
 export const valorGasto = (t, cartao) => (t.scheduled || naoEhGasto(t) ? 0 : valorBruto(t, cartao));
 export const valorParcela = (t, cartao) => (!t.scheduled || naoEhGasto(t) ? 0 : valorBruto(t, cartao));

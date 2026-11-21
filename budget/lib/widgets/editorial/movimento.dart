@@ -84,11 +84,15 @@ class MedidorEditorial extends StatelessWidget {
       required this.fracao,
       this.alerta = false,
       this.aVencer = 0,
+      this.cor,
       this.hoje,
       this.altura = 2});
 
   final double fracao;
   final bool alerta;
+
+  /// Cor da barra fora do alerta (padrão: o verde de destaque).
+  final Color? cor;
 
   /// Fração do limite ainda a vencer (não paga), desenhada após o gasto.
   final double aVencer;
@@ -104,6 +108,7 @@ class MedidorEditorial extends StatelessWidget {
     final e = cores(context);
     final alvo = fracao.clamp(0.0, 1.0);
     final fantasma = (fracao + aVencer).clamp(0.0, 1.0);
+    final cheia = cor ?? e.acc;
     final raio = BorderRadius.circular(altura / 2);
     Widget faixa(double v, Color cor) => FractionallySizedBox(
           alignment: AlignmentDirectional.centerStart,
@@ -117,8 +122,8 @@ class MedidorEditorial extends StatelessWidget {
           child: ColoredBox(
             color: e.line,
             child: Stack(fit: StackFit.expand, children: [
-              if (v.dy > v.dx) faixa(v.dy, e.acc.withOpacity(.35)),
-              faixa(v.dx, alerta ? e.warn : e.acc),
+              if (v.dy > v.dx) faixa(v.dy, cheia.withOpacity(.35)),
+              faixa(v.dx, alerta ? e.warn : cheia),
             ]),
           ),
         );
