@@ -672,8 +672,10 @@ class _TransactionEntriesState extends State<TransactionEntries> {
                 ),
               ],
             );
-          } else if (widget.renderType ==
-              TransactionEntriesRenderType.sliversNotSticky) {
+          } else if (widget.emCartoes ||
+              widget.renderType ==
+                  TransactionEntriesRenderType.sliversNotSticky) {
+            // Em cartões cada dia é um item: só os dias visíveis são montados.
             return SliverList(
               delegate: SliverChildBuilderDelegate(
                 (BuildContext context, int index) {

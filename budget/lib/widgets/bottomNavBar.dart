@@ -763,20 +763,17 @@ class _AbaEditorial extends StatelessWidget {
                       child: Align(
                         alignment: AlignmentDirectional.centerStart,
                         widthFactor: t,
-                        child: Opacity(
-                          opacity: t,
-                          child: Padding(
-                            padding:
-                                const EdgeInsetsDirectional.only(start: 8),
-                            child: Text(_rotuloAba(atalho),
-                                maxLines: 1,
-                                softWrap: false,
-                                style: TextStyle(
-                                    fontFamily: 'Geist',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: e.tx)),
-                          ),
+                        // Cor com alfa em vez de Opacity: sem camada extra.
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 8),
+                          child: Text(_rotuloAba(atalho),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: TextStyle(
+                                  fontFamily: 'Geist',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: e.tx.withOpacity(t))),
                         ),
                       ),
                     ),
