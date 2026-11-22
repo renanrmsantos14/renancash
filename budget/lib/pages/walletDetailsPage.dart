@@ -814,9 +814,8 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
                           widget.wallet == null) ||
                       widget.wallet != null,
                 )),
-                child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
+                child: GrupoBento(
+                  filhos: [
                     if (widget.wallet == null)
                       AmountSpentEntryRow(
                       forceShow: true,
@@ -1168,7 +1167,7 @@ class WalletDetailsPageState extends State<WalletDetailsPage>
             enableDoubleColumn(context) && widget.wallet == null ? false : true,
         expandedHeight:
             enableDoubleColumn(context) && widget.wallet == null ? 56 : null,
-        backgroundColor: Theme.of(context).colorScheme.background,
+        backgroundColor: fundoBento(context),
         scrollController: _scrollController,
         key: pageState,
         listID: listID,
@@ -2115,9 +2114,8 @@ class WalletDetailsLineGraph extends StatelessWidget {
           child: Container(
             margin: EdgeInsetsDirectional.symmetric(horizontal: 20),
             decoration: BoxDecoration(
-              borderRadius: BorderRadiusDirectional.all(Radius.circular(12)),
-              color: cores(context).surf,
-              border: Border.all(color: cores(context).line),
+              borderRadius: BorderRadiusDirectional.all(Radius.circular(20)),
+              color: cores(context).cartao,
             ),
             child: spendingGraph,
           ),
@@ -2853,7 +2851,7 @@ class AmountSpentEntryRow extends StatelessWidget {
             child: OpenContainerNavigation(
               borderRadius: 0,
               openPage: openPage,
-              closedColor: cores(context).bg,
+              closedColor: corCartaoBento(context),
               button: (openContainer) {
                 String formatar(double v) => comSinal(
                     v,
@@ -2865,7 +2863,7 @@ class AmountSpentEntryRow extends StatelessWidget {
                         ));
                 // Linha plana de 56 px: rótulo e quantidade à esquerda, valor à direita.
                 return Tappable(
-                  color: cores(context).bg,
+                  color: corCartaoBento(context),
                   borderRadius: 0,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: 56),

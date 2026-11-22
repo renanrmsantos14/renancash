@@ -85,9 +85,8 @@ class _MeuBancoConectarPageState extends State<MeuBancoConectarPage> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: e.surf,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: e.line),
+              color: e.cartao,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

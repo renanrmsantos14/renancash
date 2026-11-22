@@ -110,9 +110,8 @@ class _ContasConectadasState extends State<ContasConectadas> {
             height: 112,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: e.surf,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: e.line),
+              color: e.cartao,
+              borderRadius: BorderRadius.circular(20),
             ),
           ),
       ];
@@ -200,9 +199,9 @@ class _CartaoConexao extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
         decoration: BoxDecoration(
-          color: e.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: alerta ? e.warn.withOpacity(.4) : e.line),
+          color: e.cartao,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: alerta ? e.warn.withOpacity(.4) : Colors.transparent),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

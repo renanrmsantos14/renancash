@@ -125,7 +125,7 @@ class MorePages extends StatelessWidget {
     // último. No computador a lateral já tem as páginas; aqui ficam os ajustes.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: agruparBento([
         if (hasSideNavigation == false) ...[
           SettingsHeader(title: "Dinheiro"),
           pagina("allSpending", WalletDetailsPage(wallet: null)),
@@ -169,7 +169,7 @@ class MorePages extends StatelessWidget {
             icon: navBarIconsData["about"]!.iconData,
           ),
         ],
-      ],
+      ]),
     );
   }
 }

@@ -230,12 +230,11 @@ class _UpcomingTransactionsNotificationsSettingsState
               margin:
                   EdgeInsetsDirectional.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadiusDirectional.circular(12),
-                color: cores(context).surf,
-                border: Border.all(color: cores(context).line),
+                borderRadius: BorderRadiusDirectional.circular(20),
+                color: cores(context).cartao,
               ),
               child: ClipRRect(
-                borderRadius: BorderRadiusDirectional.circular(12),
+                borderRadius: BorderRadiusDirectional.circular(20),
                 child: widget.upcomingForTest != null
                     ? Column(
                         children: [

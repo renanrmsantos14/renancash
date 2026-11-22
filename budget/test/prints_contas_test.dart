@@ -265,28 +265,30 @@ void main() {
                   onEntradas: () {},
                   onSaidas: () {},
                 ),
-                AmountSpentEntryRow(
-                  openPage: const SizedBox(),
-                  textColor: cores(context).tx,
-                  label: 'Emprestou',
-                  absolute: false,
-                  invertSign: true,
-                  totalWithCountStream: _total(-150, 1),
-                ),
-                AmountSpentEntryRow(
-                  openPage: const SizedBox(),
-                  textColor: cores(context).tx,
-                  label: 'Por vir',
-                  absolute: false,
-                  totalWithCountStream: _total(-89.9, 2),
-                ),
-                AmountSpentEntryRow(
-                  openPage: const SizedBox(),
-                  textColor: cores(context).warn,
-                  label: 'Atrasado',
-                  absolute: false,
-                  totalWithCountStream: _total(-42, 1),
-                ),
+                GrupoBento(filhos: [
+                  AmountSpentEntryRow(
+                    openPage: const SizedBox(),
+                    textColor: cores(context).tx,
+                    label: 'Emprestou',
+                    absolute: false,
+                    invertSign: true,
+                    totalWithCountStream: _total(-150, 1),
+                  ),
+                  AmountSpentEntryRow(
+                    openPage: const SizedBox(),
+                    textColor: cores(context).tx,
+                    label: 'Por vir',
+                    absolute: false,
+                    totalWithCountStream: _total(-89.9, 2),
+                  ),
+                  AmountSpentEntryRow(
+                    openPage: const SizedBox(),
+                    textColor: cores(context).warn,
+                    label: 'Atrasado',
+                    absolute: false,
+                    totalWithCountStream: _total(-42, 1),
+                  ),
+                ]),
               ]),
             ),
           ));
@@ -444,10 +446,8 @@ void main() {
       for (var i = 0; i < 6; i++) {
         await t.pump(const Duration(milliseconds: 100));
       }
-      await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile(
-              '../../.verificacao/prints/contas_nova_$modo.png'));
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('../../.verificacao/prints/contas_nova_$modo.png'));
     });
 
     testWidgets('print editar conta $modo', skip: _pular, (t) async {
@@ -477,8 +477,7 @@ void main() {
       );
     });
 
-    testWidgets('print backup google conectado $modo', skip: _pular,
-        (t) async {
+    testWidgets('print backup google conectado $modo', skip: _pular, (t) async {
       googleUser = const _FakeGoogleUser();
       await _print(
         t,
@@ -523,8 +522,7 @@ void main() {
           altura: 1100);
     });
 
-    testWidgets('print investimentos com 1 mês $modo', skip: _pular,
-        (t) async {
+    testWidgets('print investimentos com 1 mês $modo', skip: _pular, (t) async {
       await _print(
           t,
           modo,
@@ -568,8 +566,8 @@ void main() {
     });
   }
 
-  testWidgets('print lista de contas desktop 1440x900 claro',
-      skip: _pular, (t) async {
+  testWidgets('print lista de contas desktop 1440x900 claro', skip: _pular,
+      (t) async {
     await _print(
       t,
       'claro',
@@ -605,8 +603,8 @@ void main() {
     );
   });
 
-  testWidgets('print editar conta desktop 1440x900 claro',
-      skip: _pular, (t) async {
+  testWidgets('print editar conta desktop 1440x900 claro', skip: _pular,
+      (t) async {
     await _print(
       t,
       'claro',
@@ -623,8 +621,8 @@ void main() {
     );
   });
 
-  testWidgets('print investimentos desktop 1440x900 claro',
-      skip: _pular, (t) async {
+  testWidgets('print investimentos desktop 1440x900 claro', skip: _pular,
+      (t) async {
     final serie = [
       const MbRetratoMes('2026-09', [
         MbAplicacaoMes('a', 'CDB Inter', 'Inter', 8000),

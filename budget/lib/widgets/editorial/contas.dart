@@ -105,9 +105,8 @@ class _Fluxo extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
-            color: e.surf,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: e.line),
+            color: e.cartao,
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -8,6 +8,12 @@ class EditorialCores extends ThemeExtension<EditorialCores> {
   // Cor por TIPO de movimento (gasto, receita, investimento, empréstimo, transferência), igual no app inteiro.
   final Color tGasto, tReceita, tInvest, tEmpr, tTransf;
 
+  /// Padrão Bento: cartão um tom acima do fundo da tela (claro: branco sobre
+  /// cinza; escuro: cinza sobre preto).
+  bool get _claro => bg.computeLuminance() > .5;
+  Color get cartao => _claro ? bg : surf;
+  Color get fundo => _claro ? surf : bg;
+
   const EditorialCores({
     required this.bg,
     required this.surf,
@@ -247,8 +253,10 @@ class CartaoEscuro extends StatelessWidget {
 bool _modoEscuro(BuildContext c) => Theme.of(c).brightness == Brightness.dark;
 
 /// Início em cartões. Claro: tela cinza bem claro e cartão branco; escuro: tela preta e cartão um tom acima.
-Color fundoBento(BuildContext c) => _modoEscuro(c) ? cores(c).bg : cores(c).surf;
-Color corCartaoBento(BuildContext c) => _modoEscuro(c) ? cores(c).surf : cores(c).bg;
+Color fundoBento(BuildContext c) =>
+    _modoEscuro(c) ? cores(c).bg : cores(c).surf;
+Color corCartaoBento(BuildContext c) =>
+    _modoEscuro(c) ? cores(c).surf : cores(c).bg;
 
 /// Cartão da Início: sem borda nem sombra, só a diferença para o fundo da tela.
 class CartaoBento extends StatelessWidget {
@@ -268,6 +276,27 @@ class CartaoBento extends StatelessWidget {
             color: cor ?? corCartaoBento(context),
             borderRadius: BorderRadius.circular(22)),
         child: child,
+      );
+}
+
+/// Várias linhas (ajustes, atalhos) dentro de um cartão só, com o toque
+/// recortado no raio do cartão.
+class GrupoBento extends StatelessWidget {
+  const GrupoBento({super.key, required this.filhos});
+  final List<Widget> filhos;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: ColoredBox(
+            color: corCartaoBento(context),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: filhos),
+          ),
+        ),
       );
 }
 

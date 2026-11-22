@@ -231,12 +231,9 @@ class ActivityPageState extends State<ActivityPage> {
                                     ),
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: cores(context).surf,
+                                        color: cores(context).cartao,
                                         borderRadius:
-                                            BorderRadiusDirectional.circular(12),
-                                        border: Border.all(
-                                          color: cores(context).line,
-                                        ),
+                                            BorderRadiusDirectional.circular(20),
                                       ),
                                       alignment:
                                           AlignmentDirectional.centerStart,

@@ -118,10 +118,10 @@ void main() {
       expect(th.brightness, t.brilho);
       expect(th.extension<AppColors>(), isNotNull);
       expect(th.extension<EditorialCores>(), same(t.cores));
-      expect(th.scaffoldBackgroundColor, t.cores.bg);
+      expect(th.scaffoldBackgroundColor, t.cores.fundo);
       // Cabeçalhos herdados do Cashew usam colorScheme.background.
       // ignore: deprecated_member_use
-      expect(th.colorScheme.background, t.cores.bg);
+      expect(th.colorScheme.background, t.cores.fundo);
       expect(
           contraste(th.colorScheme.onTertiaryContainer,
               th.colorScheme.tertiaryContainer),

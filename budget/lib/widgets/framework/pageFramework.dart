@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:budget/functions.dart';
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/animatedExpanded.dart';
 import 'package:budget/widgets/button.dart';
@@ -476,7 +477,8 @@ class PageFrameworkState extends State<PageFramework>
                   horizontal: horizontalPadding),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  for (final (i, w) in widget.listWidgets!.indexed)
+                  for (final (i, w)
+                      in agruparBento(widget.listWidgets!).indexed)
                     EntradaSuave(
                       // Repassa a chave do item para o SliverList achá-lo.
                       key: w.key == null ? null : ValueKey(w.key),
@@ -504,7 +506,7 @@ class PageFrameworkState extends State<PageFramework>
 
     Widget scaffold = Scaffold(
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
-      backgroundColor: widget.backgroundColor,
+      backgroundColor: widget.backgroundColor ?? fundoBento(context),
       body: widget.bodyBuilder != null
           ? widget.bodyBuilder!(
               _scrollController,
@@ -970,7 +972,9 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
                       child: Padding(
                         key: ValueKey(titleString),
                         padding: EdgeInsetsDirectional.only(
-                            end: longo && (actions?.isNotEmpty ?? false) ? 56 : 0),
+                            end: longo && (actions?.isNotEmpty ?? false)
+                                ? 56
+                                : 0),
                         child: TextFont(
                           text: titleString,
                           maxLines: longo ? 1 : null,
@@ -982,7 +986,9 @@ class PageFrameworkSliverAppBar extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.4,
                           textColor: textColor == null
-                              ? Theme.of(context).colorScheme.onSecondaryContainer
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .onSecondaryContainer
                               : textColor,
                           textAlign: centeredTitleWithDefault
                               ? TextAlign.center
@@ -1078,11 +1084,9 @@ Color calculateAppBarBGColor({
   required Color? appBarBackgroundColor,
   required bool centeredTitleSmall,
 }) {
-  Color appBarBGColorCalculated =
-      appBarBackgroundColor ?? Theme.of(context).colorScheme.surface;
+  Color appBarBGColorCalculated = appBarBackgroundColor ?? fundoBento(context);
   if (centeredTitleSmall && getPlatform() == PlatformOS.isIOS) {
-    appBarBGColorCalculated =
-        appBarBackgroundColor ?? Theme.of(context).colorScheme.background;
+    appBarBGColorCalculated = appBarBackgroundColor ?? fundoBento(context);
   }
   return appBarBGColorCalculated;
 }
@@ -1107,7 +1111,7 @@ List<Widget> getAppBarBackgroundColorLayers({
   );
   return [
     Container(
-      color: appBarBackgroundColor ?? Theme.of(context).colorScheme.background,
+      color: appBarBackgroundColor ?? fundoBento(context),
       // Fixes backdrop not fading correctly when using Impeller (iOS - Flutter v3.13)
       width: MediaQuery.sizeOf(context).width,
       height: MediaQuery.sizeOf(context).height - 1,
@@ -1120,7 +1124,7 @@ List<Widget> getAppBarBackgroundColorLayers({
             height: MediaQuery.sizeOf(context).height - 1,
 
             color: appBarBackgroundColorStart == null
-                ? Theme.of(context).colorScheme.background
+                ? fundoBento(context)
                 : appBarBackgroundColorStart,
           ),
     (animationControllerOpacity != null ||

@@ -414,9 +414,8 @@ class AppliedFilterChip extends StatelessWidget {
           height: 36,
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: e.surf,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: e.line),
+            color: e.cartao,
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

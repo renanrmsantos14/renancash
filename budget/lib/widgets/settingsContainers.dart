@@ -204,8 +204,7 @@ class SettingsContainerOpenPage extends StatelessWidget {
       child: OpenContainerNavigation(
         onClosed: onClosed,
         onOpen: onOpen,
-        closedColor:
-            backgroundColor ?? Theme.of(context).colorScheme.background,
+        closedColor: backgroundColor ?? Colors.transparent,
         borderRadius: isOutlined == true
             ? 12
             : getIsFullScreen(context)
@@ -386,9 +385,8 @@ class SettingsContainerOutlined extends StatelessWidget {
     double defaultIconSize = 22;
     final e = cores(context);
     final cartao = BoxDecoration(
-      color: e.surf,
-      border: Border.all(color: e.line),
-      borderRadius: BorderRadiusDirectional.circular(12),
+      color: e.cartao,
+      borderRadius: BorderRadiusDirectional.circular(20),
     );
     Widget content;
     if (isOutlinedColumn == true) {
@@ -668,6 +666,34 @@ class SettingsContainer extends StatelessWidget {
   }
 }
 
+/// Junta em cartões Bento as linhas entre um [SettingsHeader] e o próximo.
+/// O que vem antes do primeiro título (cabeçalho da tela) e o que já é
+/// [GrupoBento] passam como estão.
+List<Widget> agruparBento(List<Widget> itens) {
+  final saida = <Widget>[];
+  var grupo = <Widget>[];
+  var comTitulo = false;
+  void fecha() {
+    if (grupo.isNotEmpty) saida.add(GrupoBento(filhos: grupo));
+    grupo = [];
+  }
+
+  for (final w in itens) {
+    if (w is SettingsHeader) {
+      fecha();
+      comTitulo = true;
+      saida.add(w);
+    } else if (!comTitulo || w is GrupoBento) {
+      fecha();
+      saida.add(w);
+    } else {
+      grupo.add(w);
+    }
+  }
+  fecha();
+  return saida;
+}
+
 class SettingsHeader extends StatelessWidget {
   const SettingsHeader({
     Key? key,
@@ -679,10 +705,10 @@ class SettingsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsetsDirectional.only(
-        start: 18,
-        end: 18,
+        start: 21,
+        end: 21,
         top: 22,
-        bottom: 6,
+        bottom: 8,
       ),
       child: Semantics(
         header: true,

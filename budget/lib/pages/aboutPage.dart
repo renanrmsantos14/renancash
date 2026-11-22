@@ -662,7 +662,7 @@ class AboutInfoBox extends StatelessWidget {
         child: Tappable(
           onTap: link == null ? null : () => openUrl(link!),
           onLongPress: link == null ? null : () => copyToClipboard(link!),
-          color: color ?? e.surf,
+          color: color ?? e.cartao,
           borderRadius: 12,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
