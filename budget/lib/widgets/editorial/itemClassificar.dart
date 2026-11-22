@@ -138,56 +138,50 @@ class _ItemClassificarState extends State<ItemClassificar> {
         return Opacity(
           opacity: _enviando ? .5 : 1,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(16)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [
-                  IconeTipo(tipo, tamanho: 32),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(nomeSemEspacosRepetidos(_l.descricao),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
-                  ),
-                ]),
-                const SizedBox(height: 2),
-                Text([if (_l.conta.isNotEmpty) _l.conta, diaMes(_l.data)].join(' · '),
-                    style: EdTexto.rotulo(context)),
-                const SizedBox(height: 16),
-                Text(brl(_l.valor),
-                    style: EdTexto.numeroGrande(context).copyWith(fontWeight: FontWeight.w700, color: tipo.cor(context))),
-                const SizedBox(height: 16),
-                if (cat != null && sugestao != null) ...[
-                  Text(_rotuloFonte[sugestao.fonte]!, style: EdTexto.rotulo(context)),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SeloTipo(tipo, categoria: sub == null ? cat.nome : '${cat.nome} › ${sub.nome}'),
-                  ),
-                  if (sugestao.pergunta != null) ...[
-                    const SizedBox(height: 10),
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(sugestao.pergunta!,
-                          style: EdTexto.corpo(context).copyWith(fontSize: 14, height: 1.3)),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  _BotaoPrincipal(rotulo: 'Confirmar', onTap: _enviando ? null : () => _confirmar(sugestao)),
-                ] else
-                  Text('Sem sugestão para este. Toque na categoria certa.', style: EdTexto.rotulo(context)),
-                if (situacaoIa != null) ...[
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Icon(situacaoIa.icone, size: 14, color: e.mu),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(situacaoIa.texto, style: EdTexto.rotulo(context))),
-                  ]),
-                ],
+            Row(children: [
+              IconeTipo(tipo, tamanho: 32),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(nomeSemEspacosRepetidos(_l.descricao),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context).copyWith(fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+            const SizedBox(height: 2),
+            Text([if (_l.conta.isNotEmpty) _l.conta, diaMes(_l.data)].join(' · '),
+                style: EdTexto.rotulo(context)),
+            const SizedBox(height: 16),
+            Text(brl(_l.valor),
+                style: EdTexto.numeroGrande(context).copyWith(fontWeight: FontWeight.w700, color: tipo.cor(context))),
+            const SizedBox(height: 16),
+            if (cat != null && sugestao != null) ...[
+              Text(_rotuloFonte[sugestao.fonte]!, style: EdTexto.rotulo(context)),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SeloTipo(tipo, categoria: sub == null ? cat.nome : '${cat.nome} › ${sub.nome}'),
+              ),
+              if (sugestao.pergunta != null) ...[
+                const SizedBox(height: 10),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(sugestao.pergunta!,
+                      style: EdTexto.corpo(context).copyWith(fontSize: 14, height: 1.3)),
+                ),
+              ],
+              const SizedBox(height: 16),
+              _BotaoPrincipal(rotulo: 'Confirmar', onTap: _enviando ? null : () => _confirmar(sugestao)),
+            ] else
+              Text('Sem sugestão para este. Toque na categoria certa.', style: EdTexto.rotulo(context)),
+            if (situacaoIa != null) ...[
+              const SizedBox(height: 12),
+              Row(children: [
+                Icon(situacaoIa.icone, size: 14, color: e.mu),
+                const SizedBox(width: 6),
+                Expanded(child: Text(situacaoIa.texto, style: EdTexto.rotulo(context))),
               ]),
-            ),
+            ],
             if (troco != null) ...[
               const SizedBox(height: 16),
               Text('Devolveu o troco?', style: EdTexto.h2(context)),
@@ -200,8 +194,8 @@ class _ItemClassificarState extends State<ItemClassificar> {
                     onTap: _enviando ? null : () => _devolverTroco(troco)),
               ),
             ],
-            const SizedBox(height: 16),
-            Text(cat == null || sugestao == null ? 'Qual é a categoria?' : 'Não é isso? Toque na certa', style: EdTexto.h2(context)),
+            Divider(height: 32, thickness: 1, color: e.line),
+            Text(cat == null || sugestao == null ? 'Qual é a categoria?' : 'Não é isso? Toque na certa', style: EdTexto.rotulo(context)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final c in alternativas)
@@ -289,7 +283,7 @@ class _ParteDeContaState extends State<ParteDeConta> {
         }
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: e.chip, borderRadius: BorderRadius.circular(12)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
               Icon(estorno ? Icons.undo_rounded : Icons.call_split_rounded, size: 14, color: e.acc),
@@ -385,7 +379,7 @@ class _RendimentosPoupancaState extends State<RendimentosPoupanca> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              decoration: BoxDecoration(color: e.surf, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: e.chip, borderRadius: BorderRadius.circular(12)),
               child: escolha == null || cat == null
                   ? Text('Escolha a categoria abaixo.', style: EdTexto.rotulo(context))
                   : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -484,7 +478,7 @@ class _BotaoPrincipal extends StatelessWidget {
             backgroundColor: secundario ? e.bg : e.pos,
             foregroundColor: secundario ? e.tx : e.bg,
             side: secundario ? BorderSide(color: e.line) : null,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
         onPressed: onTap,
         child: Text(rotulo, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
       ),

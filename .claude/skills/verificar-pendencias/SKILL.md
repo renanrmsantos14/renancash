@@ -12,6 +12,11 @@ description: "Verifica a aba Pendências e a fila Para validar: toda transação
 - `widgets/editorial/itemClassificar.dart` (cartão) e `pages/pendenciasPage.dart` (fila: Para revisar → Para classificar → contas vencidas; `ordenarPulados`, posição real "N de T", estado inicial `_CarregandoPendencias`, vazio com aviso `_NadaNaFila` e largura máxima editorial de 680 px no desktop).
 - `pages/homePage/homePageParaRevisar.dart` (cartão `HomePageParaRevisar` no padrão Editorial com divisor entre itens e `ItemParaRevisar` exibindo o pagador em `Pix recebido de <Nome>`).
 
+## Visual (padrão Bento)
+- Fundo `fundoBento`; contador "N de T" com a barra num `CartaoBento` próprio e o item em outro (`_CartaoTriagem`), sem borda nem sombra. Faixa de banco desconectado com raio 22.
+- `ItemClassificar` sem caixa cinza interna: cabeçalho, valor, sugestão e Confirmar direto no cartão, linha fina (`Divider`) antes de "Não é isso? Toque na certa" (rótulo pequeno). Blocos internos (`ParteDeConta`, `RendimentosPoupanca`) em `e.chip`, visíveis no claro e no escuro.
+- Confira nos prints `pendencias_classificar_sugestao_*`, `pendencias_vazia_aviso_*` e `casos_rendimentos_*`: tudo claro ou tudo escuro, cartão destacado do fundo.
+
 ## Código de cores por tipo (vale no app inteiro)
 - Definido em `budget/lib/struct/tipoMovimento.dart` (`TipoMov`, `mbTipoMov`, `mbTipoDaTransacao`, `IconeTipo`, `SeloTipo`) e nos tokens `tGasto/tReceita/tInvest/tEmpr/tTransf` de `EditorialCores` (claro e escuro, contraste AA testado em `test/tipo_movimento_test.dart`).
 - Gasto vermelho ↓ (−R$), Receita verde ↑ (+R$), Investimento azul ↗, Empréstimo âmbar ⇄, Transferência/fatura cinza ↻, A classificar neutro com borda.

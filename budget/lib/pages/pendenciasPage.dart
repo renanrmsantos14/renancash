@@ -138,11 +138,10 @@ class _PendenciasPageState extends State<PendenciasPage> {
 
   @override
   Widget build(BuildContext context) {
-    final e = cores(context);
     // Material (não ColoredBox): aberta via pushRoute não há Scaffold acima, e sem
     // Material os textos saem com o sublinhado amarelo de erro do Flutter.
     return Material(
-      color: e.bg,
+      color: fundoBento(context),
       child: SafeArea(
         bottom: false,
         child: ListenableBuilder(
@@ -163,7 +162,7 @@ class _PendenciasPageState extends State<PendenciasPage> {
             return ListView(
               // Folga no fim: o "Pular" do último cartão nunca encosta na faixa da versão.
               padding: const EdgeInsets.fromLTRB(
-                  20, 16, 20, 120 + mbAlturaFaixaVersao),
+                  14, 16, 14, 120 + mbAlturaFaixaVersao),
               children: [
                 Align(
                   alignment: AlignmentDirectional.topStart,
@@ -172,8 +171,11 @@ class _PendenciasPageState extends State<PendenciasPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Pendências', style: EdTexto.h1(context)),
-                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('Pendências', style: EdTexto.h1(context)),
+                        ),
+                        const SizedBox(height: 14),
                         for (final a in avisos) _FaixaDesconectado(aviso: a),
                         if (_carregando && fila.isEmpty && avisos.isEmpty)
                           const _CarregandoPendencias()
@@ -182,16 +184,25 @@ class _PendenciasPageState extends State<PendenciasPage> {
                         else if (fila.isEmpty)
                           const _NadaNaFila()
                         else ...[
-                          Row(children: [
-                            Expanded(
-                                child: Text(fila.first.rotulo,
-                                    style: EdTexto.rotulo(context))),
-                            Text('${_total - itens.length + itens.indexOf(fila.first) + 1} de $_total',
-                                style: EdTexto.rotulo(context)),
-                          ]),
-                          const SizedBox(height: 8),
-                          _BarraProgresso(
-                              feitas: _total - itens.length, total: _total),
+                          CartaoBento(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(children: [
+                                  Expanded(
+                                      child: Text(fila.first.rotulo,
+                                          style: EdTexto.corpo(context).copyWith(
+                                              fontWeight: FontWeight.w600))),
+                                  Text('${_total - itens.length + itens.indexOf(fila.first) + 1} de $_total',
+                                      style: EdTexto.rotulo(context)),
+                                ]),
+                                const SizedBox(height: 10),
+                                _BarraProgresso(
+                                    feitas: _total - itens.length,
+                                    total: _total),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 10),
                           _CartaoTriagem(
                             key: ValueKey(fila.first.id),
@@ -259,10 +270,10 @@ class _FaixaDesconectado extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = cores(context);
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
-          color: e.warnbg, borderRadius: BorderRadius.circular(12)),
+          color: e.warnbg, borderRadius: BorderRadius.circular(22)),
       child: Row(children: [
         Icon(Icons.link_off_rounded, size: 20, color: e.warntx),
         const SizedBox(width: 10),
@@ -301,9 +312,9 @@ class _BarraProgresso extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: LinearProgressIndicator(
-        minHeight: 4,
+        minHeight: 6,
         value: total <= 0 ? 0 : (feitas / total).clamp(0.0, 1.0),
-        backgroundColor: e.line,
+        backgroundColor: e.chip,
         color: e.pos,
       ),
     );
@@ -493,14 +504,9 @@ class _CartaoTriagemState extends State<_CartaoTriagem>
             child: Opacity(opacity: opacidade, child: filho),
           );
         },
-        child: Container(
+        child: CartaoBento(
           padding: EdgeInsets.fromLTRB(
-              18, 18, 18, widget.aoPular == null ? 18 : 8),
-          decoration: BoxDecoration(
-            color: e.bg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: e.line),
-          ),
+              16, 16, 16, widget.aoPular == null ? 16 : 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
