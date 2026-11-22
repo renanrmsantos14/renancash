@@ -1,4 +1,5 @@
 import 'package:budget/struct/editorial.dart';
+import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart' show brl, diaMes;
 import 'package:budget/struct/meuBancoSync.dart' show mbDesfazerPerdao, mbPerdoarEmprestimo;
@@ -52,7 +53,7 @@ class _Conteudo extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('Emprestado em aberto', style: EdTexto.rotulo(context)),
         const SizedBox(height: 4),
-        Text(brl(e.devido), key: const Key('emprestado_em_aberto'), style: EdTexto.numeroGrande(context)),
+        ContagemValor(key: const Key('emprestado_em_aberto'), valor: e.devido, formatar: brl, estilo: EdTexto.numeroGrande(context)),
         const SizedBox(height: 20),
         if (pessoas.isEmpty)
           Text('Nenhum empréstimo em aberto.', style: EdTexto.corpo(context).copyWith(color: cor.mu)),

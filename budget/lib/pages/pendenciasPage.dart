@@ -311,11 +311,16 @@ class _BarraProgresso extends StatelessWidget {
     final e = cores(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
-      child: LinearProgressIndicator(
-        minHeight: 6,
-        value: total <= 0 ? 0 : (feitas / total).clamp(0.0, 1.0),
-        backgroundColor: e.chip,
-        color: e.pos,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: total <= 0 ? 0 : (feitas / total).clamp(0.0, 1.0)),
+        duration: Duration(milliseconds: semMovimento(context) ? 0 : 400),
+        curve: curvaEditorial,
+        builder: (_, v, __) => LinearProgressIndicator(
+          minHeight: 6,
+          value: v,
+          backgroundColor: e.chip,
+          color: e.pos,
+        ),
       ),
     );
   }
