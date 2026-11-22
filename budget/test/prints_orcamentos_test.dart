@@ -575,7 +575,9 @@ void main() {
       await t.pumpWidget(_app(
         modo,
         Builder(
-          builder: (c) => ListView(
+          builder: (c) => ColoredBox(
+            color: fundoBento(c),
+            child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 13),
             children: [
               _titulo(c, 'Orçamentos'),
@@ -589,29 +591,45 @@ void main() {
                 aVencer: 420,
                 hoje: 9 / 30,
               ),
-              const SizedBox(height: 12),
-              const CartaoOrcamento(
-                nome: 'Mercado',
-                cor: Color(0xFFFF9800),
-                periodo: '1 de nov. – 30 de nov.',
-                gasto: 1312.4,
-                limite: 1200,
-                diasRestantes: 18,
-                hoje: 13 / 30,
-              ),
-              const SizedBox(height: 12),
-              const CartaoOrcamento(
-                nome: 'Reserva do mês',
-                cor: Color(0xFF2196F3),
-                periodo: '1 de nov. – 30 de nov.',
-                gasto: 650,
-                limite: 1000,
-                renda: true,
-                diasRestantes: 18,
-                hoje: 13 / 30,
-              ),
+              const TituloBento('Limites'),
+              const GradeBento(filhos: [
+                CartaoOrcamento(
+                  nome: 'Mercado',
+                  cor: Color(0xFFFF9800),
+                  periodo: '1 de nov. – 30 de nov.',
+                  gasto: 1312.4,
+                  limite: 1200,
+                  diasRestantes: 18,
+                  hoje: 13 / 30,
+                  compacto: true,
+                ),
+                CartaoOrcamento(
+                  nome: 'Lazer e restaurantes',
+                  cor: Color(0xFF9C27B0),
+                  periodo: '1 de nov. – 30 de nov.',
+                  gasto: 214,
+                  limite: 400,
+                  diasRestantes: 18,
+                  hoje: 13 / 30,
+                  compacto: true,
+                ),
+              ]),
+              const TituloBento('Para guardar'),
+              const GradeBento(filhos: [
+                CartaoOrcamento(
+                  nome: 'Reserva do mês',
+                  cor: Color(0xFF2196F3),
+                  periodo: '1 de nov. – 30 de nov.',
+                  gasto: 650,
+                  limite: 1000,
+                  renda: true,
+                  diasRestantes: 18,
+                  hoje: 13 / 30,
+                  compacto: true,
+                ),
+              ]),
             ],
-          ),
+          )),
         ),
       ));
       await _print(t, 'orcamentos_lista_$modo');

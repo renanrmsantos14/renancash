@@ -3,7 +3,6 @@ import 'package:budget/functions.dart';
 import 'package:budget/pages/addBudgetPage.dart';
 import 'package:budget/pages/analiseOrcamentos.dart';
 import 'package:budget/pages/editBudgetPage.dart';
-import 'package:budget/pages/objectivesListPage.dart' show cartaoPlano;
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/budgetContainer.dart';
@@ -48,6 +47,9 @@ class BudgetsListPageState extends State<BudgetsListPage> {
     return PageFramework(
       key: pageState,
       title: "budgets".tr(),
+      backgroundColor: fundoBento(context),
+      appBarBackgroundColor: fundoBento(context),
+      appBarBackgroundColorStart: fundoBento(context),
       backButton: widget.enableBackButton,
       dragDownToDismiss: widget.enableBackButton,
       horizontalPaddingConstrained: enableDoubleColumn(context) == false,
@@ -107,54 +109,58 @@ class BudgetsListPageState extends State<BudgetsListPage> {
                 if (analise != null) analise,
               ]);
             }
-            Widget item(int i) => EntradaSuave(
-                  key: ValueKey(orcamentos[i].budgetPk),
-                  indice: i,
+            // O Geral abre a tela; sem ele, o primeiro da ordem do usuário.
+            final principal = orcamentos
+                    .where((b) => b.budgetPk == mbOrcamentoGeralPk)
+                    .firstOrNull ??
+                orcamentos.first;
+            final outros = orcamentos.where((b) => b != principal).toList();
+            Widget item(Budget b, {bool compacto = true}) => EntradaSuave(
+                  key: ValueKey(b.budgetPk),
+                  indice: orcamentos.indexOf(b),
                   animar: DateTime.now().difference(_aberta) <
                       const Duration(milliseconds: 600),
-                  child: BudgetContainer(budget: orcamentos[i]),
+                  child: BudgetContainer(budget: b, compacto: compacto),
                 );
+            List<Widget> grade(String titulo, bool renda) {
+              final filhos = [
+                for (final b in outros)
+                  if (b.income == renda) item(b)
+              ];
+              return filhos.isEmpty
+                  ? const []
+                  : [TituloBento(titulo), GradeBento(filhos: filhos)];
+            }
+
             final paraLimites = orcamentoParaSugerirLimites(orcamentos);
-            final lista = SliverPadding(
-              padding:
-                  const EdgeInsetsDirectional.symmetric(vertical: 4, horizontal: 13),
-              sliver: enableDoubleColumn(context)
-                  ? SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 600,
-                        mainAxisExtent: 238,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => item(i),
-                        childCount: orcamentos.length,
-                      ),
-                    )
-                  : SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => Padding(
-                          padding: const EdgeInsetsDirectional.only(bottom: 12),
-                          child: item(i),
-                        ),
-                        childCount: orcamentos.length,
+            return MultiSliver(children: [
+              SliverToBoxAdapter(
+                child: Align(
+                  alignment: AlignmentDirectional.topStart,
+                  child: ConstrainedBox(
+                    // Computador: mesma largura máxima da análise.
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(13, 4, 13, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          item(principal, compacto: false),
+                          ...grade('Limites', false),
+                          ...grade('Para guardar', true),
+                          if (paraLimites != null) ...[
+                            const SizedBox(height: 10),
+                            AtalhoSugerirLimites(
+                                onTap: () =>
+                                    abrirSugestaoLimites(context, paraLimites)),
+                          ],
+                        ],
                       ),
                     ),
-            );
-            if (paraLimites == null) {
-              return MultiSliver(children: [if (analise != null) analise, lista]);
-            }
-            return MultiSliver(children: [
-              if (analise != null) analise,
-              lista,
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 13),
-                  child: AtalhoSugerirLimites(
-                      onTap: () => abrirSugestaoLimites(context, paraLimites)),
+                  ),
                 ),
               ),
+              if (analise != null) analise,
             ]);
           },
         ),
@@ -188,9 +194,8 @@ class AtalhoSugerirLimites extends StatelessWidget {
       button: true,
       child: ToqueEscala(
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 14, 12),
-          decoration: cartaoPlano(e),
+        child: CartaoBento(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 14),
           child: Row(children: [
             Icon(Icons.tune_rounded, size: 20, color: e.acc),
             const SizedBox(width: 12),

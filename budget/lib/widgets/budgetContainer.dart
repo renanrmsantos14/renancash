@@ -249,12 +249,16 @@ class SeloRitmo extends StatelessWidget {
     required this.hoje,
     this.renda = false,
     this.formatar,
+    this.faixa,
   });
 
   final double gasto, limite;
   final double? hoje;
   final bool renda;
   final FormatarDinheiro? formatar;
+
+  /// Lista de orçamentos: vira uma faixa da largura do cartão, com este texto depois do ritmo.
+  final String? faixa;
 
   @override
   Widget build(BuildContext context) {
@@ -276,8 +280,20 @@ class SeloRitmo extends StatelessWidget {
         : acima == renda
             ? (e.pos.withOpacity(.14), e.pos)
             : (e.warnbg, e.warntx);
+    final semSeta = texto.replaceAll('▲ ', '').replaceAll('▼ ', '');
+    if (faixa != null) {
+      return CartaoBento(
+        cor: fundo,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Text('$semSeta · $faixa',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EdTexto.rotulo(context).copyWith(
+                color: letra, fontWeight: FontWeight.w500, fontSize: 13)),
+      );
+    }
     return Semantics(
-      label: texto.replaceAll('▲ ', '').replaceAll('▼ ', ''),
+      label: semSeta,
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -301,11 +317,15 @@ class _TresBlocos extends StatelessWidget {
     required this.aVencer,
     required this.renda,
     this.formatar,
+    this.plano = false,
   });
 
   final double gasto, limite, aVencer;
   final bool renda;
   final FormatarDinheiro? formatar;
+
+  /// Lista de orçamentos: só rótulo e valor, sem caixa nem quadradinho de cor.
+  final bool plano;
 
   @override
   Widget build(BuildContext context) {
@@ -331,30 +351,35 @@ class _TresBlocos extends StatelessWidget {
               label: '${blocos[i].$1} ${dinheiro(blocos[i].$2)}',
               excludeSemantics: true,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: e.bg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: e.line),
-                ),
+                padding: plano
+                    ? null
+                    : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: plano
+                    ? null
+                    : BoxDecoration(
+                        color: e.bg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: e.line),
+                      ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: blocos[i].$3,
-                            borderRadius: BorderRadius.circular(2),
-                            border: blocos[i].$4
-                                ? Border.all(color: e.mu.withOpacity(.4))
-                                : null,
+                        if (!plano)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsetsDirectional.only(end: 6),
+                            decoration: BoxDecoration(
+                              color: blocos[i].$3,
+                              borderRadius: BorderRadius.circular(2),
+                              border: blocos[i].$4
+                                  ? Border.all(color: e.mu.withOpacity(.4))
+                                  : null,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
                         Flexible(
                           child: Text(blocos[i].$1,
                               maxLines: 1,
@@ -382,7 +407,8 @@ class _TresBlocos extends StatelessWidget {
   }
 }
 
-/// Cartão da lista de orçamentos: nome e selo de ritmo, depois o resumo.
+/// Cartão da lista de orçamentos. O principal ocupa a largura toda (valor grande,
+/// barra, gasto/a vencer/livre e a faixa de ritmo); [compacto] cabe em meia largura.
 class CartaoOrcamento extends StatelessWidget {
   const CartaoOrcamento({
     super.key,
@@ -395,6 +421,7 @@ class CartaoOrcamento extends StatelessWidget {
     this.diasRestantes,
     this.aVencer = 0,
     this.hoje,
+    this.compacto = false,
     this.onTap,
     this.onLongPress,
   });
@@ -403,59 +430,151 @@ class CartaoOrcamento extends StatelessWidget {
   final Color cor;
   final double gasto, limite, aVencer;
   final double? hoje;
-  final bool renda;
+  final bool renda, compacto;
   final int? diasRestantes;
   final VoidCallback? onTap, onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final e = cores(context);
-    final cartao = Container(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 16),
-      decoration: BoxDecoration(
-        color: e.surf,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: e.line),
+    final rotulo = EdTexto.rotulo(context);
+    final restante = limite - gasto;
+    final passou = restante < 0;
+    final mostrarGasto = appStateSettings["showTotalSpentForBudget"] == true;
+    final palavra = mostrarGasto
+        ? (renda ? 'guardado' : 'gasto')
+        : renda
+            ? (passou ? 'acima da meta' : 'falta guardar')
+            : (passou ? 'acima do limite' : 'resta');
+    // Meia largura: uma palavra só, à direita do limite.
+    final curta = mostrarGasto
+        ? palavra
+        : renda
+            ? (passou ? 'acima' : 'falta')
+            : (passou ? 'estourou' : 'resta');
+    // Estouro de gasto em vermelho; poupança acima da meta em verde.
+    final corValor = !passou || mostrarGasto
+        ? null
+        : (renda ? e.pos : getColor(context, "overspentAmount"));
+    final tamanho = compacto ? 22.0 : 40.0;
+    final numero = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: ContagemValor(
+        valor: mostrarGasto ? gasto : restante.abs(),
+        // Sempre com centavos: o número não muda de formato ao terminar de contar.
+        formatar: (v) => _dinheiro(context, null, v, todasCasas: true),
+        centavosMenores: true,
+        estilo: EdTexto.numeroGrande(context).copyWith(
+            fontSize: tamanho, letterSpacing: -.03 * tamanho, color: corValor),
       ),
-      child: Column(
+    );
+    final barra = limite > 0
+        ? BarraOrcamento(
+            gasto: gasto,
+            limite: limite,
+            aVencer: aVencer,
+            hoje: hoje,
+            renda: renda,
+            alerta: passou && !renda)
+        : const MedidorEditorial(fracao: 0);
+    final ponto = Container(
+      width: 8,
+      height: 8,
+      margin: const EdgeInsetsDirectional.only(end: 8),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: cor),
+    );
+    final dias = diasRestantes;
+    final Widget cartao;
+    if (compacto) {
+      cartao = CartaoBento(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              ponto,
+              Expanded(
+                child: Text(nome,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: EdTexto.corpo(context)
+                        .copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            numero,
+            const SizedBox(height: 14),
+            barra,
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: Text(
+                    'de ${_dinheiro(context, null, limite, inteiro: true)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: rotulo),
+              ),
+              const SizedBox(width: 8),
+              Text(curta, style: rotulo),
+            ]),
+          ],
+        ),
+      );
+    } else {
+      cartao = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              // A cor do orçamento vira um ponto ao lado do nome.
-              Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsetsDirectional.only(end: 8),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: cor),
-              ),
-              Expanded(
-                child: Text(nome,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: EdTexto.corpo(context)
-                        .copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
-              ),
-              const SizedBox(width: 8),
-              SeloRitmo(
-                  gasto: gasto, limite: limite, hoje: hoje, renda: renda),
-            ],
+          CartaoBento(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  ponto,
+                  Expanded(
+                    child: Text('$nome · $palavra',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: rotulo.copyWith(fontSize: 14)),
+                  ),
+                  if (dias != null) ...[
+                    const SizedBox(width: 8),
+                    Text(dias <= 1 ? 'último dia' : '$dias dias', style: rotulo),
+                  ],
+                ]),
+                const SizedBox(height: 8),
+                numero,
+                const SizedBox(height: 14),
+                barra,
+                if (limite > 0) ...[
+                  Container(
+                      height: 1,
+                      color: e.line,
+                      margin: const EdgeInsets.symmetric(vertical: 14)),
+                  _TresBlocos(
+                      gasto: gasto,
+                      limite: limite,
+                      aVencer: aVencer,
+                      renda: renda,
+                      plano: true),
+                ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          ResumoOrcamento(
-            gasto: gasto,
-            limite: limite,
-            renda: renda,
-            periodo: periodo,
-            diasRestantes: diasRestantes,
-            aVencer: aVencer,
-            hoje: hoje,
-            mostrarGasto: appStateSettings["showTotalSpentForBudget"] == true,
-          ),
+          if (hoje != null && limite > 0) ...[
+            const SizedBox(height: 10),
+            SeloRitmo(
+                gasto: gasto,
+                limite: limite,
+                hoje: hoje,
+                renda: renda,
+                faixa: periodo),
+          ],
         ],
-      ),
-    );
+      );
+    }
     return GestureDetector(
       onLongPress: onLongPress,
       child: ToqueEscala(onTap: onTap, child: cartao),
@@ -469,10 +588,11 @@ class BudgetContainer extends StatelessWidget {
     super.key,
     required this.budget,
     this.longPressToEdit = true,
+    this.compacto = false,
   });
 
   final Budget budget;
-  final bool longPressToEdit;
+  final bool longPressToEdit, compacto;
 
   @override
   Widget build(BuildContext context) {
@@ -485,7 +605,7 @@ class BudgetContainer extends StatelessWidget {
       builder: (context, snapshot) {
         final gasto = snapshot.data;
         // Mesma altura do cartão carregado: sem salto ao chegar o total.
-        if (gasto == null) return const SizedBox(height: 230);
+        if (gasto == null) return SizedBox(height: compacto ? 129 : 232);
         return StreamBuilder<double>(
           stream: mbWatchAVencerOrcamento(budget, carteiras, periodo),
           builder: (context, aVencer) => CartaoOrcamento(
@@ -500,6 +620,7 @@ class BudgetContainer extends StatelessWidget {
             diasRestantes: diasRestantesOrcamento(periodo, agora),
             aVencer: aVencer.data ?? 0,
             hoje: fracaoDoCiclo(periodo.start, periodo.end, agora),
+            compacto: compacto,
             onTap: () => pushRoute(
                 context, BudgetPage(budgetPk: budget.budgetPk, dateForRange: agora)),
             onLongPress: longPressToEdit
