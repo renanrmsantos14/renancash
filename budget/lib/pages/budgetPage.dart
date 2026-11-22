@@ -746,9 +746,8 @@ class _BudgetPageContentState extends State<_BudgetPageContent> {
               child: Container(
                 margin: EdgeInsetsDirectional.symmetric(horizontal: 13),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: cores(context).surf,
-                  border: Border.all(color: cores(context).line),
+                  borderRadius: BorderRadius.circular(20),
+                  color: cores(context).cartao,
                 ),
                 child: BudgetLineGraph(
                   budget: widget.budget,

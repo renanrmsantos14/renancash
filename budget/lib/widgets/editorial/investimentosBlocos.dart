@@ -232,9 +232,8 @@ class _Caixa extends StatelessWidget {
 // Gráfico e Mês a mês
 
 BoxDecoration _decoracaoCartao(EditorialCores e) => BoxDecoration(
-    color: e.surf,
-    borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: e.line));
+    color: e.cartao,
+    borderRadius: BorderRadius.circular(20));
 
 class GraficoInvestimentos extends StatelessWidget {
   const GraficoInvestimentos({super.key, required this.serie, required this.hoje});
@@ -467,9 +466,8 @@ class _BlocoBancoState extends State<_BlocoBanco> {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
       decoration: BoxDecoration(
-          color: e.surf,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: e.line)),
+          color: e.cartao,
+          borderRadius: BorderRadius.circular(20)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Semantics(
           container: true,

@@ -60,9 +60,8 @@ class ResumoPeriodo extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
-              color: e.surf,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: e.line),
+              color: e.cartao,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
               children: [

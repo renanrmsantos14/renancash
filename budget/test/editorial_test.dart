@@ -86,7 +86,7 @@ void main() {
     expect(escuro.extension<EditorialCores>()!.acc, const Color(0xFF5CC783));
     expect(escuro.scaffoldBackgroundColor, const Color(0xFF0B0B0C));
     expect(temaEditorial(Brightness.light).scaffoldBackgroundColor,
-        const Color(0xFFFFFFFF));
+        const Color(0xFFF6F6F5));
   });
 
   testWidgets('ContagemValor chega ao texto final após 900ms', (t) async {

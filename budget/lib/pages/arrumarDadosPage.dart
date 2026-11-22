@@ -194,9 +194,8 @@ class _ArrumarDadosState extends State<ArrumarDados> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: e.surf,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: e.line),
+              color: e.cartao,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               children: [
@@ -296,9 +295,8 @@ class _Item extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: e.surf,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: e.line),
+        color: e.cartao,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(titulo, style: EdTexto.h2(context)),
@@ -326,9 +324,8 @@ class _Resultado extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: e.surf,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: e.line),
+        color: e.cartao,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         p.vazio

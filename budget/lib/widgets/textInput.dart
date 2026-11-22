@@ -152,7 +152,7 @@ class TextInput extends StatelessWidget {
           decoration: BoxDecoration(
             color: bubbly == false
                 ? Colors.transparent
-                : backgroundColor ?? cores(context).surf,
+                : backgroundColor ?? cores(context).cartao,
             borderRadius: borderRadius ?? BorderRadiusDirectional.circular(12),
           ),
           child: Center(

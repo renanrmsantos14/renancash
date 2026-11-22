@@ -27,7 +27,7 @@ description: "Verifica o tema Editorial (modos claro/escuro e 4 acentos), a tela
 - Computador (≥ 1100 px): "Nova transação" no topo da lateral abre o formulário na coluna 3 (`painelTransacao.dart`); sem botão flutuante. Transações vira tabela (`transacoesDesktop.dart`): clique seleciona e abre o detalhe, 2º clique em até 500 ms ou "Editar" abre o formulário. Teste: `flutter test test/desktop_fluxos_test.dart`.
 - Formulário: Enter salva (uma vez só), Esc fecha; com alteração pede "Descartar alterações?"; "1.500" = 1500; transferência/correção de saldo abre a página completa (atualiza o par); edição relê a transação antes de salvar.
 - No `shot.mjs`, o Tab do Playwright sai do campo oculto do Flutter web: clique nos campos por posição; categoria se escolhe digitando + seta + Enter.
-- Visual plano: `boxShadowGeneral`, `boxShadowSharp` e `boxShadowCategoryPercent` retornam vazio; cartões se separam por `surf` e borda.
+- Visual plano: `boxShadowGeneral`, `boxShadowSharp` e `boxShadowCategoryPercent` retornam vazio; padrão Bento em todas as telas: o tema usa `cores().fundo` como fundo (claro `#F6F6F5`, escuro `#0B0B0C`) e os cartões usam `cores().cartao` (claro branco, escuro `#151516`), raio 20–22, sem borda.
 - Placeholder de lista vazia (`AddButton` com altura > 80) é uma linha compacta de 56 px com "+ Adicionar …"; empréstimos mostram "add-loan".
 - Orçamento sem dados não dá para criar pelo `shot.mjs` com estabilidade (o formulário depende de toques por coordenada); confira o cartão no app pareado ou com o modo demonstração do onboarding.
 - Cabeçalho de toda tela é compacto (56 px, título na linha do voltar); telas com subtítulo usam 110. Nada de faixa vazia no topo (preferência explícita do Renan).

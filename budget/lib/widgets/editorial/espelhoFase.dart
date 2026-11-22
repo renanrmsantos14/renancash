@@ -63,9 +63,9 @@ class EspelhoFase extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: Material(
-                  color: cores(context).surf,
+                  color: cores(context).cartao,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12), side: BorderSide(color: cores(context).line)),
+                      borderRadius: BorderRadius.circular(20)),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(

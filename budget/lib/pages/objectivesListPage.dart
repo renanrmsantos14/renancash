@@ -442,9 +442,8 @@ Widget iconeMeta(Objective objective,
     );
 
 BoxDecoration cartaoPlano(EditorialCores e) => BoxDecoration(
-      color: e.surf,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: e.line),
+      color: e.cartao,
+      borderRadius: BorderRadius.circular(20),
     );
 
 /// Cartão de meta/empréstimo sem acesso ao banco: valor em destaque, medidor

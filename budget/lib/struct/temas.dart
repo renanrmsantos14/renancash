@@ -124,7 +124,7 @@ AppColors coresRenanCash(TemaPronto t) {
     "warningOrange": claro ? const Color(0xFF9A5B00) : const Color(0xFFE0A15E),
     "starYellow": claro ? const Color(0xFFB98900) : const Color(0xFFFFD54F),
     "dividerColor": e.line,
-    "standardContainerColor": e.surf,
+    "standardContainerColor": e.cartao,
   });
 }
 
@@ -148,7 +148,7 @@ ThemeData temaFlutter(TemaPronto t) {
     useMaterial3: true,
     fontFamily: 'Geist',
     fontFamilyFallback: const ['Inter'],
-    scaffoldBackgroundColor: e.bg,
+    scaffoldBackgroundColor: e.fundo,
     // fromSeed preenche os papéis de container (primaryContainer, secondaryContainer…)
     // usados pelas telas herdadas do Cashew; sem isso viram primário/branco.
     colorScheme: ColorScheme.fromSeed(seedColor: e.acc, brightness: b).copyWith(
@@ -164,7 +164,7 @@ ThemeData temaFlutter(TemaPronto t) {
       // `background` é deprecado, mas as telas herdadas do Cashew ainda o usam
       // (cabeçalhos); sem isso ficaria a cor gerada pelo fromSeed.
       // ignore: deprecated_member_use
-      background: e.bg,
+      background: e.fundo,
       // ignore: deprecated_member_use
       onBackground: e.tx,
       surfaceTint: Colors.transparent,
@@ -227,7 +227,7 @@ ThemeData temaFlutter(TemaPronto t) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: e.surf,
+      fillColor: e.cartao,
       border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: e.line)),

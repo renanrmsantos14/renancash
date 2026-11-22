@@ -1,5 +1,5 @@
 import 'package:budget/colors.dart';
-import 'package:budget/functions.dart';
+import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/settings.dart';
 import 'package:budget/widgets/settingsContainers.dart';
 import 'package:budget/widgets/tappable.dart';
@@ -44,8 +44,7 @@ class OutlinedButtonStacked extends StatelessWidget {
   final bool showToggleSwitch;
   @override
   Widget build(BuildContext context) {
-    double borderRadiusValue =
-        borderRadius ?? (getPlatform() == PlatformOS.isIOS ? 10 : 15);
+    double borderRadiusValue = borderRadius ?? 20;
     return Row(
       children: [
         Expanded(
@@ -161,21 +160,22 @@ class OutlinedContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (enabled == false) return child;
-    double borderRadiusValue =
-        borderRadius ?? (getPlatform() == PlatformOS.isIOS ? 10 : 15);
+    double borderRadiusValue = borderRadius ?? 20;
     return AnimatedContainer(
       duration: Duration(milliseconds: 250),
       decoration: BoxDecoration(
         border: Border.all(
           color: borderColor ??
-              (appStateSettings["materialYou"]
-                  ? Theme.of(context).colorScheme.secondary.withOpacity(0.5)
-                  : getColor(context, "lightDarkAccentHeavy")),
+              (!filled
+                  ? Colors.transparent
+                  : appStateSettings["materialYou"]
+                      ? Theme.of(context).colorScheme.secondary.withOpacity(0.5)
+                      : getColor(context, "lightDarkAccentHeavy")),
           width: 2,
         ),
         color: filled == true
             ? Theme.of(context).colorScheme.secondary.withOpacity(0.2)
-            : Colors.transparent,
+            : corCartaoBento(context),
         borderRadius: BorderRadiusDirectional.circular(borderRadiusValue),
       ),
       child: clip
