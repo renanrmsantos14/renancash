@@ -31,7 +31,7 @@ async function ambiente(transacoes, espelho = false) {
       const linhas = registros.map((r) => r.tabela === "categorias"
         ? { tabela: "categories", pk: r.id, dados: { name: r.dados.nome, income: r.dados.tipo === "receita" ? 1 : 0 }, updated_at: r.updated_at, deleted_at: r.deleted_at }
         : r.tabela === "ajustes"
-          ? { tabela: "transactions", pk: `mb:${r.id}`, dados: { category_fk: r.dados.categoria_id, type: 0 }, updated_at: r.updated_at, deleted_at: r.deleted_at }
+          ? { tabela: "transactions", pk: `mb:${r.id}`, dados: { category_fk: r.dados.categoria_id, type: 0, ...(r.dados.divida_id ? { objective_loan_fk: r.dados.divida_id } : {}) }, updated_at: r.updated_at, deleted_at: r.deleted_at }
           : { tabela: `mb_${r.tabela}`, pk: r.id, dados: r.dados == null ? null : { pk: r.id, dados: JSON.stringify(r.dados) }, updated_at: r.updated_at, deleted_at: r.deleted_at });
       const r = await amb.pedir("/api/espelho", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ linhas }) });
       const corpo = await r.json();
@@ -182,6 +182,14 @@ for (const espelho of MODOS) test(`empréstimo antigo sem pessoa (categoria Empr
     decisao("u1", "categoria", { categoria_id: "cat-outra", recategorizado: 1 })]);
   c = await ciclo(A);
   assert.deepEqual(c.revisar.filter((i) => i.tipo === "emprestimo_sem_pessoa"), []);
+});
+
+for (const espelho of MODOS) test(`empréstimo já ligado a um empréstimo do app (divida_id) não volta à fila pedindo a pessoa ${nomeDoModo(espelho)}`, async () => {
+  const { A, ciclo, enviar } = await ambiente([...salarios, ["p1", 6, "Pix enviado: Carlos Lima", -110], ["p2", 5, "Pix enviado: Carlos Lima", -40]], espelho);
+  const ajuste = (id, dados) => ({ tabela: "ajustes", id, updated_at: new Date().toISOString(), deleted_at: null, dados });
+  await enviar(A, [categoriaEmprestimo, ajuste("p1", { categoria_id: "cat-emp", divida_id: "pai" }), ajuste("p2", { categoria_id: "cat-emp" })]);
+  const c = await ciclo(A);
+  assert.deepEqual(c.revisar.filter((i) => i.tipo === "emprestimo_sem_pessoa").map((i) => i.tx_id), ["p2"]);
 });
 
 for (const espelho of MODOS) test(`Pix que paga empréstimo e passa do saldo: a sobra para reembolso abate só ela do gasto ${nomeDoModo(espelho)}`, async () => {

@@ -115,14 +115,18 @@ export function filaRevisar({ transacoes, contas, config, resumo, hoje, revisoes
   return fila.concat(itens, emprestimosSemPessoa({ transacoes, cartoes, revisoes, registros }));
 }
 
+// Transações ligadas no app a um empréstimo (divida_id no ajuste).
+export const ligadasAEmprestimo = (registros) => new Set(registros.filter((r) => r.tabela === "ajustes" && r.dados?.divida_id).map((r) => r.id));
+
 // Empréstimos que já existem sem pessoa: decisão "emprestimo" sem `pessoa` ou saída na categoria "Empréstimo" (categoria da decisão,
 // do ajuste, de regra ou lembrada do destinatário) sem decisão "emprestimo" nem `recategorizado`. Voltam à fila pedindo a pessoa.
 function emprestimosSemPessoa({ transacoes, cartoes, revisoes, registros }) {
   if (!revisoes) return [];
   const ids = categoriasEmprestimo(registros);
   const ctx = contextoDeRegistros(registros);
+  const ligadas = ligadasAEmprestimo(registros); // a pessoa é a do empréstimo: não há o que perguntar
   const achados = transacoes.filter((t) => {
-    if (t.amount >= 0 || t.scheduled || cartoes.has(t.account_id) || t.id.startsWith("perdao:")) return false;
+    if (t.amount >= 0 || t.scheduled || cartoes.has(t.account_id) || t.id.startsWith("perdao:") || ligadas.has(t.id)) return false;
     const dec = revisoes.decisoes.get(t.id);
     if (dec?.resposta === "emprestimo") return !dec.pessoa;
     if (dec?.recategorizado) return false;

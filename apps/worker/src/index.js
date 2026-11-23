@@ -3,7 +3,7 @@ import { renderSVG } from "uqr";
 import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, mapearEmprestimos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
-import { lerRevisoes, aplicarRevisoes, filaRevisar, transacoesDePerdao } from "./revisao.js";
+import { lerRevisoes, aplicarRevisoes, filaRevisar, transacoesDePerdao, ligadasAEmprestimo } from "./revisao.js";
 import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasEmprestimos, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido, apagarTransacoes, idsRemovidos } from "./pluggy.js";
 import { enviarPush } from "./push.js";
@@ -310,7 +310,7 @@ async function baseCiclo(env) {
   ]);
   const { config, registros } = lido;
   // Transação ligada a empréstimo (divida_id no ajuste) não é gasto, como no app (onlyShowIfOnlyExpenseAndIncome): o "para gastar" fecha igual nos dois.
-  const comDivida = new Set(registros.filter((r) => r.tabela === "ajustes" && r.dados?.divida_id).map((r) => r.id));
+  const comDivida = ligadasAEmprestimo(registros);
   if (comDivida.size) tx.results = tx.results.map((t) => (comDivida.has(t.id) ? { ...t, ajuste_gasto: 0 } : t));
   // Conta e cartão do Santander ficam fora de tudo que sai daqui (ciclo, alertas, resumo semanal, "disponível").
   const [semIgnorar, contasUsadas] = semIgnoradas(tx.results, contas.results);
