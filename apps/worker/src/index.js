@@ -13,6 +13,8 @@ import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
 import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
 import { sugerir, entender } from "./ia.js";
 import { EspelhoHub as HubBase } from "./hub.js";
+import { registrarCliente, autorizar, trocarToken, acessoValido, metadadosRecurso, metadadosServidor } from "./oauth.js";
+import { tratarMcp, aplicarVinculadas, alertasAnotacoes } from "./mcp.js";
 import { avisar, configDe, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
 // O Durable Object também roda a sincronização pedida pelo webhook (alarme): fora do limite de ~30 s do waitUntil.
@@ -56,6 +58,7 @@ export default {
       if (caminho === "/api/login" && request.method === "POST") resp = await entrar(request, env, url);
       else if (caminho === "/api/app/parear" && request.method === "POST") resp = await parearComSenha(request, env, url);
       else if (caminho === "/api/pluggy/webhook" && request.method === "POST") resp = await webhookPluggy(request, env, url, ctx);
+      else if (ROTAS_MCP.has(caminho)) resp = await rotaMcp(request, env, url, caminho, ctx); // OAuth próprio, sem cookie
       else if (PUBLICO.test(caminho)) resp = await env.ASSETS.fetch(request);
       else if (caminho === "/api/app/transacoes" && request.method === "GET") resp = await appTransacoes(request, env, url); // Bearer, sem cookie
       else if (ROTAS_ESPELHO.has(caminho)) resp = espelhoLigado(env) ? await rotaEspelho(request, env, url, caminho, ctx) : json({ erro: "Rota não encontrada" }, 404);
@@ -90,7 +93,7 @@ export default {
         resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
       else resp = await env.ASSETS.fetch(request);
-      return resp.status === 101 ? resp : seguranca(resp); // upgrade de WebSocket: a resposta do DO não pode ser recriada
+      return resp.status === 101 ? resp : seguranca(resp, caminho === "/oauth/authorize" ? CSP_AUTORIZAR : CSP_PAINEL); // upgrade de WebSocket: a resposta do DO não pode ser recriada
     } catch (e) {
       console.error("Erro na requisição", caminho, e?.stack || e);
       return seguranca(json({ erro: String(e?.message || e) }, 500));
@@ -163,16 +166,44 @@ async function parearComSenha(request, env, url) {
 
 // Limite por IP (binding de rate limit): 5 tentativas por minuto, além da espera de 1 s por erro.
 async function conferirSenha(request, env) {
-  const ip = request.headers.get("cf-connecting-ip") || "local";
-  if (env.LIMITE_LOGIN && !(await env.LIMITE_LOGIN.limit({ key: ip })).success) {
-    return { erro: json({ erro: "Muitas tentativas. Espere 1 minuto." }, 429) };
-  }
   const corpo = await request.json().catch(() => null);
-  if (!(await iguais(typeof corpo?.senha === "string" ? corpo.senha : "", env.APP_PASSWORD))) {
-    await new Promise((r) => setTimeout(r, 1000)); // freia tentativa em série
-    return { erro: json({ erro: "Senha incorreta" }, 401) };
+  const negada = await senhaErrada(request, env, typeof corpo?.senha === "string" ? corpo.senha : "");
+  return negada ? { erro: json({ erro: negada.erro }, negada.status) } : { corpo };
+}
+
+// null = senha certa; senão { status, erro }. Usado pelo login, pelo pareamento e pela autorização do conector MCP.
+async function senhaErrada(request, env, senha) {
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (env.LIMITE_LOGIN && !(await env.LIMITE_LOGIN.limit({ key: ip })).success) return { status: 429, erro: "Muitas tentativas. Espere 1 minuto." };
+  if (await iguais(senha, env.APP_PASSWORD)) return null;
+  await new Promise((r) => setTimeout(r, 1000)); // freia tentativa em série
+  return { status: 401, erro: "Senha incorreta" };
+}
+
+// ---------- Conector MCP (claude.ai) ----------
+
+const ROTAS_MCP = new Set(["/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-authorization-server", "/oauth/register", "/oauth/authorize", "/oauth/token"]);
+
+async function rotaMcp(request, env, url, caminho, ctx) {
+  const rota = `${request.method} ${caminho}`;
+  if (caminho.startsWith("/.well-known/oauth-protected-resource")) return json(metadadosRecurso(url.origin));
+  if (rota === "GET /.well-known/oauth-authorization-server") return json(metadadosServidor(url.origin));
+  if (rota === "POST /oauth/register") {
+    // Registro é público: o limite por IP (chave própria, não gasta as tentativas de senha) evita encher mcp_clientes.
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    if (env.LIMITE_LOGIN && !(await env.LIMITE_LOGIN.limit({ key: "registro:" + ip })).success) return json({ error: "slow_down", error_description: "Muitos registros. Espere 1 minuto." }, 429);
+    return registrarCliente(request, env.DB);
   }
-  return { corpo };
+  if (caminho === "/oauth/authorize") return autorizar(request, env.DB, url, (senha) => senhaErrada(request, env, senha));
+  if (rota === "POST /oauth/token") return trocarToken(request, env.DB);
+  if (caminho !== "/mcp") return json({ erro: "Método não permitido" }, 405);
+  if (!(await acessoValido(request, env.DB))) {
+    return json({ erro: "Token necessário" }, 401, { "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"` });
+  }
+  return tratarMcp(request, env, ctx, {
+    baseCiclo: () => baseCiclo(env),
+    atualizar: async () => (await atualizarAgora(env, "app", ctx)).json(), // mesmo limite de 5 min do botão do app
+  });
 }
 
 // Comparação em tempo constante (compara os hashes, que têm o mesmo tamanho).
@@ -191,6 +222,8 @@ function mesmaOrigem(request, url) {
 }
 
 const CSP_PAINEL = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+// O formulário de autorização do MCP posta para cá e o 302 segue para o callback do cliente: form-action cobre os destinos aceitos no registro.
+const CSP_AUTORIZAR = CSP_PAINEL.replace("form-action 'self'", "form-action 'self' https://claude.ai https://claude.com http://localhost:* http://127.0.0.1:*");
 const CSP_APP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 // Com o espelho ligado o app abre um WebSocket na própria origem; 'self' não cobre wss: em todos os navegadores.
@@ -428,6 +461,7 @@ async function avaliarAlertas(env) {
     ...alertasConsentimento({ conexoes, hoje: b.hoje }),
     ...alertasEmprestimos({ emprestimos }),
     ...alertasRevisao(b),
+    ...(await alertasAnotacoes(db)),
   ];
   await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);
   await enviarPendentes(env);
@@ -492,8 +526,11 @@ async function rotaEspelho(request, env, url, caminho, ctx) {
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/espelho") {
-    const r = await enviarEspelho(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    const corpo = await request.json().catch(() => null);
+    const r = await enviarEspelho(env.DB, corpo, agora(), aparelho);
     if (r.gravadas) avisarClientes({ tipo: "mudou", cursor: r.cursor, aparelho }); // o cursor é só uma dica: o cliente puxa pelo próprio
+    // Transação do banco recém-importada pelo app pode ser a de uma anotação já confirmada no Claude.
+    if (r.gravadas && corpo.linhas.some((l) => l?.tabela === "transactions" && String(l.pk).startsWith("mb:"))) ctx.waitUntil(aplicarVinculadas(env, ctx).catch((e) => console.error("Anotações vinculadas", e?.stack || e)));
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/espelho/semear") {

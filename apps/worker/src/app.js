@@ -5,7 +5,8 @@ const REGEX_TOKEN = /^mb_[A-Za-z0-9_-]{43}$/; // 32 bytes em base64url (43 chars
 
 export const base64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-export const gerarToken = () => "mb_" + base64url(crypto.getRandomValues(new Uint8Array(32)));
+export const gerarToken = (prefixo = "mb_") => prefixo + base64url(crypto.getRandomValues(new Uint8Array(32)));
+export const agoraS = () => Math.floor(Date.now() / 1000);
 
 export async function hashToken(token) {
   const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
