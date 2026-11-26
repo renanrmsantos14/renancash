@@ -2,6 +2,7 @@ import 'package:budget/struct/mbSync/notificacoes.dart';
 import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
+import 'package:budget/pages/feitoPelaIaPage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/notificationsGlobal.dart';
@@ -48,6 +49,12 @@ Future<String?> initializeNotifications() async {
 onSelectNotification(NotificationResponse notificationResponse) async {
   // Alerta do Meu Banco: o botão responde a fila; o toque simples só abre o app na Início.
   if (notificationResponse.payload?.startsWith(mbPrefixoPayload) == true) {
+    // Toque (sem botão) num alerta `ia:`: abre "Feito pela IA".
+    if ((notificationResponse.actionId ?? '').isEmpty && mbPayloadEhIa(notificationResponse.payload)) {
+      notificationPayload = notificationResponse.payload;
+      runNotificationPayLoadsNoContext();
+      return;
+    }
     await mbTratarRespostaNotificacao(notificationResponse);
     return;
   }
@@ -73,6 +80,11 @@ Future<bool> runNotificationPayLoads(context) async {
   print("Notification payload: " + notificationPayload.toString());
   if (kIsWeb) return false;
   if (notificationPayload == null) return false;
+  if (mbPayloadEhIa(notificationPayload)) {
+    notificationPayload = "";
+    pushRoute(context, const FeitoPelaIaPage());
+    return true;
+  }
   if (notificationPayload == "addTransaction") {
     // Add a delay so the keyboard can focus
     await Future.delayed(Duration(milliseconds: 50), () async {

@@ -29,6 +29,23 @@ const Map<String, String> _rotulos = {
 String mbPayloadAlerta(Map<String, dynamic> n) =>
     mbPrefixoPayload + jsonEncode({'chave': '${n['chave']}', if (n['item'] != null) 'item': n['item']});
 
+/// Payload do alerta (`mb:{chave, item?}`) decodificado; null se não for do Meu Banco ou vier malformado.
+Map<String, dynamic>? mbDecodificarPayload(String? payload) {
+  if (payload == null || !payload.startsWith(mbPrefixoPayload)) return null;
+  try {
+    final j = jsonDecode(payload.substring(mbPrefixoPayload.length));
+    return j is Map ? Map<String, dynamic>.from(j) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Toque simples (sem botão) num alerta de classificação da IA: o Worker manda `item.tipo == 'ia_aplicadas'`; abre "Feito pela IA".
+bool mbPayloadEhIa(String? payload) {
+  final item = mbDecodificarPayload(payload)?['item'];
+  return item is Map && item['tipo'] == 'ia_aplicadas';
+}
+
 /// Respostas que pedem uma escolha (gasto, pessoa ou empréstimo): o botão abre o app em vez de responder sozinho.
 const Set<String> _pedemOApp = {'reembolso', 'emprestimo', 'devolucao'};
 
@@ -47,15 +64,8 @@ List<AndroidNotificationAction> mbAcoesDoAlerta(Map<String, dynamic> n) {
 /// saiu da fila, resposta que pede o app).
 Future<bool> mbResponderPelaNotificacao(String? payload, String? acao,
     {MbCliente? clienteParaTeste}) async {
-  if (payload == null || !payload.startsWith(mbPrefixoPayload) || acao == null || acao.isEmpty) return false;
-  if (_pedemOApp.contains(acao)) return false;
-  final Object? json;
-  try {
-    json = jsonDecode(payload.substring(mbPrefixoPayload.length));
-  } catch (_) {
-    return false;
-  }
-  final item = MbItemRevisao.tentar(json is Map ? json['item'] : null);
+  if (acao == null || acao.isEmpty || _pedemOApp.contains(acao)) return false;
+  final item = MbItemRevisao.tentar(mbDecodificarPayload(payload)?['item']);
   if (item == null || !item.respostas.contains(acao)) return false;
   // O aviso chega antes da próxima sincronização: puxa o que houver (offline segue com o que tem) e só barra
   // se já existe decisão para a transação, vinda deste ou de outro aparelho.

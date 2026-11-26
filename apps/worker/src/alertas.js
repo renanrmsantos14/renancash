@@ -179,6 +179,21 @@ export function alertasRevisao({ revisar, hoje }) {
   return out;
 }
 
+// IA automática: um push só para todas as aplicações ainda não avisadas. No silêncio (22h-7h) não sai nada e nada é marcado, então
+// o que a IA aplicou à noite vira um aviso só no cron das 7h. Desfeita antes do aviso não conta. `avisadas` = ids a marcar.
+export function alertaIa({ aplicadas, agora }) {
+  if (!aplicadas.length || emSilencio(new Date(agora))) return { alertas: [], avisadas: [] };
+  const valem = aplicadas.filter((a) => a.status === "aplicada");
+  const avisadas = aplicadas.map((a) => a.tx_id);
+  if (!valem.length) return { alertas: [], avisadas };
+  const desde = valem.map((a) => a.aplicado_em).sort()[0];
+  const n = valem.length;
+  return {
+    alertas: [{ chave: `ia:${desde}`, titulo: n === 1 ? "1 gasto classificado pela IA" : `${n} gastos classificados pela IA`, corpo: "Toque para conferir ou desfazer em Feito pela IA." }],
+    avisadas,
+  };
+}
+
 // `criada` única por alerta (base + 1 ms cada): o cursor do app (criada > ?) não pula alertas além do corte do LIMIT.
 export const stmtAlertas = (db, alertas, base = Date.now()) => alertas.map((a, i) =>
   db.prepare("INSERT OR IGNORE INTO notificacoes (chave, titulo, corpo, criada) VALUES (?1, ?2, ?3, ?4)").bind(a.chave, a.titulo, a.corpo, new Date(base + i).toISOString()));

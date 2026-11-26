@@ -27,5 +27,5 @@ test("TABELAS cria toda tabela do schema.sql que não existia na base original",
   novo.exec(schema);
   const migrado = new DatabaseSync(":memory:");
   migrado.exec(TABELAS.join(" "));
-  for (const t of ["transacoes_removidas", "espelho", "espelho_meta"]) assert.deepEqual(colunasDe(migrado, t), colunasDe(novo, t), t);
+  for (const t of ["transacoes_removidas", "espelho", "espelho_meta", "ia_memoria", "ia_aplicacoes"]) assert.deepEqual(colunasDe(migrado, t), colunasDe(novo, t), t);
 });

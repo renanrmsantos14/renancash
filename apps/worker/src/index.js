@@ -4,18 +4,19 @@ import { ApiCliente } from "./api.js";
 import { bancoDoItem, desambiguar, mapearConta, mapearTransacao, avisoItem, mapearFaturas, mapearInvestimentos, mapearEmprestimos, semAplicado, aplicadoPelasMovimentacoes } from "./mapa.js";
 import { resumoCiclo, gastoPorDia, normalizar, somarDias, semIgnoradas } from "./ciclo.js";
 import { lerRevisoes, aplicarRevisoes, filaRevisar, transacoesDePerdao, ligadasAEmprestimo } from "./revisao.js";
-import { stmtAlertas, gravarAlertas, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasEmprestimos, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
+import { stmtAlertas, gravarAlertas, alertaIa, resumoSemanal, emSilencio, consumoGeral, alertasGeral, comprasNovas, alertaCompras, alertasFatura, alertasCredito, alertasConsentimento, alertasEmprestimos, alertasConexao, alertasRevisao, linhasMetas, doTipo } from "./alertas.js";
 import { REGEX_ITEM, idsConexoes, registrarItem, esquecerItem, limparRemovidas, listarConexoes, atualizarStatus, acaoWebhook, webhookValido, apagarTransacoes, idsRemovidos } from "./pluggy.js";
 import { enviarPush } from "./push.js";
 import { salvarBackup } from "./backup.js";
 import { autenticarAparelho, puxar, esperaAtualizar } from "./sync.js";
 import { CHAVE_HISTORICO, mesSP, registrarRetrato } from "./historico.js";
-import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta } from "./app.js";
+import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta, hojeSP, agoraTs, DIAS_REIMPORTAR } from "./app.js";
 import { sugerir, entender } from "./ia.js";
 import { EspelhoHub as HubBase } from "./hub.js";
 import { registrarCliente, autorizar, trocarToken, acessoValido, metadadosRecurso, metadadosServidor } from "./oauth.js";
 import { tratarMcp, aplicarVinculadas, alertasAnotacoes } from "./mcp.js";
-import { avisar, configDe, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
+import { decidirIa, aplicarPendentesIa, aprenderIa, estadoMb, listarAplicadas, desfazerIa, importarMemoria, relatorioIa, naoAvisadasIa, stmtAvisadasIa } from "./iaAuto.js";
+import { avisar, configDe, editadaNoApp, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
 // O Durable Object também roda a sincronização pedida pelo webhook (alarme): fora do limite de ~30 s do waitUntil.
 // Com a trava ocupada tenta de novo a cada minuto, até a trava vencer; um pedido novo no meio reagenda e zera a contagem.
@@ -37,7 +38,6 @@ const MAX_PAGINAS = 10; // limite de segurança (subrequests do plano grátis)
 const VALIDADE_ALERTA_MS = 48 * 3600 * 1000; // alerta não enviado/entregue há mais que isso é velho demais para virar notificação
 const TRAVA_MS = 10 * 60 * 1000; // sync_log aberto há menos que isso = sincronização em andamento
 const MSG_OCUPADO = "Já existe uma atualização em andamento. Tente em alguns minutos.";
-const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso
 
 export default {
   async fetch(request, env, ctx) {
@@ -88,7 +88,7 @@ export default {
       else if (request.method === "DELETE" && idToken) resp = await revogarToken(request, env, url, idToken);
       else if (caminho === "/api/ferramentas" && request.method === "GET") {
         // Diagnóstico: testa as credenciais do Pluggy e mostra o status de cada conexão.
-        const api = await clientePluggy(env.DB, env, agora());
+        const api = await clientePluggy(env.DB, env, agoraTs());
         const itens = await Promise.all((await api.listarIds()).map((id) => api.item(id).then((i) => ({ id, conector: i.connector?.name, status: i.status, executionStatus: i.executionStatus, lastUpdatedAt: i.lastUpdatedAt }), (e) => ({ id, erro: e.message }))));
         resp = json({ itens });
       } else if (caminho.startsWith("/api/")) resp = json({ erro: "Rota não encontrada" }, 404);
@@ -107,7 +107,7 @@ export default {
     const t = new Date(evento.scheduledTime);
     const resumo = t.getUTCDay() === 0 && t.getUTCHours() === 22;
     const backup = t.getUTCHours() === 7 && env.BACKUP;
-    ctx.waitUntil(sincronizar(env, "cron").finally(async () => {
+    ctx.waitUntil(sincronizar(env, "cron", ctx).finally(async () => {
       if (resumo) await alertaSemanal(env);
       // O backup nunca derruba a sincronização: em falha, só registra o erro (sem segredos).
       if (backup) await salvarBackup(env, t).then((k) => console.log("Backup salvo", k), (e) => console.error("Backup falhou", e?.message || e));
@@ -245,9 +245,6 @@ function json(obj, status = 200, extra = {}) {
 
 // ---------- Datas ----------
 
-const agora = () => new Date().toISOString();
-const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
-
 // Segmento de URL malformado (%) vira "", que as rotas já tratam como id inválido.
 const decodificar = (segmento) => { try { return decodeURIComponent(segmento); } catch { return ""; } };
 
@@ -312,7 +309,7 @@ async function salvarAjuste(request, env, idUrl) {
   const valido = id && id.length <= 100 && (category === null || (typeof category === "string" && category && category.length <= 80)) && (gasto === null || gasto === 0 || gasto === 1);
   if (!valido) return json({ erro: "Dados inválidos" }, 400);
   // Merge-patch (RFC 7396): null remove a chave; campos gravados pelo app (ex.: nota) ficam. O painel sempre vence.
-  const ts = agora();
+  const ts = agoraTs();
   await env.DB.prepare(
     "INSERT INTO registros (tabela, id, dados, updated_at, deleted_at, server_at) VALUES ('ajustes', ?1, json_patch('{}', ?2), ?3, NULL, ?3) " +
       "ON CONFLICT(tabela, id) DO UPDATE SET dados = json_patch(COALESCE(registros.dados, '{}'), ?2), updated_at = ?3, deleted_at = NULL, server_at = ?3"
@@ -391,7 +388,7 @@ async function salvarConfig(request, env, url, ctx) {
   // senão um relógio adiantado do celular venceria a edição do painel.
   let aviso = null;
   if (await espelhoPronto(env)) {
-    const ts = agora();
+    const ts = agoraTs();
     const atuais = new Map((await env.DB.prepare("SELECT pk, updated_at FROM espelho WHERE tabela = '_config'").all()).results.map((r) => [r.pk, r.updated_at]));
     const linhas = Object.entries(novas).map(([pk, v]) => {
       const seguinte = atuais.has(pk) ? new Date(Date.parse(atuais.get(pk)) + 1).toISOString() : ts;
@@ -414,7 +411,7 @@ async function inscreverPush(request, env, url) {
   const permitido = /^https:\/\//.test(endpoint || "") || (env.PUSH_HTTP_LOCAL === "1" && /^http:\/\/localhost[:/]/.test(endpoint || ""));
   if (!permitido || endpoint.length > 1000) return json({ erro: "Endpoint inválido" }, 400);
   if (request.method === "DELETE") await env.DB.prepare("DELETE FROM push_inscricoes WHERE endpoint = ?1").bind(endpoint).run();
-  else await env.DB.prepare("INSERT OR REPLACE INTO push_inscricoes (endpoint, criada) VALUES (?1, ?2)").bind(endpoint, agora()).run();
+  else await env.DB.prepare("INSERT OR REPLACE INTO push_inscricoes (endpoint, criada) VALUES (?1, ?2)").bind(endpoint, agoraTs()).run();
   return json({ ok: true });
 }
 
@@ -432,7 +429,7 @@ async function enviarPendentes(env, ignorarSilencio = false) {
     if (status === 404 || status === 410) await env.DB.prepare("DELETE FROM push_inscricoes WHERE endpoint = ?1").bind(endpoint).run();
     else if (status >= 200 && status < 300) enviados++;
   }
-  if (enviados) await env.DB.prepare("UPDATE notificacoes SET enviada_em = ?1 WHERE enviada_em IS NULL").bind(agora()).run();
+  if (enviados) await env.DB.prepare("UPDATE notificacoes SET enviada_em = ?1 WHERE enviada_em IS NULL").bind(agoraTs()).run();
   return enviados;
 }
 
@@ -445,11 +442,11 @@ const lerSnapshot = async (db, key, vazio) => {
 async function avaliarAlertas(env) {
   const db = env.DB;
   const b = await baseCiclo(env);
-  const [avisos, vistas, avisadas, conexoes] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", []),
-    db.prepare("SELECT id, conector, consentimento_expira FROM pluggy_items WHERE removido IS NULL AND consentimento_expira IS NOT NULL").all().then((r) => r.results)]);
+  const [avisos, vistas, avisadas, conexoes, anotacoes, aplicadasIa] = await Promise.all([lerSnapshot(db, "avisos", []), lerSnapshot(db, "compras_vistas", null), lerSnapshot(db, "conexoes_avisadas", []),
+    db.prepare("SELECT id, conector, consentimento_expira FROM pluggy_items WHERE removido IS NULL AND consentimento_expira IS NOT NULL").all().then((r) => r.results), alertasAnotacoes(db), naoAvisadasIa(db)]);
   const emprestimos = (await db.prepare("SELECT data FROM snapshots WHERE key LIKE 'emprestimos:%'").all()).results
     .flatMap((s) => { try { return JSON.parse(s.data) || []; } catch { return []; } });
-  const ts = agora();
+  const ts = agoraTs();
   const geral = consumoGeral(b);
   const { novas, ids } = comprasNovas({ ...b, vistas });
   const alertas = [
@@ -461,15 +458,18 @@ async function avaliarAlertas(env) {
     ...alertasConsentimento({ conexoes, hoje: b.hoje }),
     ...alertasEmprestimos({ emprestimos }),
     ...alertasRevisao(b),
-    ...(await alertasAnotacoes(db)),
+    ...anotacoes,
   ];
-  await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id))]);
+  const ia = alertaIa({ aplicadas: aplicadasIa, agora: ts });
+  alertas.push(...ia.alertas);
+  await db.batch([...stmtAlertas(db, alertas), stmtSnapshot(db, "compras_vistas", ids), stmtSnapshot(db, "conexoes_avisadas", avisos.map((a) => a.item_id)),
+    ...(ia.avisadas.length ? [stmtAvisadasIa(db, ia.avisadas, ts)] : [])]);
   await enviarPendentes(env);
 }
 
 async function alertaSemanal(env) {
   const b = await baseCiclo(env);
-  const conexoes = await idsConexoes(env.DB, env, agora());
+  const conexoes = await idsConexoes(env.DB, env, agoraTs());
   const { results } = await env.DB.prepare("SELECT key, data FROM snapshots WHERE key LIKE 'investimentos:%'").all();
   const saldos = new Map(results.filter((r) => conexoes.includes(r.key.slice("investimentos:".length))).flatMap((r) => JSON.parse(r.data) || []).map((i) => [i.id, i.saldo]));
   const metas = linhasMetas({ metas: doTipo(b.registros, "metas"), saldos, hoje: b.hoje });
@@ -479,7 +479,7 @@ async function alertaSemanal(env) {
 
 async function testePush(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
-  await gravarAlertas(env.DB, [{ chave: "teste:" + agora(), titulo: "Teste do RenanCash", corpo: "As notificações estão funcionando." }]);
+  await gravarAlertas(env.DB, [{ chave: "teste:" + agoraTs(), titulo: "Teste do RenanCash", corpo: "As notificações estão funcionando." }]);
   return json({ ok: true, enviados: await enviarPendentes(env, true) });
 }
 
@@ -487,14 +487,15 @@ async function entregarNotificacoes(request, env, url) {
   if (!mesmaOrigem(request, url)) return json({ erro: "Origem não permitida" }, 403);
   const { results } = await env.DB.prepare(
     "UPDATE notificacoes SET entregue_em = ?1 WHERE chave IN (SELECT chave FROM notificacoes WHERE enviada_em IS NOT NULL AND entregue_em IS NULL AND criada > ?2 ORDER BY criada DESC LIMIT 20) RETURNING chave, titulo, corpo"
-  ).bind(agora(), validadeAlerta()).all();
+  ).bind(agoraTs(), validadeAlerta()).all();
   return json({ notificacoes: results });
 }
 
 // ---------- App Android (token de aparelho) ----------
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
-const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender"]);
+const ROTAS_IA = new Set(["/api/ia/aplicadas", "/api/ia/desfazer", "/api/ia/memoria", "/api/ia/relatorio"]);
+const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender", ...ROTAS_IA]);
 const MAX_CORPO_IA = 64 * 1024; // contexto + lote pequeno cabem com folga
 const ROTAS_ESPELHO = new Set(["/api/espelho", "/api/espelho/semear", "/api/espelho/ws"]);
 const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
@@ -511,7 +512,7 @@ async function identificar(request, env, url, ts) {
 // Espelho completo (atrás da flag ESPELHO). O semeio só vale com token de aparelho; o WebSocket do navegador (cookie) exige Origin igual.
 // A identidade do aparelho (desempate do LWW, `mudou`) é o id do token; a sessão do painel é "web".
 async function rotaEspelho(request, env, url, caminho, ctx) {
-  const quem = await identificar(request, env, url, agora());
+  const quem = await identificar(request, env, url, agoraTs());
   if (quem.erro) return quem.erro;
   const aparelho = quem.aparelho ?? "web";
   const rota = `${request.method} ${caminho}`;
@@ -527,15 +528,25 @@ async function rotaEspelho(request, env, url, caminho, ctx) {
   }
   if (rota === "POST /api/espelho") {
     const corpo = await request.json().catch(() => null);
-    const r = await enviarEspelho(env.DB, corpo, agora(), aparelho);
+    const mb = Array.isArray(corpo?.linhas) ? corpo.linhas.filter((l) => l?.tabela === "transactions" && String(l.pk).startsWith("mb:")) : [];
+    // A IA só aprende de edição do usuário: sem linha `mb:` editada no lote, nem lê o estado de antes.
+    const editadas = [...new Set(mb.filter((l) => editadaNoApp(l.dados)).map((l) => String(l.pk)))];
+    // a IA aprende comparando com o que o app acabou de gravar; falha aqui não pode barrar a gravação do app
+    const antes = editadas.length ? await estadoMb(env.DB, editadas).catch((e) => (console.error("IA: estado antes", e?.stack || e), null)) : null;
+    const r = await enviarEspelho(env.DB, corpo, agoraTs(), aparelho);
     if (r.gravadas) avisarClientes({ tipo: "mudou", cursor: r.cursor, aparelho }); // o cursor é só uma dica: o cliente puxa pelo próprio
-    // Transação do banco recém-importada pelo app pode ser a de uma anotação já confirmada no Claude.
-    if (r.gravadas && corpo.linhas.some((l) => l?.tabela === "transactions" && String(l.pk).startsWith("mb:"))) ctx.waitUntil(aplicarVinculadas(env, ctx).catch((e) => console.error("Anotações vinculadas", e?.stack || e)));
+    // Transação do banco recém-importada pelo app: memória da IA aprende com a edição, a anotação confirmada no Claude é aplicada
+    // e a decisão da IA que esperava a linha mb: é gravada (nessa ordem: a anotação do usuário vale mais que a IA).
+    if (r.gravadas && mb.length) ctx.waitUntil((async () => {
+      if (antes) await aprenderIa(env, antes).catch((e) => console.error("IA: aprendizado", e?.stack || e));
+      await aplicarVinculadas(env, ctx).catch((e) => console.error("Anotações vinculadas", e?.stack || e));
+      await aplicarPendentesIa(env, ctx).catch((e) => console.error("IA: aplicação", e?.stack || e));
+    })());
     return json(r.corpo, r.status);
   }
   if (rota === "POST /api/espelho/semear") {
     if (!quem.aparelho) return json({ erro: "O semeio só vale com o token do aparelho" }, 403);
-    const r = await semear(env.DB, await request.json().catch(() => null), agora(), aparelho);
+    const r = await semear(env.DB, await request.json().catch(() => null), agoraTs(), aparelho);
     if (r.fim) avisarClientes({ tipo: "mudou", cursor: r.corpo.cursor, aparelho });
     return json(r.corpo, r.status);
   }
@@ -543,7 +554,7 @@ async function rotaEspelho(request, env, url, caminho, ctx) {
 }
 
 async function rotaAparelho(request, env, url, caminho, ctx) {
-  const ts = agora();
+  const ts = agoraTs();
   const quem = await identificar(request, env, url, ts);
   if (quem.erro) return quem.erro;
   const rota = `${request.method} ${caminho}`;
@@ -565,6 +576,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json({ ok: true, aceitos: 0, rejeitados: [], descontinuado: true });
   }
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
+  if (ROTAS_IA.has(caminho)) return rotaIa(request, env, url, rota, ctx);
   if (rota === "POST /api/ia/sugerir" || rota === "POST /api/ia/entender") {
     const texto = await request.text();
     if (texto.length > MAX_CORPO_IA) return json({ erro: "Pedido grande demais" }, 413);
@@ -608,6 +620,25 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   return json({ erro: "Método não permitido" }, 405);
 }
 
+// IA automática ("Feito pela IA"): token do aparelho (APK) ou cookie do app web; POST com cookie exige mesma origem (identificar).
+async function rotaIa(request, env, url, rota, ctx) {
+  if (rota === "GET /api/ia/aplicadas") {
+    const desde = normalizarDesde(url.searchParams.get("desde"));
+    if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
+    return json(await listarAplicadas(env.DB, desde));
+  }
+  if (rota === "GET /api/ia/relatorio") return json(await relatorioIa(env.DB));
+  if (rota === "POST /api/ia/desfazer") {
+    const r = await desfazerIa(env, ctx, await request.json().catch(() => null));
+    return json(r.corpo, r.status);
+  }
+  if (rota === "POST /api/ia/memoria") {
+    const r = await importarMemoria(env.DB, await request.json().catch(() => null));
+    return json(r.corpo, r.status);
+  }
+  return json({ erro: "Método não permitido" }, 405);
+}
+
 // Notificações para o app: só leitura (enviada_em e entregue_em são do Web Push). Em silêncio (22h–7h) o cursor não anda.
 async function notificacoesAparelho(env, desde, ts) {
   const b = await baseCiclo(env);
@@ -622,6 +653,7 @@ async function notificacoesAparelho(env, desde, ts) {
   // "Para revisar": leva o item (o app mostra os botões das opções) e some com o aviso de item já respondido em outro aparelho.
   const fila = new Map(b.revisar.map((i) => [i.tipo === "salario_nao_detectado" ? "salario" : i.id, i]));
   const notificacoes = results.flatMap((n) => {
+    if (n.chave.startsWith("ia:")) return [{ ...n, item: { tipo: "ia_aplicadas", desde: n.chave.slice("ia:".length) } }]; // abre "Feito pela IA"
     if (!n.chave.startsWith("revisar:")) return [n];
     const k = n.chave.startsWith("revisar:salario:") ? "salario" : n.chave.slice("revisar:".length);
     const item = fila.get(k);
@@ -637,7 +669,7 @@ async function webhookPluggy(request, env, url, ctx) {
   const ev = await request.json().catch(() => null);
   const acao = acaoWebhook(ev);
   if (acao) {
-    const ts = agora();
+    const ts = agoraTs();
     const tarefa = acao === "apagar"
       ? apagarTransacoes(env.DB, idsRemovidos(ev), ts)
       : acao === "remover"
@@ -695,12 +727,12 @@ async function atualizarAgora(env, origem, ctx) {
     return json({ ok: false, erro: mensagem, mensagem, liberado_em: new Date(liberado).toISOString() }, 429);
   }
   const tarefa = (async () => {
-    const api = await clientePluggy(db, env, agora());
+    const api = await clientePluggy(db, env, agoraTs());
     const ids = await api.listarIds().catch(() => []); // falha de credencial ou descoberta aparece na sincronização abaixo
     const pedidos = await Promise.allSettled(ids.map((id) => api.atualizarItem(id)));
     const falhas = pedidos.flatMap((p, i) => (p.status === "rejected" ? [`Conexão ${ids[i]}: ${p.reason?.message || p.reason}`] : []));
     for (const f of falhas) console.warn("Atualizar no banco falhou", f);
-    return { ...(await sincronizar(env, origem)), pedidos: ids.length - falhas.length, falhas };
+    return { ...(await sincronizar(env, origem, ctx)), pedidos: ids.length - falhas.length, falhas };
   })();
   // O erro já chega ao cliente por `await tarefa`; o catch só evita rejeição não tratada quando o cliente desconecta e a tarefa segue.
   ctx.waitUntil(tarefa.catch(() => {}));
@@ -725,7 +757,7 @@ async function inserirToken(env, nome) {
   if (!limpo || limpo.length > 40) return null;
   const token = gerarToken();
   const id = crypto.randomUUID();
-  await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agora()).run();
+  await env.DB.prepare("INSERT INTO app_tokens (id, nome, hash, criado) VALUES (?1, ?2, ?3, ?4)").bind(id, limpo, await hashToken(token), agoraTs()).run();
   return { id, nome: limpo, token };
 }
 
@@ -734,7 +766,7 @@ async function revogarToken(request, env, url, idUrl) {
   const id = decodificar(idUrl);
   const t = await env.DB.prepare("SELECT revogado FROM app_tokens WHERE id = ?1").bind(id).first();
   if (!t) return json({ erro: "Token não encontrado" }, 404);
-  if (!t.revogado) await env.DB.prepare("UPDATE app_tokens SET revogado = ?1 WHERE id = ?2").bind(agora(), id).run();
+  if (!t.revogado) await env.DB.prepare("UPDATE app_tokens SET revogado = ?1 WHERE id = ?2").bind(agoraTs(), id).run();
   return json({ ok: true });
 }
 
@@ -742,7 +774,7 @@ async function revogarToken(request, env, url, idUrl) {
 // sincronização em andamento grava com o `ts` do início (< agora) e essas linhas podem escapar do filtro; a releitura de
 // DIAS_REIMPORTAR dias a cada sincronização as traz de volta na rodada seguinte.
 async function appTransacoes(request, env, url) {
-  const agoraIso = agora();
+  const agoraIso = agoraTs();
   if (!(await autenticarAparelho(request, env.DB, agoraIso))) return json({ erro: "Token inválido" }, 401, { "www-authenticate": "Bearer" });
   const desde = normalizarDesde(url.searchParams.get("desde"));
   if (desde === undefined) return json({ erro: "Parâmetro desde inválido (use data ISO)" }, 400);
@@ -765,7 +797,7 @@ async function clientePluggy(db, env, ts) {
   return new ApiCliente(env, semeado ? conexoes : undefined);
 }
 
-async function sincronizar(env, origem) {
+async function sincronizar(env, origem, ctx) {
   const db = env.DB;
 
   // Evita duas sincronizações ao mesmo tempo (cron + botão): checagem e registro num comando só (atômico no D1).
@@ -774,14 +806,14 @@ async function sincronizar(env, origem) {
     .prepare(
       "INSERT INTO sync_log (origem, started_at) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM sync_log WHERE ok IS NULL AND started_at > ?3) RETURNING id"
     )
-    .bind(origem, agora(), limite)
+    .bind(origem, agoraTs(), limite)
     .first();
   if (!log) return { ok: false, ocupado: true, mensagem: MSG_OCUPADO };
   const avisos = [];
   let ok = 1;
 
   try {
-    const ts = agora();
+    const ts = agoraTs();
     const api = await clientePluggy(db, env, ts);
 
     // 1) Conexões (items do Meu Pluggy) e contas de cada uma. Uma conexão com erro vira aviso; as demais seguem.
@@ -861,8 +893,10 @@ async function sincronizar(env, origem) {
   const mensagem = avisos.join(" | ").slice(0, 2000) || "OK";
   await db
     .prepare("UPDATE sync_log SET finished_at = ?1, ok = ?2, message = ?3 WHERE id = ?4")
-    .bind(agora(), ok, mensagem, log.id)
+    .bind(agoraTs(), ok, mensagem, log.id)
     .run();
+  // Antes dos alertas, para o push em lote já contar as aplicadas.
+  if (ok && espelhoLigado(env)) await decidirIa(env, ctx).catch((e) => console.error("IA: decisão falhou", e?.stack || e));
   if (ok) await avaliarAlertas(env).catch((e) => console.error("Alertas falharam", e?.stack || e));
   if (ok && espelhoLigado(env)) await avisar(env, { tipo: "banco" }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e));
   // `parcial`: terminou, mas alguma conexão, conta ou produto não foi lido (os detalhes estão na mensagem).
@@ -880,7 +914,7 @@ async function sincronizarConta(db, api, conta, hoje, diasImport, docTitular) {
   if (ultima?.p && ultima.p < de) de = ultima.p; // relê pendentes antigas para não duplicarem quando forem postadas
   // Cartão sem "to" para trazer parcelas futuras.
   const todas = await api.transacoes(conta.id, de, conta.type === "CREDIT" ? undefined : hoje, MAX_PAGINAS);
-  const ts = agora();
+  const ts = agoraTs();
   const linhas = todas.map((t) => mapearTransacao(t, conta, hoje, ts, docTitular));
 
   // Apaga parcelas futuras e pendentes da janela (podem mudar de id) e regrava tudo num lote atômico.
@@ -942,5 +976,5 @@ async function registrarHistoricoInvestimentos(db, ids, lidas) {
 
 const stmtSnapshot = (db, key, data) => db
   .prepare("INSERT INTO snapshots (key, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at")
-  .bind(key, JSON.stringify(data ?? null), agora());
+  .bind(key, JSON.stringify(data ?? null), agoraTs());
 const salvarSnapshot = (db, key, data) => stmtSnapshot(db, key, data).run();

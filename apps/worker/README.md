@@ -244,6 +244,18 @@ Liga o Claude ao RenanCash. A ideia: você conta um gasto ao Claude na hora ("ga
 - **Como aplica**: a confirmação grava título, categoria, subcategoria e nota na linha `transactions/mb:<id>` do espelho, com `date_time_modified` atual, como se você tivesse editado no app. Se o app ainda não importou a transação, a anotação fica `vinculada` e é aplicada quando o celular gravar a linha no espelho.
 - **Outras ferramentas**: resumo do ciclo, contas, categorias, buscar/editar/criar/apagar transações, ler/escrever/apagar linhas de qualquer tabela do espelho, SQL só leitura (`consultar_sql`, até 200 linhas, sem tabelas de credenciais) e atualizar do banco. Toda escrita vai pelo espelho como o aparelho `claude` (mesmo LWW e aviso em tempo real). Exige o espelho ligado e semeado.
 
+## IA automática (fase 1)
+
+Classifica sozinha as transações que chegam do banco (spec: `docs/ia-automatica-plano.md`). Código em `src/iaAuto.js`; só roda com o espelho ligado e semeado.
+
+- **Decisão**: no fim de cada sincronização com a Pluggy (`sincronizar`: cron, webhook e botão Atualizar), para as transações dos últimos 10 dias ainda sem decisão. Regra do app (`associated_titles`) ou memória do favorecido com 2+ confirmações → aplica. O resto vai ao Llama em lotes de 8 (até 16 por rodada) e fica em **sombra** (só registrado). Se o Workers AI falhar, nada é gravado e a próxima sincronização tenta de novo.
+- **Memória** (`ia_memoria`, chave = `mbChavePadrao` da descrição do banco): cresce a cada edição do usuário numa linha `mb:` recebida no `POST /api/espelho`. A mesma escolha soma 1; outra escolha troca e volta a 1. Desfazer zera.
+- **Aplicação** (`ia_aplicacoes`): grava pelo mesmo caminho do MCP, como o aparelho `ia`, guardando o estado `anterior`. Linha já editada pelo usuário nunca é sobrescrita (a decisão vira `descartada`). Se o app ainda não importou a transação, a decisão fica `pendente` até a linha chegar.
+- **Endpoints** (token do aparelho; o cookie do painel só nos GET): `GET /api/ia/aplicadas?desde=`, `POST /api/ia/desfazer {tx_id}`, `POST /api/ia/memoria {padroes}` e `GET /api/ia/relatorio` (acerto do modo sombra por faixa de confiança).
+- **Push**: um aviso só (`ia:<primeiro aplicado_em>`, "N gastos classificados pela IA"). No silêncio (22h–7h) fica retido até o cron das 7h. Em `/api/notificacoes` ele vem com `item: {tipo: "ia_aplicadas", desde}`.
+- **Chaves** (linha `_config` do espelho, tabela `config` ou var): `ia_auto = "0"` desliga decisão, aplicação e push. `ia_limiar` (0–1) deixa o Llama aplicar quando a confiança passa dele; ausente, o Llama nunca aplica.
+- **Migração**: `pnpm --filter @meu-banco/worker migrar -- --local` (ou `--remote`) cria as duas tabelas com `CREATE ... IF NOT EXISTS`. O deploy pelo Actions já roda com `--remote`.
+
 ## Segurança
 
 - As credenciais do Pluggy (`PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`) e `PLUGGY_ITEM_IDS` só existem como secrets no Worker; o navegador nunca as recebe e ela não está em nenhum arquivo do projeto. `.dev.vars` está no `.gitignore`.

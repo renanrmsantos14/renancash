@@ -1,3 +1,4 @@
+import 'package:budget/pages/feitoPelaIaPage.dart';
 import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/pages/meuBancoParear.dart';
 import 'package:budget/struct/atualizador.dart';
@@ -375,6 +376,13 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
             padding: const EdgeInsetsDirectional.symmetric(horizontal: 20),
             child: _status(),
           ),
+          _secao("Classificação automática", [
+            OutlinedButton.icon(
+              onPressed: () => pushRoute(context, const FeitoPelaIaPage()),
+              icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+              label: _rotuloBotao("Feito pela IA"),
+            ),
+          ]),
           _secao("Contas conectadas",
               [widget.contasConectadas ?? const ContasConectadas()]),
           _copiaUnicaSecao(),

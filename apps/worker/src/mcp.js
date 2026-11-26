@@ -3,10 +3,9 @@
 // Anotações: o Renan conta um gasto ao Claude antes de o banco lançar; quando a transação chega, o Claude mostra as candidatas
 // e, com a confirmação, grava título, categoria e nota na transação `mb:<id>` como uma edição feita no app.
 import { TABELAS_ESPELHO } from "@meu-banco/core";
-import { enviarEspelho, avisar } from "./espelho.js";
-import { agoraS } from "./app.js";
+import { gravar as gravarEspelho, editadaNoApp, ErroGravacao, linhasDe } from "./espelho.js";
+import { agoraS, diaSP as DIA, hojeSP } from "./app.js";
 
-const TZ = "America/Sao_Paulo";
 const APARELHO = "claude";
 const VERSOES = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const MAX_LINHAS_SQL = 200;
@@ -16,26 +15,19 @@ const DIAS_ANTES = 3; // o banco pode datar a compra um pouco antes do que foi d
 const DIAS_DEPOIS = 7;
 const TOLERANCIA = 0.02; // 2% (compra no exterior, gorjeta); a exata vem primeiro
 
-const DIA = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
-const hojeSP = () => DIA.format(new Date());
 const dataDe = (s) => (s == null ? null : DIA.format(new Date(Number(s) * 1000)));
 const epochDe = (data) => Math.floor(Date.parse(data + "T00:00:00-03:00") / 1000); // meia-noite em Brasília, como o app grava
 const somarDias = (data, n) => new Date(Date.parse(data + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const chave = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-const editadaNoApp = (d) => Number(d?.date_time_modified) >= 978307200; // 2001-01-01: o app trata como edição do usuário
 const reais = (v) => Math.round(Number(v) * 100) / 100;
 const limite = (v, padrao, max) => Math.min(Math.max(Number(v) || padrao, 1), max);
 
-class ErroFerramenta extends Error {}
+class ErroFerramenta extends ErroGravacao {}
+const gravar = (c, linhas) => gravarEspelho(c, linhas, APARELHO);
 const falhar = (msg) => { throw new ErroFerramenta(msg); };
 
 // ---------- Leitura do espelho ----------
-
-async function linhasDe(db, tabela) {
-  const { results } = await db.prepare("SELECT pk, dados FROM espelho WHERE tabela = ?1 AND deleted_at IS NULL").bind(tabela).all();
-  return results.map((r) => ({ pk: r.pk, ...JSON.parse(r.dados || "{}") }));
-}
 
 async function linhaDe(db, tabela, pk) {
   const r = await db.prepare("SELECT dados, deleted_at FROM espelho WHERE tabela = ?1 AND pk = ?2").bind(tabela, pk).first();
@@ -84,26 +76,6 @@ function transacaoLegivel(pk, d, cat, banco) {
     editada_no_app: editadaNoApp(d),
     ...(banco?.description ? { texto_do_banco: banco.description, estabelecimento: banco.merchant || banco.contraparte || null, conta_banco: banco.conta } : {}),
   };
-}
-
-// ---------- Escrita ----------
-
-// updated_at = agora, mas sempre depois do que já está gravado: duas escritas do Claude no mesmo milissegundo (criar e apagar)
-// virariam "reenvio idêntico" e seriam ignoradas, e um aparelho com relógio adiantado faria o LWW recusar a edição para sempre.
-async function gravar({ env, ctx }, linhas) {
-  const agoraMs = Date.now();
-  const ts = new Date(agoraMs).toISOString();
-  const marcadas = await Promise.all(linhas.map(async (l) => {
-    const atual = await env.DB.prepare("SELECT updated_at FROM espelho WHERE tabela = ?1 AND pk = ?2").bind(l.tabela, l.pk).first("updated_at");
-    const ms = Math.max(agoraMs, atual ? Date.parse(atual) + 1 || 0 : 0);
-    return { deleted_at: null, ...l, updated_at: new Date(ms).toISOString() };
-  }));
-  const r = await enviarEspelho(env.DB, { linhas: marcadas }, ts, APARELHO);
-  if (r.status === 409) falhar("O espelho ainda não foi semeado pelo celular: nada pode ser gravado.");
-  if (r.status !== 200) falhar(r.corpo?.erro || "Falha ao gravar");
-  if (r.corpo.rejeitados?.length) falhar("Rejeitado: " + JSON.stringify(r.corpo.rejeitados).slice(0, 500));
-  if (r.gravadas) ctx.waitUntil(avisar(env, { tipo: "mudou", cursor: r.cursor, aparelho: APARELHO }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
-  return r.gravadas;
 }
 
 // ---------- Anotações ----------
@@ -569,7 +541,7 @@ async function chamar(msg, c) {
       const r = await f(params.arguments ?? {}, c);
       return resultado(id, { content: [{ type: "text", text: JSON.stringify(r) }], structuredContent: r });
     } catch (e) {
-      if (!(e instanceof ErroFerramenta)) console.error("MCP", params?.name, e?.stack || e);
+      if (!(e instanceof ErroGravacao)) console.error("MCP", params?.name, e?.stack || e);
       return resultado(id, { content: [{ type: "text", text: "Erro: " + (e?.message || e) }], isError: true });
     }
   }
