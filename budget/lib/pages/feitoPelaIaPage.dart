@@ -81,7 +81,9 @@ class _FeitoPelaIaPageState extends State<FeitoPelaIaPage> {
       if (cliente == null) throw MbErroHttp(401, 'Pareie o aparelho com o Meu Banco.');
       await cliente.iaDesfazer(i.txId);
       feito = true;
-      msg = 'Desfeito. A transação volta para a fila Para classificar.';
+      msg = i.devolucao
+          ? 'Desfeito. O Pix volta para a fila Para revisar.'
+          : 'Desfeito. A transação volta para a fila Para classificar.';
     } on MbErroHttp catch (e) {
       feito = e.status == 409;
       msg = feito ? 'Essa classificação já estava desfeita.' : e.mensagem;
@@ -151,7 +153,9 @@ class _FeitoPelaIaPageState extends State<FeitoPelaIaPage> {
               style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
-              antes == null || _categoria(antes) == _categoria(i.depois)
+              i.devolucao
+                  ? 'Reembolso da compra'
+                  : antes == null || _categoria(antes) == _categoria(i.depois)
                   ? _categoria(i.depois)
                   : '${_categoria(antes)} → ${_categoria(i.depois)}',
               style: EdTexto.corpo(context)),
@@ -172,11 +176,12 @@ class _FeitoPelaIaPageState extends State<FeitoPelaIaPage> {
                   child: Text(_desfazendo.contains(i.txId) ? 'Desfazendo…' : 'Desfazer'),
                 ),
               ),
-              const SizedBox(width: 10),
+              if (!i.devolucao) const SizedBox(width: 10),
             ],
-            Expanded(
-              child: OutlinedButton(onPressed: () => _corrigir(i), child: const Text('Corrigir')),
-            ),
+            if (!i.devolucao)
+              Expanded(
+                child: OutlinedButton(onPressed: () => _corrigir(i), child: const Text('Corrigir')),
+              ),
           ]),
         ]),
       ),

@@ -188,8 +188,11 @@ export function alertaIa({ aplicadas, agora }) {
   if (!valem.length) return { alertas: [], avisadas };
   const desde = valem.map((a) => a.aplicado_em).sort()[0];
   const n = valem.length;
+  const titulo = valem.some((a) => a.origem === "devolucao")
+    ? (n === 1 ? "1 item resolvido pela IA" : `${n} itens resolvidos pela IA`)
+    : (n === 1 ? "1 gasto classificado pela IA" : `${n} gastos classificados pela IA`);
   return {
-    alertas: [{ chave: `ia:${desde}`, titulo: n === 1 ? "1 gasto classificado pela IA" : `${n} gastos classificados pela IA`, corpo: "Toque para conferir ou desfazer em Feito pela IA." }],
+    alertas: [{ chave: `ia:${desde}`, titulo, corpo: "Toque para conferir ou desfazer em Feito pela IA." }],
     avisadas,
   };
 }

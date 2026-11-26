@@ -221,8 +221,15 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     }
   }
 
+  String? get _pessoaLembrada {
+    final dest = widget.item.destinatario;
+    return dest == null ? null : meuBancoPessoasLembradas.value[dest];
+  }
+
   String get _nomeSugerido {
     final i = widget.item;
+    final lembrada = _pessoaLembrada;
+    if (lembrada != null) return lembrada;
     final chave = mbChavePadrao(i.destinatario ?? (i.semPessoa ? '' : i.descricao ?? ''));
     return chave.isEmpty ? '' : mbNomeDoPagador(chave);
   }
@@ -232,6 +239,7 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
     if (_enviando || _escolhendo) return;
     _escolhendo = true;
     try {
+      final lembrada = _pessoaLembrada;
       final sugestao = _nomeSugerido;
       final grupos = meuBancoEmprestimos.value.paraPagamento(sugestao);
       final daPessoa = [for (final e in grupos.daPessoa) if (e.txId != widget.item.txId) e];
@@ -242,7 +250,11 @@ class _ItemParaRevisarState extends State<ItemParaRevisar> {
           if (e.txId != widget.item.txId && (e.pessoa ?? '').trim().isNotEmpty) e
       ];
       final r = await mbEscolherPessoaDoEmprestimo(context,
-          sugestao: sugestao, valor: widget.item.valor, daPessoa: daPessoa, outros: outros);
+          sugestao: sugestao,
+          lembradaDe: lembrada == null ? null : widget.item.destinatario,
+          valor: widget.item.valor,
+          daPessoa: daPessoa,
+          outros: outros);
       if (r != null) await _responder('emprestimo', pessoa: r.pessoa, emprestimoId: r.emprestimoId);
     } finally {
       _escolhendo = false;

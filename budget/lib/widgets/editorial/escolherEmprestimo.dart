@@ -136,6 +136,7 @@ typedef MbPessoaDoEmprestimo = ({String pessoa, String? emprestimoId});
 
 Future<MbPessoaDoEmprestimo?> mbEscolherPessoaDoEmprestimo(BuildContext context,
     {required String sugestao,
+    String? lembradaDe,
     required double valor,
     required List<MbEmprestimo> daPessoa,
     List<MbEmprestimo> outros = const []}) async {
@@ -144,15 +145,16 @@ Future<MbPessoaDoEmprestimo?> mbEscolherPessoaDoEmprestimo(BuildContext context,
     PopupFramework(
       title: 'Empréstimo',
       subtitle: brl(valor.abs()),
-      child: _PessoaDoEmprestimo(sugestao: sugestao, daPessoa: daPessoa, outros: outros),
+      child: _PessoaDoEmprestimo(sugestao: sugestao, lembradaDe: lembradaDe, daPessoa: daPessoa, outros: outros),
     ),
   );
   return r is MbPessoaDoEmprestimo ? r : null;
 }
 
 class _PessoaDoEmprestimo extends StatefulWidget {
-  const _PessoaDoEmprestimo({required this.sugestao, required this.daPessoa, this.outros = const []});
+  const _PessoaDoEmprestimo({required this.sugestao, this.lembradaDe, required this.daPessoa, this.outros = const []});
   final String sugestao;
+  final String? lembradaDe; // destinatário cujo empréstimo anterior deu o nome sugerido
   final List<MbEmprestimo> daPessoa;
   final List<MbEmprestimo> outros; // os abertos de outras pessoas (ou com nome escrito diferente): também dá para somar
 
@@ -193,6 +195,7 @@ class _PessoaDoEmprestimoState extends State<_PessoaDoEmprestimo> {
         Divider(height: 24, thickness: 1, color: c.line),
       ],
       Text('Empréstimo novo para', style: EdTexto.rotulo(context)),
+      if (widget.lembradaDe != null) Text('Sugestão: usada antes para ${widget.lembradaDe}', style: EdTexto.rotulo(context)),
       const SizedBox(height: 6),
       TextField(
         controller: _nome,

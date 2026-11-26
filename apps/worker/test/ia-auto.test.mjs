@@ -1,4 +1,4 @@
-// test/ia-auto.test.mjs — IA automática, fase 1 (docs/ia-automatica-plano.md, "Critérios de aceite"): memória por favorecido,
+// test/ia-auto.test.mjs — IA automática (docs/ia-automatica-plano.md, "Critérios de aceite"): memória por favorecido,
 // decisão no fim da sincronização, modo sombra do Llama, "Feito pela IA" com Desfazer e o push em lote.
 // Relógio fixo: terça 10/11/2026 12h BRT (fora do silêncio); cada passo do "app" anda 1 s para o LWW não empatar.
 import { test, mock, afterEach } from "node:test";
@@ -328,4 +328,250 @@ test("sombra (sem ia_limiar) roda o Llama em segundo plano via waitUntil e ainda
   await t.worker.scheduled({ scheduledTime: Date.now() }, t.env, { waitUntil: (p) => tarefas.push(p) });
   await Promise.allSettled(tarefas);
   assert.equal((await t.decisao("w1")).status, "sombra");
+});
+
+// ---------- Anotações automáticas e devolução de compra ----------
+
+const anotar = (t, id, valor = 45, o = {}) => t.db.prepare(
+  "INSERT INTO anotacoes (id, valor, data, receita, descricao, titulo, categoria, subcategoria, nota, conta, status, criada, atualizada) VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7, ?8, NULL, 'pendente', ?9, ?9)"
+).bind(id, valor, HOJE, o.descricao ?? "almoço", o.titulo ?? "Almoço", o.categoria ?? "c-alim", o.subcategoria ?? "c-rest", o.nota ?? "com o time", new Date().toISOString()).run();
+const anotacao = (t, id) => t.db.prepare("SELECT * FROM anotacoes WHERE id = ?1").bind(id).first();
+const avisosAnotacao = (t) => t.db.prepare("SELECT count(*) n FROM notificacoes WHERE chave LIKE 'anotacao:%'").first("n");
+const txPix = (t, id, desc, valor, data, status = "POSTED") => t.db.prepare("INSERT INTO transactions (id, account_id, date, description, amount, type, status, scheduled, updated_at) VALUES (?1, 'cc', ?2, ?3, ?4, ?5, ?6, 0, ?7)")
+  .bind(id, data, desc, valor, valor < 0 ? "DEBIT" : "CREDIT", status, new Date().toISOString()).run();
+const fila = async (t) => (await t.get("/api/sync")).ciclo;
+const revisao = async (t, id) => { const r = await t.db.prepare("SELECT dados, deleted_at FROM espelho WHERE tabela = 'mb_revisoes' AND pk = ?1").bind("tx:" + id).first(); return r && { ...r, dec: r.deleted_at ? null : JSON.parse(JSON.parse(r.dados).dados) }; };
+
+test("anotação com 1 transação compatível: aplicada sozinha, em Feito pela IA e sem o push de confirmação", async () => {
+  const t = await preparar();
+  await anotar(t, "an1");
+  await t.gasto("a1", "OUTBACK SHOPPING", 45); await t.app("a1", "OUTBACK SHOPPING");
+  await t.sincronizar();
+  const linha = await t.tx("a1");
+  assert.deepEqual([linha.name, linha.category_fk, linha.sub_category_fk, linha.note], ["Almoço", "c-alim", "c-rest", "com o time"]);
+  assert.ok(linha.date_time_modified > 978307200);
+  assert.equal((await anotacao(t, "an1")).status, "aplicada");
+  assert.equal((await anotacao(t, "an1")).transacao_id, "a1");
+  const d = await t.decisao("a1");
+  assert.deepEqual([d.origem, d.status, d.chave], ["anotacao", "aplicada", "an1"]);
+  const item = (await t.get("/api/ia/aplicadas")).itens.find((i) => i.tx_id === "a1");
+  assert.equal(item.origem, "anotacao");
+  assert.equal(item.antes.name, "OUTBACK SHOPPING");
+  assert.equal(item.depois.name, "Almoço");
+  assert.equal(await avisosAnotacao(t), 0);
+  assert.equal((await t.memoria("OUTBACK SHOPPING")), null, "aplicar anotação não ensina a memória");
+});
+
+test("anotação ligada antes de a linha mb: chegar: o app importa e a IA aplica; editada no app nesse meio tempo volta a pendente", async () => {
+  const t = await preparar();
+  await anotar(t, "an1"); await anotar(t, "an2", 30, { titulo: "Café" });
+  await t.gasto("b1", "OUTBACK", 45); await t.gasto("b2", "CAFE CENTRAL", 30);
+  await t.sincronizar();
+  assert.equal((await anotacao(t, "an1")).status, "automatica");
+  assert.equal((await t.decisao("b1")).status, "pendente");
+  await t.app("b1", "OUTBACK");
+  assert.equal((await t.tx("b1")).name, "Almoço");
+  assert.equal((await anotacao(t, "an1")).status, "aplicada");
+  await t.app("b2", "CAFE CENTRAL", { cat: "c-lazer", nome: "Meu café", editada: true });
+  assert.equal((await t.tx("b2")).name, "Meu café", "edição do usuário não é sobrescrita");
+  assert.equal((await t.decisao("b2")).status, "descartada");
+  const an = await anotacao(t, "an2");
+  assert.deepEqual([an.status, an.transacao_id], ["pendente", null]);
+});
+
+test("anotação ambígua não liga: 2 transações, valor aproximado, PENDING ou já editada no app", async () => {
+  const casos = {
+    "2 transações": async (t) => { await t.gasto("c1", "A", 45); await t.gasto("c2", "B", 45); },
+    "valor 45,50": async (t) => { await t.gasto("c1", "A", 45.5); await t.app("c1", "A"); },
+    "PENDING": async (t) => { await txPix(t, "c1", "A", -45, HOJE, "PENDING"); await t.app("c1", "A"); },
+    "editada no app": async (t) => { await t.gasto("c1", "A", 45); await t.app("c1", "A", { cat: "c-lazer", editada: true }); },
+  };
+  for (const [nome, montar] of Object.entries(casos)) {
+    const t = await preparar();
+    await anotar(t, "an1");
+    await montar(t);
+    await t.sincronizar();
+    const an = await anotacao(t, "an1");
+    assert.deepEqual([an.status, an.transacao_id], ["pendente", null], nome);
+    assert.equal(await t.db.prepare("SELECT count(*) n FROM ia_aplicacoes WHERE origem = 'anotacao'").first("n"), 0, nome);
+    assert.equal(await avisosAnotacao(t), nome === "PENDING" ? 0 : 1, `${nome}: o push de confirmação segue o comportamento de antes`);
+  }
+});
+
+test("duas anotações de 45 e uma só transação: nenhuma liga sozinha", async () => {
+  const t = await preparar();
+  await anotar(t, "an1"); await anotar(t, "an2", 45, { titulo: "Outro" });
+  await t.gasto("d1", "OUTBACK"); await t.app("d1", "OUTBACK");
+  await t.sincronizar();
+  assert.deepEqual([(await anotacao(t, "an1")).status, (await anotacao(t, "an2")).status], ["pendente", "pendente"]);
+  assert.equal((await t.tx("d1")).name, "OUTBACK");
+});
+
+test("desfazer anotação: restaura nome, categoria e nota, volta a pendente e não liga de novo", async () => {
+  const t = await preparar();
+  await anotar(t, "an1");
+  await t.gasto("e1", "OUTBACK", 45); await t.app("e1", "OUTBACK");
+  await t.sincronizar();
+  assert.equal((await t.tx("e1")).note, "com o time");
+  const r = await t.post("/api/ia/desfazer", { tx_id: "e1" });
+  assert.equal(r.status, 200);
+  const linha = await t.tx("e1");
+  assert.deepEqual([linha.name, linha.category_fk, linha.note], ["OUTBACK", "c-sem", ""]);
+  const an = await anotacao(t, "an1");
+  assert.deepEqual([an.status, an.transacao_id], ["pendente", null]);
+  assert.equal((await t.decisao("e1")).status, "desfeita");
+  await t.sincronizar();
+  assert.equal((await anotacao(t, "an1")).status, "pendente", "a próxima sincronização não liga de novo");
+  assert.equal((await t.tx("e1")).name, "OUTBACK");
+  assert.equal(await t.memoria("OUTBACK"), null);
+});
+
+test("memória pendente perde para a anotação única; memória já aplicada vence e a anotação fica pendente", async () => {
+  const t = await preparar();
+  await t.confirmar2x("OUTBACK");
+  await t.gasto("f1", "OUTBACK", 41); // sem linha mb:: a memória fica pendente
+  await t.sincronizar();
+  assert.deepEqual([(await t.decisao("f1")).origem, (await t.decisao("f1")).status], ["memoria", "pendente"]);
+  await anotar(t, "an1", 41);
+  await t.sincronizar();
+  assert.deepEqual([(await t.decisao("f1")).origem, (await t.decisao("f1")).status], ["anotacao", "pendente"]);
+  await t.app("f1", "OUTBACK");
+  assert.equal((await t.tx("f1")).name, "Almoço");
+
+  await t.gasto("f2", "OUTBACK", 42); await t.app("f2", "OUTBACK");
+  await t.sincronizar();
+  assert.deepEqual([(await t.decisao("f2")).origem, (await t.decisao("f2")).status], ["memoria", "aplicada"]);
+  await anotar(t, "an2", 42, { titulo: "Janta" });
+  await t.sincronizar();
+  assert.equal((await anotacao(t, "an2")).status, "pendente", "transação já decidida pela IA não liga");
+});
+
+test("kill switch ia_auto = 0: nem anotação nem devolução", async () => {
+  const t = await preparar({ extra: { IA_AUTO: "0" } });
+  await anotar(t, "an1");
+  await t.gasto("g1", "OUTBACK", 45); await t.app("g1", "OUTBACK");
+  await txPix(t, "g2", "Pix enviado - LOJA X", -120, "2026-11-05");
+  await txPix(t, "g3", "Pix recebido - LOJA X", 120, HOJE);
+  await t.sincronizar();
+  assert.equal((await anotacao(t, "an1")).status, "pendente");
+  assert.equal(await t.db.prepare("SELECT count(*) n FROM ia_aplicacoes").first("n"), 0);
+  assert.equal(await revisao(t, "g3"), null);
+  assert.ok((await fila(t)).revisar.some((i) => i.id === "tx:g3"));
+});
+
+test("devolução de compra: Pix recebido com 1 compra de mesmo valor e favorecido sai da fila e abate o gasto", async () => {
+  const t = await preparar();
+  await txPix(t, "h1", "Pix enviado - LOJA X", -120, "2026-10-31"); // 10 dias antes
+  await txPix(t, "h2", "Pix recebido - LOJA X", 120, HOJE);
+  await t.sincronizar();
+  const r = await revisao(t, "h2");
+  assert.deepEqual([r.dec.resposta, r.dec.reembolso_de, r.dec.valor, r.dec.data, r.dec.tipo, r.dec.ia], ["reembolso", "h1", 120, HOJE, "decisao", "devolucao"]);
+  assert.equal(JSON.parse(r.dados).pk, "tx:h2");
+  const d = await t.decisao("h2");
+  assert.deepEqual([d.origem, d.status, d.anterior], ["devolucao", "aplicada", null]);
+  assert.deepEqual(JSON.parse(d.sugestao), { reembolso_de: "h1", compra: "Pix enviado - LOJA X" });
+  assert.ok(!(await fila(t)).revisar.some((i) => i.id === "tx:h2"), "saiu da fila");
+  const item = (await t.get("/api/ia/aplicadas")).itens.find((i) => i.tx_id === "h2");
+  assert.deepEqual([item.origem, item.depois.name, item.antes], ["devolucao", "Devolução: Pix enviado - LOJA X", null]);
+});
+
+test("devolução: o ciclo deixa de contar a compra reembolsada, e ia_devolucao = 0 desliga só a devolução", async () => {
+  const consumido = async (extra) => {
+    const t = await preparar({ extra });
+    await txPix(t, "i1", "Pix enviado - LOJA X", -120, "2026-11-05");
+    await txPix(t, "i2", "Pix recebido - LOJA X", 120, HOJE);
+    await t.sincronizar();
+    return { t, valor: (await fila(t)).consumido };
+  };
+  const ligada = await consumido({});
+  const desligada = await consumido({ IA_DEVOLUCAO: "0" });
+  assert.ok(await revisao(ligada.t, "i2"));
+  assert.equal(await revisao(desligada.t, "i2"), null);
+  assert.equal(Math.round(desligada.valor - ligada.valor), 120);
+});
+
+test("devolução ambígua não grava: 2 compras, valor diferente, 31 dias, compra já reembolsada, outro favorecido, 2 Pix disputando", async () => {
+  const t = await preparar();
+  // 2 compras iguais
+  await txPix(t, "j1", "Pix enviado - LOJA X", -120, "2026-11-02"); await txPix(t, "j2", "Pix enviado - LOJA X", -120, "2026-11-03");
+  await txPix(t, "j3", "Pix recebido - LOJA X", 120, HOJE);
+  // valor diferente
+  await txPix(t, "k1", "Pix enviado - LOJA Y", -120, "2026-11-02"); await txPix(t, "k2", "Pix recebido - LOJA Y", 119.99, HOJE);
+  // 31 dias (2026-10-10 → 2026-11-10)
+  await txPix(t, "l1", "Pix enviado - LOJA Z", -80, "2026-10-10"); await txPix(t, "l2", "Pix recebido - LOJA Z", 80, HOJE);
+  // compra já reembolsada por uma decisão do usuário
+  await txPix(t, "m1", "Pix enviado - LOJA W", -60, "2026-11-02"); await txPix(t, "m2", "Pix recebido - LOJA W", 60, HOJE);
+  await t.db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('mb_revisoes', 'tx:m0', ?1, ?2, NULL, ?2, 'cel')")
+    .bind(JSON.stringify({ pk: "tx:m0", dados: JSON.stringify({ tipo: "decisao", tx_id: "m0", resposta: "reembolso", reembolso_de: "m1" }) }), new Date().toISOString()).run();
+  // outro favorecido
+  await txPix(t, "n1", "Pix enviado - LOJA V", -50, "2026-11-02"); await txPix(t, "n2", "Pix recebido - OUTRA PESSOA", 50, HOJE);
+  // 2 Pix recebidos disputam a mesma compra
+  await txPix(t, "o1", "Pix enviado - LOJA U", -90, "2026-11-02"); await txPix(t, "o2", "Pix recebido - LOJA U", 90, HOJE); await txPix(t, "o3", "Pix recebido - LOJA U", 90, HOJE);
+  await t.sincronizar();
+  for (const id of ["j3", "k2", "l2", "m2", "n2", "o2", "o3"]) {
+    assert.equal(await revisao(t, id), null, id);
+    assert.notEqual((await t.decisao(id))?.origem, "devolucao", id);
+  }
+});
+
+test("devolução nunca sobrescreve resposta do usuário, e empréstimo não é compra", async () => {
+  const t = await preparar();
+  await txPix(t, "p1", "Pix enviado - LOJA X", -120, "2026-11-05"); await txPix(t, "p2", "Pix recebido - LOJA X", 120, HOJE);
+  const resposta = JSON.stringify({ pk: "tx:p2", dados: JSON.stringify({ tipo: "decisao", tx_id: "p2", resposta: "renda", valor: 120, data: HOJE }) });
+  await t.db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('mb_revisoes', 'tx:p2', ?1, ?2, NULL, ?2, 'cel')").bind(resposta, new Date().toISOString()).run();
+  await txPix(t, "q1", "Pix enviado - LOJA Q", -70, "2026-11-05"); await txPix(t, "q2", "Pix recebido - LOJA Q", 70, HOJE);
+  await t.db.prepare("INSERT INTO espelho (tabela, pk, dados, updated_at, deleted_at, server_at, aparelho) VALUES ('mb_revisoes', 'tx:q1', ?1, ?2, NULL, ?2, 'cel')")
+    .bind(JSON.stringify({ pk: "tx:q1", dados: JSON.stringify({ tipo: "decisao", tx_id: "q1", resposta: "emprestimo", pessoa: "Pai" }) }), new Date().toISOString()).run();
+  await t.sincronizar();
+  assert.equal((await t.db.prepare("SELECT dados FROM espelho WHERE tabela = 'mb_revisoes' AND pk = 'tx:p2'").first("dados")), resposta);
+  assert.notEqual((await t.decisao("p2"))?.origem, "devolucao");
+  assert.notEqual((await t.decisao("q2"))?.origem, "devolucao", "a compra é um empréstimo");
+});
+
+test("desfazer devolução: tombstone, o Pix volta à fila e não é decidido de novo; resposta do usuário depois da IA dá 412", async () => {
+  const t = await preparar();
+  await txPix(t, "r1", "Pix enviado - LOJA X", -120, "2026-11-05"); await txPix(t, "r2", "Pix recebido - LOJA X", 120, HOJE);
+  await t.sincronizar();
+  const r = await t.post("/api/ia/desfazer", { tx_id: "r2" });
+  assert.equal(r.status, 200);
+  assert.ok((await revisao(t, "r2")).deleted_at, "tombstone");
+  assert.equal((await t.decisao("r2")).status, "desfeita");
+  assert.ok((await fila(t)).revisar.some((i) => i.id === "tx:r2"));
+  await t.sincronizar();
+  assert.equal((await revisao(t, "r2")).dec, null);
+  assert.equal((await t.post("/api/ia/desfazer", { tx_id: "r2" })).status, 409);
+
+  await txPix(t, "s1", "Pix enviado - LOJA S", -30, "2026-11-05"); await txPix(t, "s2", "Pix recebido - LOJA S", 30, HOJE);
+  await t.sincronizar();
+  assert.equal((await revisao(t, "s2")).dec.reembolso_de, "s1");
+  andar();
+  await t.post("/api/espelho", { linhas: [{ tabela: "mb_revisoes", pk: "tx:s2", updated_at: new Date(Date.now() + 1000).toISOString(), deleted_at: null,
+    dados: { pk: "tx:s2", dados: JSON.stringify({ tipo: "decisao", tx_id: "s2", resposta: "renda", valor: 30, data: HOJE }) } }] });
+  const r2 = await t.post("/api/ia/desfazer", { tx_id: "s2" });
+  assert.equal(r2.status, 412);
+  assert.match((await r2.json()).erro, /Respondida no app depois da IA/);
+  assert.equal((await revisao(t, "s2")).dec.resposta, "renda");
+});
+
+test("push em lote: 1 anotação + 1 devolução às 23h viram um push às 7h com '2 itens resolvidos pela IA'", async () => {
+  const t = await preparar();
+  relogio("2026-11-11T02:07:00.000Z"); // 23:07 BRT do dia 10
+  await anotar(t, "an1");
+  await t.gasto("u1", "OUTBACK", 45); await t.app("u1", "OUTBACK");
+  await txPix(t, "u2", "Pix enviado - LOJA X", -120, "2026-11-05"); await txPix(t, "u3", "Pix recebido - LOJA X", 120, HOJE);
+  await t.sincronizar();
+  assert.equal(await t.db.prepare("SELECT count(*) n FROM ia_aplicacoes WHERE status = 'aplicada'").first("n"), 2);
+  assert.equal(await t.db.prepare("SELECT count(*) n FROM notificacoes WHERE chave LIKE 'ia:%'").first("n"), 0);
+  relogio("2026-11-11T10:07:00.000Z");
+  await t.sincronizar();
+  const ia = (await t.db.prepare("SELECT titulo FROM notificacoes WHERE chave LIKE 'ia:%'").all()).results;
+  assert.deepEqual(ia.map((n) => n.titulo), ["2 itens resolvidos pela IA"]);
+});
+
+test("alertaIa: devolução troca o título; só classificação e anotação mantém", () => {
+  const dia = "2026-11-10T15:00:00.000Z";
+  const a = (tx_id, origem) => ({ tx_id, origem, status: "aplicada", aplicado_em: dia });
+  assert.equal(alertaIa({ aplicadas: [a("a", "anotacao"), a("b", "memoria")], agora: dia }).alertas[0].titulo, "2 gastos classificados pela IA");
+  assert.equal(alertaIa({ aplicadas: [a("a", "devolucao")], agora: dia }).alertas[0].titulo, "1 item resolvido pela IA");
+  assert.equal(alertaIa({ aplicadas: [a("a", "devolucao"), a("b", "regra"), a("c", "llama")], agora: dia }).alertas[0].titulo, "3 itens resolvidos pela IA");
 });

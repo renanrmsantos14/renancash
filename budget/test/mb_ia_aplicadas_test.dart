@@ -109,6 +109,24 @@ void main() {
       await t.pumpAndSettle(const Duration(seconds: 1));
     });
 
+    testWidgets('devolução de compra: só Desfazer, sem Corrigir; anotação mantém os dois', (t) async {
+      await _monta(t, _cliente((r) async {
+        final dev = {
+          'tx_id': 'd',
+          'origem': 'devolucao',
+          'status': 'aplicada',
+          'antes': null,
+          'depois': {'name': 'Devolucao: Pix enviado - LOJA X', 'category_fk': null},
+          'criado_em': '2026-11-25T12:00:00Z',
+        };
+        return http.Response(jsonEncode({'itens': [dev, _item('an', 'aplicada', origem: 'anotacao')]}), 200);
+      }));
+      expect(find.text('Desfazer'), findsNWidgets(2));
+      expect(find.text('Corrigir'), findsOneWidget);
+      expect(find.textContaining('Devolução de compra'), findsOneWidget);
+      expect(find.textContaining('Anotação'), findsOneWidget);
+    });
+
     testWidgets('vazio', (t) async {
       await _monta(t, _cliente((r) async => http.Response('{"itens":[]}', 200)));
       expect(find.text('Nada classificado pela IA nos últimos 14 dias.'), findsOneWidget);
