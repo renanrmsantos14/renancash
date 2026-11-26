@@ -1,4 +1,4 @@
-// "Feito pela IA" (fase 1): modelo do que o Worker aplicou e a importação única dos padrões locais para a memória dele.
+// "Feito pela IA": modelo do que o Worker aplicou e a importação única dos padrões locais para a memória dele.
 import 'dart:convert';
 
 import 'package:budget/struct/mbSync/armazem.dart';
@@ -20,13 +20,16 @@ class MbIaValores {
 String? _txt(Object? v) => v is String && v.isNotEmpty ? v : null;
 
 class MbIaAplicada {
-  final String txId, origem, status; // origem: memoria|regra|llama; status: pendente|aplicada|desfeita
+  final String txId, origem, status; // origem: memoria|regra|llama|anotacao|devolucao; status: pendente|aplicada|desfeita
   final MbIaValores? antes;
   final MbIaValores depois;
   final DateTime? data;
   const MbIaAplicada(this.txId, this.origem, this.status, this.antes, this.depois, this.data);
 
   bool get desfeita => status == 'desfeita';
+
+  /// Devolução de compra: não tem nome nem categoria para corrigir, só Desfazer.
+  bool get devolucao => origem == 'devolucao';
 
   /// Linha do Drift no espelho (`mb:<tx_id>`).
   String get pk => 'mb:$txId';
@@ -35,6 +38,8 @@ class MbIaAplicada {
         'memoria' => 'Memória',
         'regra' => 'Regra',
         'llama' => 'IA',
+        'anotacao' => 'Anotação',
+        'devolucao' => 'Devolução de compra',
         _ => origem,
       };
 

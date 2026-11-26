@@ -114,6 +114,11 @@ export async function enviarEspelho(db, corpo, agoraIso, aparelho) {
   };
 }
 
+// Decisão de uma linha mb_revisoes do app ({pk, dados: "<JSON>"}); malformada = null (como em lerRevisoes).
+export function decisaoDe(linha) {
+  try { const d = JSON.parse(linha?.dados); return d && typeof d === "object" ? d : null; } catch { return null; }
+}
+
 export const editadaNoApp = (d) => Number(d?.date_time_modified) >= 978307200; // 2001-01-01: o app trata como edição do usuário
 
 // Linhas vivas de uma tabela como objetos {pk, ...dados}.
@@ -258,7 +263,8 @@ export async function registrosDoEspelho(db, desde = null) {
   }
   // A linha do app é {pk, dados} com a decisão em texto JSON; a malformada fica de fora, como em lerRevisoes.
   for (const { pk, d } of daTabela("mb_revisoes")) {
-    try { const dec = JSON.parse(d.dados); if (dec && typeof dec === "object") novo("revisoes", pk, dec); } catch {}
+    const dec = decisaoDe(d);
+    if (dec) novo("revisoes", pk, dec);
   }
 
   const escolhas = Map.groupBy(daTabela("mb_orcamento_tx"), (r) => r.d.tx_pk);

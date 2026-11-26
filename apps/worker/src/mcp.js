@@ -4,20 +4,19 @@
 // e, com a confirmação, grava título, categoria e nota na transação `mb:<id>` como uma edição feita no app.
 import { TABELAS_ESPELHO } from "@meu-banco/core";
 import { gravar as gravarEspelho, editadaNoApp, ErroGravacao, linhasDe } from "./espelho.js";
-import { agoraS, diaSP as DIA, hojeSP } from "./app.js";
+import { agoraS, agoraTs, diaSP as DIA, hojeSP } from "./app.js";
+import { desfazerIa } from "./iaAuto.js";
+import { candidatas } from "./anotacoes.js";
+import { somarDias } from "./ciclo.js";
 
 const APARELHO = "claude";
 const VERSOES = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const MAX_LINHAS_SQL = 200;
 const TABELAS_SECRETAS = /\b(app_tokens|mcp_oauth|mcp_clientes|push_inscricoes)\b/i;
 const SQL_PROIBIDO = /\b(insert|update|delete|drop|alter|create|attach|detach|pragma|vacuum|reindex|analyze|replace\s+into)\b/i;
-const DIAS_ANTES = 3; // o banco pode datar a compra um pouco antes do que foi dito
-const DIAS_DEPOIS = 7;
-const TOLERANCIA = 0.02; // 2% (compra no exterior, gorjeta); a exata vem primeiro
 
 const dataDe = (s) => (s == null ? null : DIA.format(new Date(Number(s) * 1000)));
 const epochDe = (data) => Math.floor(Date.parse(data + "T00:00:00-03:00") / 1000); // meia-noite em Brasília, como o app grava
-const somarDias = (data, n) => new Date(Date.parse(data + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const chave = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const reais = (v) => Math.round(Number(v) * 100) / 100;
@@ -80,28 +79,6 @@ function transacaoLegivel(pk, d, cat, banco) {
 
 // ---------- Anotações ----------
 
-const sinalGasto = "CASE WHEN a.type = 'CREDIT' THEN t.amount > 0 ELSE t.amount < 0 END";
-
-async function candidatas(db, an) {
-  const tol = Math.max(0.01, an.valor * TOLERANCIA);
-  const { results } = await db.prepare(
-    `SELECT t.id, t.date, t.description, t.merchant, t.contraparte, t.amount, t.status, a.name AS conta, e.dados AS app
-     FROM transactions t JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN espelho e ON e.tabela = 'transactions' AND e.pk = 'mb:' || t.id AND e.deleted_at IS NULL
-     WHERE abs(abs(t.amount) - ?1) <= ?2 AND t.date BETWEEN ?3 AND ?4 AND t.scheduled = 0 AND (${sinalGasto}) = ?5
-       AND t.id NOT IN (SELECT transacao_id FROM anotacoes WHERE transacao_id IS NOT NULL AND status IN ('vinculada', 'aplicada') AND id != ?6)
-     ORDER BY abs(abs(t.amount) - ?1) > 0.005, abs(julianday(t.date) - julianday(?7)), t.date LIMIT 6`
-  ).bind(an.valor, tol, somarDias(an.data, -DIAS_ANTES), somarDias(an.data, DIAS_DEPOIS), an.receita ? 0 : 1, an.id, an.data).all();
-  return results.map((t) => {
-    const app = t.app ? JSON.parse(t.app) : null;
-    return {
-      transacao_id: t.id, data: t.date, valor: Math.abs(t.amount), valor_exato: Math.abs(Math.abs(t.amount) - an.valor) < 0.005,
-      texto_do_banco: t.description, estabelecimento: t.merchant || t.contraparte || null, conta: t.conta, pendente_no_banco: t.status === "PENDING",
-      no_app: app ? { titulo: app.name, ja_editada: editadaNoApp(app) } : null,
-    };
-  });
-}
-
 const anotacaoLegivel = (a, cat) => ({
   id: a.id, status: a.status, valor: a.valor, data: a.data, receita: !!a.receita, descricao: a.descricao, titulo: a.titulo,
   categoria: nomeCat(cat, a.categoria), subcategoria: nomeCat(cat, a.subcategoria),
@@ -126,7 +103,7 @@ export async function aplicarVinculadas(env, ctx) {
   ).all();
   if (!results.length) return 0;
   await gravar({ env, ctx }, results.map((a) => ({ tabela: "transactions", pk: "mb:" + a.transacao_id, dados: patchDaAnotacao(a) })));
-  const ts = new Date().toISOString();
+  const ts = agoraTs();
   await db.batch(results.map((a) => db.prepare("UPDATE anotacoes SET status = 'aplicada', atualizada = ?1 WHERE id = ?2 AND status = 'vinculada'").bind(ts, a.id)));
   return results.length;
 }
@@ -171,8 +148,8 @@ const FERRAMENTAS = [
   {
     name: "listar_anotacoes",
     title: "Listar anotações",
-    description: "Lista anotações. As pendentes vêm com as transações do banco compatíveis (valor e data). Mostre as candidatas ao Renan e confirme antes de chamar confirmar_anotacao.",
-    inputSchema: obj({ status: s("string", "pendente (padrão), vinculada, aplicada, descartada ou todas", { enum: ["pendente", "vinculada", "aplicada", "descartada", "todas"] }), limite: s("integer", "Máximo (padrão 30)") }),
+    description: "Lista anotações. As pendentes vêm com as transações do banco compatíveis (valor e data). Mostre as candidatas ao Renan e confirme antes de chamar confirmar_anotacao. 'automatica' = o app ligou sozinho (1 transação compatível) e aplica/aplicou; o Renan pode desfazer em Feito pela IA.",
+    inputSchema: obj({ status: s("string", "pendente (padrão), vinculada, automatica, aplicada, descartada ou todas", { enum: ["pendente", "vinculada", "automatica", "aplicada", "descartada", "todas"] }), limite: s("integer", "Máximo (padrão 30)") }),
     annotations: LEITURA,
   },
   {
@@ -185,7 +162,7 @@ const FERRAMENTAS = [
   {
     name: "editar_anotacao",
     title: "Editar ou descartar anotação",
-    description: "Corrige campos de uma anotação pendente/vinculada, volta uma vinculada para pendente (desvincular) ou descarta.",
+    description: "Corrige campos de uma anotação pendente/vinculada, volta uma vinculada (ou ligada sozinha pelo app) para pendente (desvincular) ou descarta. Numa ligada sozinha, desvincular e descartar desfazem a aplicação.",
     inputSchema: obj({
       id: s("string", "Id da anotação"), valor: s("number", "Valor"), data: s("string", "AAAA-MM-DD"), descricao: s("string", "Descrição"),
       titulo: s("string", "Título"), categoria: s("string", "Categoria ('' remove)"), subcategoria: s("string", "Subcategoria"), nota: s("string", "Nota"),
@@ -307,7 +284,7 @@ const EXECUTAR = {
     const db = c.env.DB;
     const cat = await catalogo(db);
     const r = resolverCategoria(cat, texto(a.categoria), texto(a.subcategoria));
-    const ts = new Date().toISOString();
+    const ts = agoraTs();
     const an = {
       id: crypto.randomUUID(), valor: exigirValor(a.valor), data: exigirData(a.data, hojeSP()), receita: a.receita ? 1 : 0,
       descricao: texto(a.descricao) || falhar("descricao obrigatória"), titulo: texto(a.titulo), categoria: r.categoria, subcategoria: r.subcategoria ?? null,
@@ -336,9 +313,10 @@ const EXECUTAR = {
     const an = (await lerAnotacao(db, a.anotacao_id)) || falhar("Anotação não encontrada");
     if (!["pendente", "vinculada"].includes(an.status)) falhar(`Anotação está ${an.status}`);
     const tx = (await db.prepare("SELECT id FROM transactions WHERE id = ?1").bind(a.transacao_id).first()) || falhar("Transação do banco não encontrada");
-    const outra = await db.prepare("SELECT id FROM anotacoes WHERE transacao_id = ?1 AND status IN ('vinculada', 'aplicada') AND id != ?2").bind(tx.id, an.id).first();
+    const outra = await db.prepare("SELECT id FROM anotacoes WHERE transacao_id = ?1 AND status IN ('vinculada', 'aplicada', 'automatica') AND id != ?2").bind(tx.id, an.id).first();
     if (outra) falhar(`Essa transação já está ligada à anotação ${outra.id}`);
-    await db.prepare("UPDATE anotacoes SET status = 'vinculada', transacao_id = ?1, atualizada = ?2 WHERE id = ?3").bind(tx.id, new Date().toISOString(), an.id).run();
+    const ligou = await db.prepare("UPDATE anotacoes SET status = 'vinculada', transacao_id = ?1, atualizada = ?2 WHERE id = ?3 AND status IN ('pendente', 'vinculada') RETURNING id").bind(tx.id, agoraTs(), an.id).all();
+    if (!ligou.results.length) falhar("A anotação mudou de status agora: liste de novo.");
     const aplicadas = await aplicarVinculadas(c.env, c.ctx);
     const fim = await lerAnotacao(db, an.id);
     return { status: fim.status, mensagem: fim.status === "aplicada" ? "Aplicada: a transação já aparece com o novo título e categoria." : "Vinculada: será aplicada assim que o app importar a transação.", aplicadas };
@@ -346,9 +324,15 @@ const EXECUTAR = {
 
   async editar_anotacao(a, c) {
     const db = c.env.DB;
-    const an = (await lerAnotacao(db, a.id)) || falhar("Anotação não encontrada");
+    let an = (await lerAnotacao(db, a.id)) || falhar("Anotação não encontrada");
     if (an.status === "aplicada") falhar("Anotação já aplicada: edite a transação com editar_transacao");
-    const ts = new Date().toISOString();
+    if (an.status === "automatica") {
+      if (!a.descartar && !a.desvincular) falhar("Anotação ligada sozinha pelo app: use desvincular ou descartar (desfaz a aplicação)");
+      const r = await desfazerIa(c.env, c.ctx, { tx_id: an.transacao_id });
+      if (r.status !== 200 && r.status !== 409) falhar(r.corpo.erro);
+      an = await lerAnotacao(db, an.id);
+    }
+    const ts = agoraTs();
     if (a.descartar) {
       await db.prepare("UPDATE anotacoes SET status = 'descartada', atualizada = ?1 WHERE id = ?2").bind(ts, an.id).run();
       return { status: "descartada" };
@@ -464,7 +448,7 @@ const EXECUTAR = {
 
   async apagar_transacao(a, c) {
     const atual = viva(await linhaDe(c.env.DB, "transactions", a.pk), "Transação não encontrada");
-    await gravar(c, [{ tabela: "transactions", pk: a.pk, dados: null, deleted_at: new Date().toISOString() }]);
+    await gravar(c, [{ tabela: "transactions", pk: a.pk, dados: null, deleted_at: agoraTs() }]);
     return { apagada: a.pk, era: transacaoLegivel(a.pk, atual.dados, await catalogo(c.env.DB)) };
   },
 
@@ -492,7 +476,7 @@ const EXECUTAR = {
   async apagar_linha(a, c) {
     if (!TABELAS_ESPELHO.includes(a.tabela)) falhar("Tabela desconhecida");
     const atual = viva(await linhaDe(c.env.DB, a.tabela, a.pk), "Linha não encontrada");
-    await gravar(c, [{ tabela: a.tabela, pk: a.pk, dados: null, deleted_at: new Date().toISOString() }]);
+    await gravar(c, [{ tabela: a.tabela, pk: a.pk, dados: null, deleted_at: agoraTs() }]);
     return { apagada: { tabela: a.tabela, pk: a.pk }, era: atual.dados };
   },
 
@@ -515,7 +499,7 @@ const EXECUTAR = {
 
 const INSTRUCOES = `RenanCash: finanças pessoais do Renan (BRL, fuso America/Sao_Paulo).
 Quando o Renan contar um gasto ("gastei 45 no almoço"), chame anotar_gasto com valor, descrição e, se der para inferir, título curto e categoria do app (veja listar_categorias). O banco lança a transação até ~24 h depois.
-Quando ele perguntar o que chegou, chame listar_anotacoes: mostre cada anotação com as candidatas e só chame confirmar_anotacao depois do ok dele. Nunca confirme sozinho.
+O app liga sozinho a anotação quando há exatamente 1 transação compatível (status automatica). Com 0 ou 2+, chame listar_anotacoes, mostre as candidatas e só chame confirmar_anotacao depois do ok dele. Nunca confirme sozinho.
 Antes de apagar qualquer coisa, confirme com ele.`;
 
 const resultado = (id, result) => ({ jsonrpc: "2.0", id, result });

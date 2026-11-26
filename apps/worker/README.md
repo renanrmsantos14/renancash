@@ -244,7 +244,7 @@ Liga o Claude ao RenanCash. A ideia: você conta um gasto ao Claude na hora ("ga
 - **Como aplica**: a confirmação grava título, categoria, subcategoria e nota na linha `transactions/mb:<id>` do espelho, com `date_time_modified` atual, como se você tivesse editado no app. Se o app ainda não importou a transação, a anotação fica `vinculada` e é aplicada quando o celular gravar a linha no espelho.
 - **Outras ferramentas**: resumo do ciclo, contas, categorias, buscar/editar/criar/apagar transações, ler/escrever/apagar linhas de qualquer tabela do espelho, SQL só leitura (`consultar_sql`, até 200 linhas, sem tabelas de credenciais) e atualizar do banco. Toda escrita vai pelo espelho como o aparelho `claude` (mesmo LWW e aviso em tempo real). Exige o espelho ligado e semeado.
 
-## IA automática (fase 1)
+## IA automática (fases 1 e 2)
 
 Classifica sozinha as transações que chegam do banco (spec: `docs/ia-automatica-plano.md`). Código em `src/iaAuto.js`; só roda com o espelho ligado e semeado.
 
@@ -254,6 +254,10 @@ Classifica sozinha as transações que chegam do banco (spec: `docs/ia-automatic
 - **Endpoints** (token do aparelho; o cookie do painel só nos GET): `GET /api/ia/aplicadas?desde=`, `POST /api/ia/desfazer {tx_id}`, `POST /api/ia/memoria {padroes}` e `GET /api/ia/relatorio` (acerto do modo sombra por faixa de confiança).
 - **Push**: um aviso só (`ia:<primeiro aplicado_em>`, "N gastos classificados pela IA"). No silêncio (22h–7h) fica retido até o cron das 7h. Em `/api/notificacoes` ele vem com `item: {tipo: "ia_aplicadas", desde}`.
 - **Chaves** (linha `_config` do espelho, tabela `config` ou var): `ia_auto = "0"` desliga decisão, aplicação e push. `ia_limiar` (0–1) deixa o Llama aplicar quando a confiança passa dele; ausente, o Llama nunca aplica.
+- **Anotação do MCP (fase 2, origem `anotacao`)**: no início da decisão, anotação `pendente` dos últimos 30 dias com exatamente 1 transação compatível (valor exato, postada, não editada no app, não decidida/desfeita pela IA, não disputada por outra anotação) vira `automatica` + decisão `pendente` em `ia_aplicacoes`, aplicada como as demais (título, categoria e nota) e depois `aplicada`. Vence a memória e o Llama ainda `pendente`; não ensina a memória e não gera o push `anotacao:`. Com 0 ou 2+ candidatas nada muda (o Claude confirma). Desfazer restaura nome, categoria e nota e volta a anotação a `pendente` sem transação; `editar_anotacao` (`desvincular`/`descartar`) numa `automatica` chama o mesmo desfazer.
+- **Devolução de compra (fase 2, origem `devolucao`)**: Pix recebido sem resposta, com exatamente 1 Pix enviado de mesmo valor e favorecido nos 30 dias anteriores (que nenhum outro Pix dispute e que ainda não foi reembolsado/emprestado) recebe a resposta `reembolso` (`reembolso_de` = a compra) em `mb_revisoes`, como o aparelho `ia`. Nunca sobrescreve resposta do usuário. `GET /api/ia/aplicadas` devolve `origem: "devolucao"`, `antes: null` e `depois.name = "Devolução: <compra>"`. Desfazer grava o tombstone da linha (o Pix volta à fila); se o usuário respondeu depois da IA, 412.
+- **Push em lote (fase 2)**: com alguma `devolucao` o título é "N itens resolvidos pela IA"; só classificação/anotação mantém "N gastos classificados pela IA".
+- **Chave extra**: `ia_devolucao = "0"` desliga só a devolução (`ia_auto = "0"` desliga tudo, inclusive anotação automática).
 - **Migração**: `pnpm --filter @meu-banco/worker migrar -- --local` (ou `--remote`) cria as duas tabelas com `CREATE ... IF NOT EXISTS`. O deploy pelo Actions já roda com `--remote`.
 
 ## Segurança

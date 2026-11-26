@@ -36,7 +36,7 @@ test("PUT /api/ajustes grava em registros, preserva campos do app e aparece na v
   const cookie = await entrarComSenha(pedir);
   const put = (corpo) => pedir("/api/ajustes/t1", { method: "PUT", headers: { cookie, origin: ORIGEM, "content-type": "application/json" }, body: JSON.stringify(corpo) });
 
-  // campo gravado pelo app (Fase 2)
+  // campo gravado pelo app
   await env.DB.prepare("INSERT INTO registros VALUES ('ajustes','t1','{\"nota\":\"do app\"}','2026-11-01T00:00:00.000Z',NULL,'2026-11-01T00:00:00.000Z')").run();
   assert.equal((await put({ category: "Mercado", gasto: 0 })).status, 200);
   let r = await env.DB.prepare("SELECT dados, server_at FROM registros WHERE tabela = 'ajustes' AND id = 't1'").first();

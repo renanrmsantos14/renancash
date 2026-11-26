@@ -211,3 +211,21 @@ MbEmprestimos mbCalcularEmprestimos(Iterable<Map<String, dynamic>> decisoes,
 
 /// Empréstimos em aberto como a Início e a aba Empréstimos os mostram, lidos das decisões do aparelho.
 final ValueNotifier<MbEmprestimos> meuBancoEmprestimos = ValueNotifier(const MbEmprestimos());
+
+/// Pessoa lembrada por destinatário, já reduzida das decisões do aparelho; atualizada junto com [meuBancoEmprestimos].
+final ValueNotifier<Map<String, String>> meuBancoPessoasLembradas = ValueNotifier(const {});
+
+/// Destinatário → a pessoa do empréstimo mais recente (por `data`) feito para ele; sem empréstimo ou sem pessoa, não entra.
+Map<String, String> mbPessoaLembrada(Iterable<Map<String, dynamic>> decisoes) {
+  final melhores = <String, Map<String, dynamic>>{};
+  String chave(Map<String, dynamic> d) => '${d['data'] ?? ''}${d['tx_id'] ?? ''}';
+  for (final d in decisoes) {
+    final dest = d['destinatario'];
+    if (d['resposta'] != 'emprestimo' || dest is! String || dest.isEmpty) continue;
+    final pessoa = d['pessoa'];
+    if (pessoa is! String || pessoa.trim().isEmpty) continue;
+    final atual = melhores[dest];
+    if (atual == null || chave(d).compareTo(chave(atual)) > 0) melhores[dest] = d;
+  }
+  return {for (final e in melhores.entries) e.key: (e.value['pessoa'] as String).trim()};
+}

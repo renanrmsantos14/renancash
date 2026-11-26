@@ -1,36 +1,34 @@
-// src/iaAuto.js — IA automática, fase 1 (docs/ia-automatica-plano.md): memória por favorecido no servidor, decisão na chegada
+// src/iaAuto.js — IA automática (docs/ia-automatica-plano.md): memória por favorecido no servidor, decisão na chegada
 // da transação da Pluggy, modo sombra do Llama e a lista "Feito pela IA" com Desfazer.
 //
 // Só roda com o espelho ligado e semeado. Kill switch: `ia_auto` = "0" (linha `_config` do espelho, tabela `config` ou var IA_AUTO)
 // desliga decisão, aplicação e push. `ia_limiar` (mesmas fontes) ausente = o Llama nunca aplica, só registra em sombra.
-// A escrita vai pelo mesmo caminho do MCP (`gravar`: LWW com updated_at = max(agora, atual + 1 ms)) como o aparelho "ia".
+// Também liga sozinha a anotação do MCP (origem `anotacao`) e a devolução de compra (origem `devolucao`, resposta `reembolso` gravada em
+// mb_revisoes); `ia_devolucao` = "0" desliga só a devolução. A escrita vai pelo mesmo caminho do MCP (`gravar`: LWW com updated_at = max(agora, atual + 1 ms)) como o aparelho "ia".
 // Linha `mb:` já editada pelo usuário (date_time_modified >= 2001) nunca é sobrescrita.
 import { ordenarRegras, padraoCasa } from "@meu-banco/core";
-import { gravar, editadaNoApp, espelhoPronto, linhasDe } from "./espelho.js";
+import { gravar, editadaNoApp, espelhoPronto, linhasDe, decisaoDe } from "./espelho.js";
 import { sugerir, MAX_LANCAMENTOS } from "./ia.js";
 import { agoraS, agoraTs, hojeSP, DIAS_REIMPORTAR } from "./app.js";
 import { lerJson as json } from "./sync.js";
 import { somarDias } from "./ciclo.js";
+import { vincularAnotacoesIa } from "./anotacoes.js";
+import { tipoDeRevisao, nomeDaPessoa, normalizarRevisao } from "./revisao.js";
 
 const APARELHO = "ia";
 const MAX_TX = 200;
+const lerSeguro = (t) => { try { return json(t); } catch { return null; } }; // linha malformada fica de fora, como em lerRevisoes
+const falha = (msg) => (e) => console.error(msg, e?.stack || e);
 const MAX_LOTES_LLAMA = 2; // até 16 lançamentos por sincronização (cada chamada pode levar até 15 s); o resto fica para a próxima
 const MIN_CONFIRMACOES = 2;
 const DIAS_LISTA = 14;
 const MAX_PADROES = 1000;
 const MAX_NOME = 60;
+const JANELA_DEVOLUCAO = 30; // mbJanelaReembolsoDias (reembolso.dart)
 const FAIXAS = [[0.7, 0.8], [0.8, 0.9], [0.9, 1]];
 
 // ---------- Chave do favorecido (igual a mbChavePadrao, budget/lib/struct/mbSync/classificar.dart) ----------
 
-const DE = "ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ";
-const PARA = "AAAAAEEEEIIIIOOOOOUUUUC";
-// mbNormalizarRevisao (revisao.dart): troca só os acentos da tabela; o resto que não é A-Z vira espaço.
-export function normalizarRevisao(s) {
-  let b = "";
-  for (const c of String(s ?? "").toUpperCase().split("")) { const i = DE.indexOf(c); b += i >= 0 ? PARA[i] : c; }
-  return b.replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
-}
 const PREFIXO_BANCO = /^(?:PIX (?:ENVIAD[OA]|ENVIO|RECEBID[OA]|RECEBIMENTO)|(?:TED|DOC|TRANSFERENCIA)(?: (?:ENVIAD[OA]|RECEBID[OA]))?|PAGAMENTO(?: DE)?|PAG|COMPRA(?: NO)?(?: (?:DEBITO|CREDITO))?)\b ?/;
 export const chavePadrao = (descricao) => normalizarRevisao(descricao).replace(PREFIXO_BANCO, "").split(" ").filter((p) => p.length > 1).slice(0, 4).join(" ");
 
@@ -43,22 +41,22 @@ function nomeDoUsuario(nome, descricao) {
 
 // ---------- Configuração ----------
 
-// Kill switch: qualquer fonte com "0" desliga. Limiar: a primeira definida (espelho, config, var), entre 0 e 1.
+// Kill switch (`ia_auto`) e interruptor da devolução (`ia_devolucao`): qualquer fonte com "0" desliga. Limiar: a primeira definida (espelho, config, var), entre 0 e 1.
 export async function configIa(env) {
   const db = env.DB;
   const [esp, cfg] = await db.batch([
-    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = '_config' AND pk IN ('ia_auto', 'ia_limiar') AND deleted_at IS NULL"),
-    db.prepare("SELECT chave, valor FROM config WHERE chave IN ('ia_auto', 'ia_limiar')"),
+    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = '_config' AND pk IN ('ia_auto', 'ia_limiar', 'ia_devolucao') AND deleted_at IS NULL"),
+    db.prepare("SELECT chave, valor FROM config WHERE chave IN ('ia_auto', 'ia_limiar', 'ia_devolucao')"),
   ]);
   const fontes = [
-    Object.fromEntries(esp.results.map((r) => { try { return [r.pk, JSON.parse(r.dados)?.v]; } catch { return [r.pk, null]; } })),
+    Object.fromEntries(esp.results.map((r) => [r.pk, lerSeguro(r.dados)?.v])),
     Object.fromEntries(cfg.results.map((r) => [r.chave, r.valor])),
-    { ia_auto: env.IA_AUTO, ia_limiar: env.IA_LIMIAR },
+    { ia_auto: env.IA_AUTO, ia_limiar: env.IA_LIMIAR, ia_devolucao: env.IA_DEVOLUCAO },
   ];
-  const auto = !fontes.some((f) => f.ia_auto != null && String(f.ia_auto).trim() === "0");
+  const desligado = (chave) => fontes.some((f) => f[chave] != null && String(f[chave]).trim() === "0");
   const bruto = fontes.map((f) => f.ia_limiar).find((v) => v != null && String(v).trim() !== "");
   const l = Number(String(bruto ?? "").replace(",", "."));
-  return { auto, limiar: bruto != null && l > 0 && l <= 1 ? l : null };
+  return { auto: !desligado("ia_auto"), devolucao: !desligado("ia_devolucao"), limiar: bruto != null && l > 0 && l <= 1 ? l : null };
 }
 
 // ---------- Catálogo do app (espelho) ----------
@@ -95,6 +93,17 @@ export async function decidirIa(env, ctx) {
   const cfg = await configIa(env);
   if (!cfg.auto) return;
   const db = env.DB;
+  const aplicar = async () => {
+    const tarefas = [];
+    await aplicarPendentesIa(env, { waitUntil: (p) => tarefas.push(p) }, cfg);
+    await Promise.allSettled(tarefas);
+  };
+  // Antes da memória/Llama: a anotação única ganha da decisão ainda pendente da mesma transação.
+  // Falha numa das duas não pode parar a classificação por memória/Llama: cada uma registra e segue.
+  const [ligou] = await Promise.all([
+    vincularAnotacoesIa(env).catch(falha("IA: anotação automática falhou")),
+    cfg.devolucao ? decidirDevolucoes(env, ctx).catch(falha("IA: devolução falhou")) : null,
+  ]);
   const { results: txs } = await db.prepare(
     `SELECT t.id, t.description, t.amount, t.date, a.type AS tipo_conta, a.name AS conta, e.dados AS app, e.deleted_at AS apagada
      FROM transactions t JOIN accounts a ON a.id = t.account_id
@@ -106,7 +115,10 @@ export async function decidirIa(env, ctx) {
      ORDER BY t.date DESC, t.id LIMIT ?2`
   ).bind(somarDias(hojeSP(), -DIAS_REIMPORTAR), MAX_TX).all();
   const novas = txs.filter((t) => !t.apagada && !editadaNoApp(json(t.app)));
-  if (!novas.length) return;
+  if (!novas.length) {
+    if (ligou) await aplicar();
+    return;
+  }
   const [categorias, titulos, mem] = await Promise.all([
     linhasDe(db, "categories"), linhasDe(db, "associated_titles"), db.prepare("SELECT * FROM ia_memoria").all().then((r) => r.results),
   ]);
@@ -121,11 +133,6 @@ export async function decidirIa(env, ctx) {
   const registrar = (t, origem, chave, sugestao, confianca, status) =>
     linhas.push(db.prepare("INSERT OR IGNORE INTO ia_aplicacoes (tx_id, origem, chave, sugestao, confianca, status, criado_em, atualizado_em) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)")
       .bind(t.id, origem, chave || null, sugestao ? JSON.stringify(sugestao) : null, confianca, status, ts));
-  const aplicar = async () => {
-    const tarefas = [];
-    await aplicarPendentesIa(env, { waitUntil: (p) => tarefas.push(p) }, cfg);
-    await Promise.allSettled(tarefas);
-  };
   const paraLlama = [];
   for (const t of novas) {
     const valor = t.tipo_conta === "CREDIT" ? -t.amount : t.amount; // negativo = saída (como o app manda ao /api/ia/sugerir)
@@ -162,19 +169,97 @@ export async function decidirIa(env, ctx) {
     if (cfg.limiar != null) await aplicar();
   };
   if (cfg.limiar != null || !ctx) await llama();
-  else ctx.waitUntil(llama().catch((e) => console.error("IA: Llama falhou", e?.stack || e)));
+  else ctx.waitUntil(llama().catch(falha("IA: Llama falhou")));
+}
+
+// ---------- Devolução de compra (Pix recebido que abate um Pix enviado de mesmo valor e favorecido) ----------
+
+const emCentavos = (v) => Math.round(Number(v) * 100);
+
+// Pix recebido sem resposta e com exatamente 1 compra (Pix enviado de −valor, até 30 dias antes, mesmo favorecido) que nenhum outro
+// Pix disputa: grava a resposta `reembolso` (reembolso_de = a compra) em mb_revisoes e registra `aplicada`. Nunca sobrescreve resposta
+// do usuário (a linha viva é conferida de novo antes de gravar). Falha ao gravar: nada é registrado, tenta na próxima sincronização.
+export async function decidirDevolucoes(env, ctx) {
+  const db = env.DB;
+  const { results: pix } = await db.prepare(
+    `SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id
+     WHERE t.date >= ?1 AND a.type != 'CREDIT' AND t.status != 'PENDING' AND t.scheduled = 0 AND t.amount > 0
+       AND NOT EXISTS (SELECT 1 FROM ia_aplicacoes i WHERE i.tx_id = t.id)
+       AND NOT EXISTS (SELECT 1 FROM espelho e WHERE e.tabela = 'mb_revisoes' AND e.pk = 'tx:' || t.id AND e.deleted_at IS NULL)
+       AND t.description LIKE '%PIX%' -- só o candidato a Pix ocupa o LIMIT (o filtro exato é tipoDeRevisao)
+     ORDER BY t.date DESC, t.id LIMIT ?2`
+  ).bind(somarDias(hojeSP(), -DIAS_REIMPORTAR), MAX_TX).all();
+  const recebidos = pix.filter((t) => tipoDeRevisao(t)?.tipo === "pix_recebido");
+  if (!recebidos.length) return;
+  const [{ results: compras }, { results: decisoes }, { results: ias }] = await db.batch([
+    db.prepare("SELECT c.id, c.description, c.amount, c.date, c.contraparte, c.merchant FROM transactions c JOIN accounts a ON a.id = c.account_id WHERE c.date >= ?1 AND a.type != 'CREDIT' AND c.scheduled = 0 AND c.status != 'PENDING' AND c.amount < 0")
+      .bind(somarDias(recebidos.at(-1).date, -JANELA_DEVOLUCAO)),
+    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = 'mb_revisoes' AND deleted_at IS NULL AND pk LIKE 'tx:%'"),
+    db.prepare("SELECT sugestao FROM ia_aplicacoes WHERE origem = 'devolucao' AND status IN ('pendente', 'aplicada')"),
+  ]);
+  const usadas = new Set(ias.map((r) => lerSeguro(r.sugestao)?.reembolso_de));
+  for (const r of decisoes) {
+    const d = decisaoDe(lerSeguro(r.dados));
+    if (d?.resposta === "emprestimo") usadas.add(r.pk.slice(3));
+    else if (d?.reembolso_de) usadas.add(String(d.reembolso_de));
+  }
+  const achadas = recebidos.map((t) => {
+    const nome = nomeDaPessoa(t.description);
+    const parte = normalizarRevisao(t.contraparte);
+    const piso = somarDias(t.date, -JANELA_DEVOLUCAO);
+    return { t, cands: compras.filter((c) => !usadas.has(c.id) && emCentavos(c.amount) === -emCentavos(t.amount) && c.date >= piso && c.date <= t.date
+      && ((nome && nome === nomeDaPessoa(c.description)) || (parte && parte === normalizarRevisao(c.contraparte ?? c.merchant)))) };
+  });
+  const disputa = new Map();
+  for (const { cands } of achadas) for (const c of cands) disputa.set(c.id, (disputa.get(c.id) ?? 0) + 1);
+  const unicas = achadas.filter(({ cands }) => cands.length === 1 && disputa.get(cands[0].id) === 1).map(({ t, cands: [c] }) => ({
+    t, c, pk: "tx:" + t.id,
+    decisao: { tipo: "decisao", tx_id: t.id, resposta: "reembolso", reembolso_de: c.id, valor: Math.abs(t.amount), data: t.date, descricao: String(t.description ?? "").slice(0, 200), ia: "devolucao" },
+  }));
+  if (!unicas.length) return;
+  // A linha viva é conferida de novo antes de gravar: resposta do usuário nunca é sobrescrita.
+  const { results: vivas } = await db.prepare("SELECT pk FROM espelho WHERE tabela = 'mb_revisoes' AND deleted_at IS NULL AND pk IN (SELECT value FROM json_each(?1))")
+    .bind(JSON.stringify(unicas.map((u) => u.pk))).all();
+  const respondidas = new Set(vivas.map((r) => r.pk));
+  const novas = unicas.filter((u) => !respondidas.has(u.pk));
+  if (!novas.length) return;
+  try {
+    await gravar({ env, ctx }, novas.map(({ pk, decisao }) => ({ tabela: "mb_revisoes", pk, dados: { pk, dados: JSON.stringify(decisao) } })), APARELHO);
+  } catch (e) {
+    console.error("IA: devolução recusada pelo espelho", e?.stack || e);
+    return;
+  }
+  const ts = agoraTs();
+  await db.batch(novas.map(({ t, c, decisao }) => db.prepare("INSERT OR IGNORE INTO ia_aplicacoes (tx_id, origem, sugestao, confianca, status, depois, criado_em, aplicado_em, atualizado_em) VALUES (?1, 'devolucao', ?2, 1, 'aplicada', ?3, ?4, ?4, ?4)")
+    .bind(t.id, JSON.stringify({ reembolso_de: c.id, compra: c.description }), JSON.stringify(decisao), ts)));
+}
+
+// Desfazer da devolução: só se a resposta ainda é a da IA; grava tombstone e o Pix volta à fila. null = pode seguir.
+async function desfazerDevolucao({ env, ctx }, dec) {
+  const pk = "tx:" + dec.tx_id;
+  const atual = await env.DB.prepare("SELECT dados, deleted_at FROM espelho WHERE tabela = 'mb_revisoes' AND pk = ?1").bind(pk).first();
+  const d = atual && atual.deleted_at == null ? decisaoDe(json(atual.dados)) : null;
+  const feita = json(dec.depois);
+  if (!d || d.resposta !== feita.resposta || d.reembolso_de !== feita.reembolso_de) return { status: 412, corpo: { erro: "Respondida no app depois da IA" } };
+  try {
+    await gravar({ env, ctx }, [{ tabela: "mb_revisoes", pk, dados: null, deleted_at: agoraTs() }], APARELHO);
+  } catch (e) {
+    return { status: 502, corpo: { erro: String(e?.message || e) } };
+  }
+  return null;
 }
 
 // ---------- Aplicação (mesmo mecanismo das anotações vinculadas do MCP) ----------
 
-const campos = (d) => ({ name: d?.name ?? null, category_fk: d?.category_fk ?? null, sub_category_fk: d?.sub_category_fk ?? null });
+// `nota`: só entra quando a decisão grava a nota (anotação); as demais origens não a restauram.
+const campos = (d, nota = d != null && "note" in d) => ({ name: d?.name ?? null, category_fk: d?.category_fk ?? null, sub_category_fk: d?.sub_category_fk ?? null, ...(nota ? { note: d?.note ?? null } : {}) });
 
 // Decisão `pendente` cuja linha `mb:` já está no espelho vira patch na hora; sem a linha, espera o app enviá-la (gancho do
 // POST /api/espelho). Linha editada pelo usuário: a decisão é descartada, nada é gravado.
 export async function aplicarPendentesIa(env, ctx, cfg = null) {
   const db = env.DB;
   const { results } = await db.prepare(
-    "SELECT i.tx_id, i.sugestao, e.dados FROM ia_aplicacoes i JOIN espelho e ON e.tabela = 'transactions' AND e.pk = 'mb:' || i.tx_id AND e.deleted_at IS NULL AND e.dados IS NOT NULL WHERE i.status = 'pendente'"
+    "SELECT i.tx_id, i.origem, i.chave, i.sugestao, e.dados FROM ia_aplicacoes i JOIN espelho e ON e.tabela = 'transactions' AND e.pk = 'mb:' || i.tx_id AND e.deleted_at IS NULL AND e.dados IS NOT NULL WHERE i.status = 'pendente'"
   ).all();
   if (!results.length || !(cfg ?? (await configIa(env))).auto) return;
   const ts = agoraTs();
@@ -183,12 +268,18 @@ export async function aplicarPendentesIa(env, ctx, cfg = null) {
   const aplicar = [];
   for (const r of results) {
     const d = JSON.parse(r.dados);
-    if (editadaNoApp(d)) { descartar.push(r.tx_id); continue; }
+    if (editadaNoApp(d)) { descartar.push(r); continue; }
     const s = JSON.parse(r.sugestao);
-    const patch = { category_fk: s.category_fk, sub_category_fk: s.sub_category_fk ?? null, date_time_modified: dtm, ...(s.name ? { name: s.name } : {}) };
-    aplicar.push({ tx_id: r.tx_id, patch, anterior: { ...campos(d), date_time_modified: d.date_time_modified ?? null }, depois: { ...campos({ ...d, ...patch }), date_time_modified: dtm } });
+    const patch = { date_time_modified: dtm, ...(s.category_fk ? { category_fk: s.category_fk, sub_category_fk: s.sub_category_fk ?? null } : {}), ...(s.name ? { name: s.name } : {}), ...(s.note ? { note: s.note } : {}) };
+    const nota = patch.note !== undefined;
+    aplicar.push({ tx_id: r.tx_id, origem: r.origem, chave: r.chave, patch, anterior: { ...campos(d, nota), date_time_modified: d.date_time_modified ?? null }, depois: { ...campos({ ...d, ...patch }, nota), date_time_modified: dtm } });
   }
-  if (descartar.length) await db.batch(descartar.map((id) => db.prepare("UPDATE ia_aplicacoes SET status = 'descartada', atualizado_em = ?1 WHERE tx_id = ?2 AND status = 'pendente'").bind(ts, id)));
+  if (descartar.length) {
+    await db.batch(descartar.flatMap((r) => [
+      db.prepare("UPDATE ia_aplicacoes SET status = 'descartada', atualizado_em = ?1 WHERE tx_id = ?2 AND status = 'pendente'").bind(ts, r.tx_id),
+      ...(r.origem === "anotacao" ? [db.prepare("UPDATE anotacoes SET status = 'pendente', transacao_id = NULL, atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, r.chave)] : []),
+    ]));
+  }
   if (!aplicar.length) return;
   // Reserva antes de gravar: uma execução concorrente (cron + POST /api/espelho) que lesse a linha já gravada pela IA a tomaria por
   // edição do usuário e descartaria a decisão. Só grava o que esta execução reservou.
@@ -202,7 +293,11 @@ export async function aplicarPendentesIa(env, ctx, cfg = null) {
     console.error("IA: aplicação recusada pelo espelho", e?.stack || e); // voltam a pendentes: a próxima linha `mb:` ou sincronização tenta de novo
     await db.batch(minhas.map((a) => db.prepare("UPDATE ia_aplicacoes SET status = 'pendente', anterior = NULL, depois = NULL, aplicado_em = NULL, atualizado_em = ?1 WHERE tx_id = ?2 AND status = 'aplicada' AND aplicado_em = ?3")
       .bind(agoraTs(), a.tx_id, ts)));
+    return;
   }
+  // Fora do try: a gravação já valeu; falhar aqui não pode devolver a decisão a `pendente` (a linha já tem o valor da IA).
+  const deAnotacao = minhas.filter((a) => a.origem === "anotacao");
+  if (deAnotacao.length) await db.batch(deAnotacao.map((a) => db.prepare("UPDATE anotacoes SET status = 'aplicada', atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, a.chave)));
 }
 
 // ---------- Aprendizado (POST /api/espelho) ----------
@@ -273,6 +368,9 @@ export async function listarAplicadas(db, desde) {
   return {
     itens: results.map((i) => {
       const s = json(i.sugestao);
+      if (i.origem === "devolucao") {
+        return { tx_id: i.tx_id, origem: i.origem, status: i.status, antes: null, depois: { name: `Devolução: ${s?.compra ?? i.description ?? ""}`, category_fk: null }, criado_em: i.criado_em, aplicado_em: i.aplicado_em ?? null };
+      }
       const depois = i.depois ? campos(json(i.depois)) : { name: s?.name || i.description || null, category_fk: s?.category_fk ?? null, sub_category_fk: s?.sub_category_fk ?? null };
       return { tx_id: i.tx_id, origem: i.origem, status: i.status, antes: i.anterior ? campos(json(i.anterior)) : null, depois, criado_em: i.criado_em, aplicado_em: i.aplicado_em ?? null };
     }),
@@ -288,10 +386,14 @@ export async function desfazerIa(env, ctx, corpo) {
   const dec = txId && (await db.prepare(`SELECT * FROM ia_aplicacoes WHERE tx_id = ?1 AND status IN ${SITUACOES}`).bind(txId).first());
   if (!dec) return { status: 404, corpo: { erro: "Aplicação da IA não encontrada" } };
   if (dec.status === "desfeita") return { status: 409, corpo: { erro: "Já desfeita" } };
-  if (dec.status === "aplicada") {
+  if (dec.status === "aplicada" && dec.origem === "devolucao") {
+    const erro = await desfazerDevolucao({ env, ctx }, dec);
+    if (erro) return erro;
+  } else if (dec.status === "aplicada") {
     const atual = await db.prepare("SELECT dados, deleted_at FROM espelho WHERE tabela = 'transactions' AND pk = ?1").bind("mb:" + txId).first();
     if (!atual || atual.deleted_at != null || !atual.dados) return { status: 410, corpo: { erro: "A transação foi apagada: não há o que desfazer." } };
-    if (!igual(json(dec.depois), json(atual.dados))) return { status: 412, corpo: { erro: "A transação foi editada depois da IA. Use Corrigir para mudar." } };
+    const depois = json(dec.depois);
+    if (!igual(depois, json(atual.dados)) || ("note" in depois && (depois.note ?? null) !== (json(atual.dados).note ?? null))) return { status: 412, corpo: { erro: "A transação foi editada depois da IA. Use Corrigir para mudar." } };
     const a = json(dec.anterior);
     try {
       await gravar({ env, ctx }, [{ tabela: "transactions", pk: "mb:" + txId, dados: { ...campos(a), date_time_modified: a.date_time_modified } }], APARELHO);
@@ -304,8 +406,11 @@ export async function desfazerIa(env, ctx, corpo) {
   // Condicional ao status lido: se a IA aplicou a pendente no meio, o Desfazer não pode marcar desfeita sem restaurar.
   const marcou = await db.prepare("UPDATE ia_aplicacoes SET status = 'desfeita', atualizado_em = ?1 WHERE tx_id = ?2 AND status = ?3 RETURNING tx_id").bind(ts, txId, dec.status).all();
   if (!marcou.results.length) return { status: 412, corpo: { erro: "A IA acabou de mudar esta transação. Atualize a lista e tente de novo." } };
-  if (dec.origem !== "regra" && dec.chave && aplicada) {
+  if (["memoria", "llama"].includes(dec.origem) && dec.chave && aplicada) {
     await db.prepare("UPDATE ia_memoria SET confirmacoes = 0, atualizado_em = ?1 WHERE chave = ?2 AND category_fk = ?3").bind(ts, dec.chave, aplicada.category_fk).run();
+  }
+  if (dec.origem === "anotacao" && dec.chave) {
+    await db.prepare("UPDATE anotacoes SET status = 'pendente', transacao_id = NULL, atualizada = ?1 WHERE id = ?2 AND status IN ('automatica', 'aplicada')").bind(ts, dec.chave).run();
   }
   return { status: 200, corpo: { ok: true } };
 }
@@ -357,7 +462,7 @@ export async function relatorioIa(db) {
 
 // Aplicações ainda não avisadas (a desfeita antes do aviso não conta, mas sai da fila do aviso).
 export async function naoAvisadasIa(db) {
-  const { results } = await db.prepare("SELECT tx_id, status, aplicado_em FROM ia_aplicacoes WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL").all();
+  const { results } = await db.prepare("SELECT tx_id, origem, status, aplicado_em FROM ia_aplicacoes WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL").all();
   return results;
 }
 

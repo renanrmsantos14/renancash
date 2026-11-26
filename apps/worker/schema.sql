@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS anotacoes (
   subcategoria TEXT,
   nota         TEXT,
   conta        TEXT,
-  status       TEXT NOT NULL DEFAULT 'pendente', -- pendente | vinculada | aplicada | descartada
+  status       TEXT NOT NULL DEFAULT 'pendente', -- pendente | vinculada | automatica (ligada pela IA, aguardando aplicar) | aplicada | descartada
   transacao_id TEXT,                      -- id da transação do banco (transactions.id)
   criada       TEXT NOT NULL,
   atualizada   TEXT NOT NULL
@@ -201,9 +201,9 @@ CREATE TABLE IF NOT EXISTS ia_memoria (
 -- Llama só registrada (acerto 1/0 quando o usuário classifica); descartada = a linha já tinha sido editada pelo usuário.
 CREATE TABLE IF NOT EXISTS ia_aplicacoes (
   tx_id         TEXT PRIMARY KEY,         -- transactions.id (linha do espelho = 'mb:' || tx_id)
-  origem        TEXT NOT NULL,            -- memoria | regra | llama
+  origem        TEXT NOT NULL,            -- memoria | regra | llama | anotacao | devolucao
   chave         TEXT,                     -- ia_memoria.chave
-  sugestao      TEXT,                     -- JSON {name, category_fk, sub_category_fk}
+  sugestao      TEXT,                     -- JSON {name, category_fk, sub_category_fk, note?}; devolucao: {reembolso_de, compra}
   confianca     REAL,
   status        TEXT NOT NULL,            -- pendente | aplicada | sombra | desfeita | descartada
   anterior      TEXT,                     -- JSON {name, category_fk, sub_category_fk, date_time_modified} antes da aplicação

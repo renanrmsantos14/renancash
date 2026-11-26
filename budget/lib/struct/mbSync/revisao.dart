@@ -253,6 +253,7 @@ Future<void> mbAtualizarRevisar() async {
     } catch (_) {}
     final revisoes = MbRevisoes.deLinhas(await mbLerRevisoes());
     meuBancoRevisar.value = mbFilaVisivel(mbItensRevisar(ciclo), revisoes);
+    meuBancoPessoasLembradas.value = mbPessoaLembrada(revisoes.decisoes.values);
     meuBancoEmprestimos.value = mbCalcularEmprestimos(revisoes.decisoes.values, perdoes: revisoes.perdoes.values);
     meuBancoReembolsos.value = mbVinculosReembolso(revisoes.decisoes.values);
     meuBancoTrocos.value = mbTrocosLigados(revisoes.decisoes.values, meuBancoReembolsos.value);

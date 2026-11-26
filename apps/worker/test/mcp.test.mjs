@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { criarAmbiente, criarAparelho, ORIGEM } from "./ambiente.mjs";
 import { base64url } from "../src/app.js";
 import { alertasAnotacoes } from "../src/mcp.js";
+import { vincularAnotacoesIa } from "../src/anotacoes.js";
 
 const CALLBACK = "https://claude.ai/api/mcp/auth_callback";
 const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -216,4 +217,52 @@ test("JSON-RPC: notificação responde 202, método desconhecido é -32601", asy
   const r = await (await pedir("/mcp", { method: "POST", headers: h, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/list" }) })).json();
   assert.equal(r.error.code, -32601);
   assert.equal((await pedir("/mcp", { headers: h })).status, 405);
+});
+
+test("anotação ligada sozinha: status automatica, sai das candidatas, confirmar recusa e desvincular/descartar desfazem", async () => {
+  const { pedir, tx, db, env } = await preparar();
+  const { ferramenta } = cliente(pedir, (await conectar(pedir)).access_token);
+  const a = await ferramenta("anotar_gasto", { valor: 45, descricao: "almoço", titulo: "Almoço", categoria: "Alimentação" });
+  await tx("z1", "acc-b", -45, hoje, "OUTBACK");
+  assert.equal(await vincularAnotacoesIa(env), 1);
+  assert.equal(await vincularAnotacoesIa(env), 0, "idempotente");
+  const [lig] = (await ferramenta("listar_anotacoes", { status: "automatica" })).anotacoes;
+  assert.deepEqual([lig.id, lig.status, lig.transacao_id], [a.anotacao.id, "automatica", "z1"]);
+  assert.equal((await ferramenta("listar_anotacoes")).anotacoes.length, 0, "pendentes não a mostram");
+  assert.equal((await db.prepare("SELECT status FROM ia_aplicacoes WHERE tx_id = 'z1'").first("status")), "pendente");
+
+  const b = await ferramenta("anotar_gasto", { valor: 45, descricao: "outro almoço" });
+  assert.deepEqual(b.candidatas_agora, [], "a transação já é da outra anotação");
+  await assert.rejects(ferramenta("confirmar_anotacao", { anotacao_id: a.anotacao.id, transacao_id: "z1" }), /automatica/);
+  await assert.rejects(ferramenta("editar_anotacao", { id: a.anotacao.id, titulo: "Novo" }), /desvincular ou descartar/);
+
+  assert.equal((await ferramenta("editar_anotacao", { id: a.anotacao.id, desvincular: true })).anotacao.status, "pendente");
+  assert.equal((await db.prepare("SELECT status FROM ia_aplicacoes WHERE tx_id = 'z1'").first("status")), "desfeita");
+  assert.equal(await vincularAnotacoesIa(env), 0, "desfeita não liga de novo");
+  assert.equal((await db.prepare("SELECT transacao_id FROM anotacoes WHERE id = ?1").bind(a.anotacao.id).first("transacao_id")), null);
+
+  await tx("z2", "acc-b", -30, hoje, "CAFE");
+  const c = await ferramenta("anotar_gasto", { valor: 30, descricao: "café" });
+  await vincularAnotacoesIa(env);
+  assert.equal((await ferramenta("editar_anotacao", { id: c.anotacao.id, descartar: true })).status, "descartada");
+  assert.equal((await db.prepare("SELECT status FROM ia_aplicacoes WHERE tx_id = 'z2'").first("status")), "desfeita");
+});
+
+test("corrida: anotação confirmada pelo Claude no meio do vínculo automático não é ligada pela IA", async () => {
+  const { pedir, tx, db, env } = await preparar();
+  const { ferramenta } = cliente(pedir, (await conectar(pedir)).access_token);
+  const a = await ferramenta("anotar_gasto", { valor: 45, descricao: "almoço" });
+  await tx("y1", "acc-b", -45, hoje, "OUTBACK");
+  await ferramenta("confirmar_anotacao", { anotacao_id: a.anotacao.id, transacao_id: "y1" });
+  assert.equal(await vincularAnotacoesIa(env), 0);
+  assert.equal(await db.prepare("SELECT count(*) n FROM ia_aplicacoes").first("n"), 0);
+  assert.equal(await db.prepare("SELECT status FROM anotacoes WHERE id = ?1").bind(a.anotacao.id).first("status"), "vinculada");
+});
+
+test("instruções do MCP dizem que o app liga sozinho e que o Claude só confirma com 0 ou 2+ candidatas", async () => {
+  const { pedir } = await preparar();
+  const { rpc } = cliente(pedir, (await conectar(pedir)).access_token);
+  const i = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } })).result.instructions;
+  assert.match(i, /exatamente 1 transação compatível \(status automatica\)/);
+  assert.match(i, /Com 0 ou 2\+/);
 });

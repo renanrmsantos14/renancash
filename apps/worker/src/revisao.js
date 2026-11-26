@@ -19,6 +19,22 @@ const MAX_DESTINATARIO = 60;
 const DIAS_CANDIDATOS_SALARIO = 60;
 const MAX_CANDIDATOS_SALARIO = 5;
 
+const DE = "ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ";
+const PARA = "AAAAAEEEEIIIIOOOOOUUUUC";
+// mbNormalizarRevisao (revisao.dart): troca só os acentos da tabela; o resto que não é A-Z vira espaço.
+export function normalizarRevisao(s) {
+  let b = "";
+  for (const c of String(s ?? "").toUpperCase().split("")) { const i = DE.indexOf(c); b += i >= 0 ? PARA[i] : c; }
+  return b.replace(/[^A-Z ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// mbNomeDaPessoa (reembolso.dart): nome inteiro do Pix, sem o prefixo do banco nem "devolvido".
+export function nomeDaPessoa(descricao) {
+  const n = normalizarRevisao(descricao);
+  const m = PIX_ENVIADO.exec(n) ?? PIX_RECEBIDO.exec(n);
+  return (m ? n.slice(m[0].length) : n).replace(/^DEVOLVID[OA]\b ?/, "").trim();
+}
+
 // Que tipo de pergunta a transação gera (ou null). Mesma regra em budget/lib/struct/mbSync/revisao.dart.
 export function tipoDeRevisao(t) {
   if (t.scheduled) return null;
