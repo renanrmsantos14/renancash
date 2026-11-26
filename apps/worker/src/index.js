@@ -203,6 +203,7 @@ async function rotaMcp(request, env, url, caminho, ctx) {
   return tratarMcp(request, env, ctx, {
     baseCiclo: () => baseCiclo(env),
     atualizar: async () => (await atualizarAgora(env, "app", ctx)).json(), // mesmo limite de 5 min do botão do app
+    enviarPendentes: () => enviarPendentes(env), // resumo da revisão diária (respeita o silêncio)
   });
 }
 
@@ -653,7 +654,7 @@ async function notificacoesAparelho(env, desde, ts) {
   // "Para revisar": leva o item (o app mostra os botões das opções) e some com o aviso de item já respondido em outro aparelho.
   const fila = new Map(b.revisar.map((i) => [i.tipo === "salario_nao_detectado" ? "salario" : i.id, i]));
   const notificacoes = results.flatMap((n) => {
-    if (n.chave.startsWith("ia:")) return [{ ...n, item: { tipo: "ia_aplicadas", desde: n.chave.slice("ia:".length) } }]; // abre "Feito pela IA"
+    if (n.chave.startsWith("ia:")) return [{ ...n, item: { tipo: "ia_aplicadas", desde: n.chave.startsWith("ia:claude:") ? null : n.chave.slice("ia:".length) } }]; // abre "Feito pela IA" (o resumo do Claude não tem data ISO na chave)
     if (!n.chave.startsWith("revisar:")) return [n];
     const k = n.chave.startsWith("revisar:salario:") ? "salario" : n.chave.slice("revisar:".length);
     const item = fila.get(k);

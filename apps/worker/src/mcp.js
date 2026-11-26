@@ -3,9 +3,10 @@
 // Anotações: o Renan conta um gasto ao Claude antes de o banco lançar; quando a transação chega, o Claude mostra as candidatas
 // e, com a confirmação, grava título, categoria e nota na transação `mb:<id>` como uma edição feita no app.
 import { TABELAS_ESPELHO } from "@meu-banco/core";
-import { gravar as gravarEspelho, editadaNoApp, ErroGravacao, linhasDe } from "./espelho.js";
+import { gravar as gravarEspelho, editadaNoApp, ErroGravacao, linhasDe, espelhoPronto } from "./espelho.js";
 import { agoraS, agoraTs, diaSP as DIA, hojeSP } from "./app.js";
-import { desfazerIa } from "./iaAuto.js";
+import { desfazerIa, configIa } from "./iaAuto.js";
+import { paraClassificar, paraRevisar, aplicarClaude, enviarResumo, MAX_ITENS, MAX_TITULO_RESUMO, MAX_TEXTO_RESUMO } from "./revisaoClaude.js";
 import { candidatas } from "./anotacoes.js";
 import { somarDias } from "./ciclo.js";
 
@@ -265,6 +266,36 @@ const FERRAMENTAS = [
     inputSchema: obj({}),
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
+  {
+    name: "fila_revisao",
+    title: "Fila da revisão diária",
+    description: "O que falta decidir: para_classificar (no app, sem categoria do Renan; com o palpite do Llama, se houver), para_revisar (Pix recebidos e as compras que podem devolver), outros_para_revisar (só para o resumo), anotacoes_pendentes (com candidatas) e se aplicar_ia está ligado.",
+    inputSchema: obj({ dias: s("number", "Janela em dias (padrão 10, máximo 30)") }),
+    annotations: LEITURA,
+  },
+  {
+    name: "aplicar_ia",
+    title: "Aplicar decisões da revisão diária",
+    description: `Aplica só o que é certeza, como IA (aparece em "Feito pela IA" com Desfazer; nunca cria nem apaga; transação editada no app é recusada). Até ${MAX_ITENS} itens: classificar {tx_id, categoria, subcategoria?, titulo?}, anotacao {anotacao_id, tx_id} ou devolucao {tx_id do Pix recebido, reembolso_de = compra_id}. motivo obrigatório. Resultado item a item.`,
+    inputSchema: obj({
+      itens: {
+        type: "array", maxItems: MAX_ITENS, description: "Decisões",
+        items: obj({
+          tipo: { type: "string", enum: ["classificar", "anotacao", "devolucao"] }, tx_id: s("string", "Id da transação do banco"),
+          categoria: s("string", "Categoria do app (nome ou pk)"), subcategoria: s("string", "Subcategoria"), titulo: s("string", "Título curto no app"),
+          anotacao_id: s("string", "Id da anotação"), reembolso_de: s("string", "compra_id que o Pix devolve"), motivo: s("string", "Por que é certeza (uma frase)"),
+        }, ["tipo", "tx_id", "motivo"]),
+      },
+    }, ["itens"]),
+    annotations: ESCRITA,
+  },
+  {
+    name: "enviar_resumo",
+    title: "Enviar resumo da revisão",
+    description: `Push no celular do Renan (abre "Feito pela IA"). Uma vez por dia; das 22h às 7h sai às 7h. titulo até ${MAX_TITULO_RESUMO} e texto até ${MAX_TEXTO_RESUMO} caracteres.`,
+    inputSchema: obj({ titulo: s("string", "Título"), texto: s("string", "O que foi feito e o que ficou para ele") }, ["titulo", "texto"]),
+    annotations: ESCRITA,
+  },
 ];
 
 const texto = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -493,6 +524,53 @@ const EXECUTAR = {
   async atualizar_banco(_a, c) {
     return c.deps.atualizar();
   },
+
+  async fila_revisao(a, c) {
+    const db = c.env.DB;
+    const dias = limite(a.dias, 10, 30);
+    const [classificar, b, cat, cfg, pronto, { results: anots }] = await Promise.all([
+      paraClassificar(c.env, dias), c.deps.baseCiclo(), catalogo(db), configIa(c.env), espelhoPronto(c.env),
+      db.prepare("SELECT * FROM anotacoes WHERE status = 'pendente' AND data >= ?1 ORDER BY data DESC LIMIT 30").bind(somarDias(hojeSP(), -30)).all(),
+    ]);
+    const [para_revisar, anotacoes_pendentes] = await Promise.all([
+      paraRevisar(c.env, b.revisar),
+      Promise.all(anots.map(async (x) => ({ ...anotacaoLegivel(x, cat), candidatas: await candidatas(db, x) }))),
+    ]);
+    return {
+      hoje: b.hoje, aplicar_ia_ligado: pronto && cfg.auto && cfg.claude,
+      para_classificar: classificar,
+      para_revisar,
+      outros_para_revisar: (b.revisar ?? []).filter((i) => i.tipo !== "pix_recebido").map((i) => ({ tipo: i.tipo, data: i.data ?? null, descricao: i.descricao ?? null, valor: i.valor ?? null })),
+      anotacoes_pendentes,
+    };
+  },
+
+  async aplicar_ia(a, c) {
+    if (!Array.isArray(a.itens) || !a.itens.length) falhar("itens obrigatório");
+    if (a.itens.length > MAX_ITENS) falhar(`No máximo ${MAX_ITENS} itens por chamada`);
+    const cat = await catalogo(c.env.DB);
+    const itens = a.itens.map((x) => {
+      const it = { tipo: x?.tipo, tx_id: texto(x?.tx_id), titulo: texto(x?.titulo), anotacao_id: texto(x?.anotacao_id), reembolso_de: texto(x?.reembolso_de), motivo: texto(x?.motivo)?.slice(0, 300) };
+      if (!it.tx_id) return { ...it, erro: "tx_id obrigatório" };
+      if (!it.motivo) return { ...it, erro: "motivo obrigatório" };
+      if (it.tipo !== "classificar") return it;
+      try {
+        const r = resolverCategoria(cat, texto(x.categoria), texto(x.subcategoria));
+        return { ...it, titulo: it.titulo?.slice(0, 60) ?? null, category_fk: r.categoria, sub_category_fk: r.subcategoria ?? null };
+      } catch (e) {
+        return { ...it, erro: e.message };
+      }
+    });
+    const r = await aplicarClaude(c.env, c.ctx, itens);
+    if (r.recusado) falhar(r.recusado);
+    return r;
+  },
+
+  async enviar_resumo(a, c) {
+    const r = await enviarResumo(c.env, { titulo: texto(a.titulo), texto: texto(a.texto) }, c.deps.enviarPendentes);
+    if (r.erro) falhar(r.erro);
+    return r;
+  },
 };
 
 // ---------- JSON-RPC ----------
@@ -500,7 +578,8 @@ const EXECUTAR = {
 const INSTRUCOES = `RenanCash: finanças pessoais do Renan (BRL, fuso America/Sao_Paulo).
 Quando o Renan contar um gasto ("gastei 45 no almoço"), chame anotar_gasto com valor, descrição e, se der para inferir, título curto e categoria do app (veja listar_categorias). O banco lança a transação até ~24 h depois.
 O app liga sozinho a anotação quando há exatamente 1 transação compatível (status automatica). Com 0 ou 2+, chame listar_anotacoes, mostre as candidatas e só chame confirmar_anotacao depois do ok dele. Nunca confirme sozinho.
-Antes de apagar qualquer coisa, confirme com ele.`;
+Antes de apagar qualquer coisa, confirme com ele.
+fila_revisao, aplicar_ia e enviar_resumo são da revisão diária agendada (prompt em docs/ia-revisao-diaria.md). Numa conversa, só chame aplicar_ia ou enviar_resumo com o ok do Renan.`;
 
 const resultado = (id, result) => ({ jsonrpc: "2.0", id, result });
 const erroRpc = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
@@ -532,7 +611,7 @@ async function chamar(msg, c) {
   return erroRpc(id, -32601, "Método não suportado: " + method);
 }
 
-// deps: { baseCiclo(), atualizar() } vindos do index.js (evita import circular).
+// deps: { baseCiclo(), atualizar(), enviarPendentes() } vindos do index.js (evita import circular).
 export async function tratarMcp(request, env, ctx, deps) {
   if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
   let corpo;

@@ -60,6 +60,17 @@ void main() {
     expect(l[0].rotuloOrigem, 'Memória');
   });
 
+  test('revisão do Claude: rótulo próprio e devolução reconhecida pelo tipo', () {
+    final l = MbIaAplicada.lista({
+      'itens': [
+        _item('c', 'aplicada', origem: 'claude'),
+        {..._item('d', 'aplicada', origem: 'claude', antes: false), 'tipo': 'devolucao'},
+      ]
+    });
+    expect(l.map((i) => i.rotuloOrigem), ['Revisão do Claude', 'Revisão do Claude']);
+    expect(l.map((i) => i.devolucao), [false, true]);
+  });
+
   test('cliente chama os três endpoints com o contrato combinado', () async {
     final reqs = <http.Request>[];
     final c = _cliente((r) async {

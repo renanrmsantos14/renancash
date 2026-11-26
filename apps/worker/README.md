@@ -244,7 +244,7 @@ Liga o Claude ao RenanCash. A ideia: você conta um gasto ao Claude na hora ("ga
 - **Como aplica**: a confirmação grava título, categoria, subcategoria e nota na linha `transactions/mb:<id>` do espelho, com `date_time_modified` atual, como se você tivesse editado no app. Se o app ainda não importou a transação, a anotação fica `vinculada` e é aplicada quando o celular gravar a linha no espelho.
 - **Outras ferramentas**: resumo do ciclo, contas, categorias, buscar/editar/criar/apagar transações, ler/escrever/apagar linhas de qualquer tabela do espelho, SQL só leitura (`consultar_sql`, até 200 linhas, sem tabelas de credenciais) e atualizar do banco. Toda escrita vai pelo espelho como o aparelho `claude` (mesmo LWW e aviso em tempo real). Exige o espelho ligado e semeado.
 
-## IA automática (fases 1 e 2)
+## IA automática (fases 1 a 3)
 
 Classifica sozinha as transações que chegam do banco (spec: `docs/ia-automatica-plano.md`). Código em `src/iaAuto.js`; só roda com o espelho ligado e semeado.
 
@@ -258,6 +258,7 @@ Classifica sozinha as transações que chegam do banco (spec: `docs/ia-automatic
 - **Devolução de compra (fase 2, origem `devolucao`)**: Pix recebido sem resposta, com exatamente 1 Pix enviado de mesmo valor e favorecido nos 30 dias anteriores (que nenhum outro Pix dispute e que ainda não foi reembolsado/emprestado) recebe a resposta `reembolso` (`reembolso_de` = a compra) em `mb_revisoes`, como o aparelho `ia`. Nunca sobrescreve resposta do usuário. `GET /api/ia/aplicadas` devolve `origem: "devolucao"`, `antes: null` e `depois.name = "Devolução: <compra>"`. Desfazer grava o tombstone da linha (o Pix volta à fila); se o usuário respondeu depois da IA, 412.
 - **Push em lote (fase 2)**: com alguma `devolucao` o título é "N itens resolvidos pela IA"; só classificação/anotação mantém "N gastos classificados pela IA".
 - **Chave extra**: `ia_devolucao = "0"` desliga só a devolução (`ia_auto = "0"` desliga tudo, inclusive anotação automática).
+- **Revisão diária do Claude (fase 3, origem `claude`)**: rotina agendada do Claude Code às 21h pelo conector MCP (prompt e cron em `docs/ia-revisao-diaria.md`). Ferramentas novas: `fila_revisao` (só leitura: `para_classificar` com o palpite do Llama em sombra, `para_revisar` com as compras candidatas a devolução, `outros_para_revisar`, `anotacoes_pendentes`), `aplicar_ia` (até 30 itens `classificar` / `anotacao` / `devolucao`, com `motivo`; resultado item a item; recusa linha editada no app, transação já decidida pela IA, categoria de receita num gasto e devolução de valor diferente ou fora dos 30 dias) e `enviar_resumo` (título ≤ 80, texto ≤ 500; chave `ia:claude:<dia>`, no máximo 1 por dia; em silêncio sai às 7h; abre "Feito pela IA"). O que o Claude aplica aparece em "Feito pela IA" como "Revisão do Claude", tem Desfazer, não ensina a memória e não gera o push em lote (já nasce avisado). `GET /api/ia/aplicadas` traz `tipo: "devolucao"` nas devoluções (automáticas e do Claude). `ia_claude = "0"` desliga só `aplicar_ia`; o resumo continua.
 - **Migração**: `pnpm --filter @meu-banco/worker migrar -- --local` (ou `--remote`) cria as duas tabelas com `CREATE ... IF NOT EXISTS`. O deploy pelo Actions já roda com `--remote`.
 
 ## Segurança
