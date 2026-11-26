@@ -33,6 +33,11 @@ export const TABELAS = [
   "CREATE TABLE IF NOT EXISTS espelho (tabela TEXT NOT NULL, pk TEXT NOT NULL, dados TEXT, updated_at TEXT NOT NULL, deleted_at TEXT, server_at TEXT NOT NULL, aparelho TEXT, PRIMARY KEY (tabela, pk));",
   "CREATE INDEX IF NOT EXISTS idx_espelho_server ON espelho(server_at, tabela, pk);",
   "CREATE TABLE IF NOT EXISTS espelho_meta (chave TEXT PRIMARY KEY, valor TEXT);",
+  "CREATE TABLE IF NOT EXISTS mcp_clientes (id TEXT PRIMARY KEY, nome TEXT NOT NULL, destinos TEXT NOT NULL, criado INTEGER NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS mcp_oauth (hash TEXT PRIMARY KEY, tipo TEXT NOT NULL, cliente TEXT NOT NULL, dados TEXT, expira INTEGER NOT NULL, criado INTEGER NOT NULL);",
+  "CREATE INDEX IF NOT EXISTS idx_mcp_oauth_expira ON mcp_oauth(expira);",
+  "CREATE TABLE IF NOT EXISTS anotacoes (id TEXT PRIMARY KEY, valor REAL NOT NULL, data TEXT NOT NULL, receita INTEGER NOT NULL DEFAULT 0, descricao TEXT NOT NULL, titulo TEXT, categoria TEXT, subcategoria TEXT, nota TEXT, conta TEXT, status TEXT NOT NULL DEFAULT 'pendente', transacao_id TEXT, criada TEXT NOT NULL, atualizada TEXT NOT NULL);",
+  "CREATE INDEX IF NOT EXISTS idx_anotacoes_status ON anotacoes(status, data);",
 ];
 
 // Comandos ALTER TABLE para o que falta, dado { tabela: [colunas existentes] }. Tabela ausente fica de fora.

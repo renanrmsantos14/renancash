@@ -234,6 +234,16 @@ Push local: no `apps/worker/.dev.vars` ponha `PUSH_HTTP_LOCAL=1` e um par de tes
 - **Revogar**: em **Apps conectados**, **Revogar** e confirme (ou `DELETE /api/app/tokens/<id>` com sessão). O app passa a receber 401 na hora. Perdeu o aparelho: revogue e crie outro.
 - Aplique o schema novo antes: `pnpm db:remote` (só `CREATE TABLE IF NOT EXISTS`).
 
+## Conector MCP (claude.ai)
+
+Liga o Claude ao RenanCash. A ideia: você conta um gasto ao Claude na hora ("gastei 87,50 no Madero, jantar de aniversário") e, quando o banco lança a transação (até ~24 h depois), o Claude já sabe o que ela é.
+
+- **Conectar**: claude.ai → **Configurações → Conectores → Adicionar conector personalizado**, URL `https://renancash.renanrmsantos14.workers.dev/mcp`. Na tela que abrir, digite a senha do painel (`APP_PASSWORD`). O mesmo vale para o Claude Code (`claude mcp add --transport http renancash <url>`).
+- **OAuth 2.1**: registro dinâmico (`/oauth/register`, só callbacks de claude.ai, claude.com e localhost), código com PKCE S256 (5 min, uso único), token de acesso de 1 h e refresh de 90 dias trocado a cada uso. No D1 (`mcp_clientes`, `mcp_oauth`) fica só o SHA-256. A senha passa pelo mesmo limite de 5 tentativas/min do login. Revogar tudo: `DELETE FROM mcp_oauth` (pelo workflow do D1).
+- **Anotações** (`anotacoes`): `anotar_gasto` guarda o gasto; `listar_anotacoes` mostra as transações do banco compatíveis (valor ±2%, de 3 dias antes a 7 depois, sinal de gasto ou entrada). Nada é aplicado sozinho: o Claude mostra as candidatas e só chama `confirmar_anotacao` depois do seu ok. Quando surge uma candidata, sai um push "Gasto anotado chegou do banco".
+- **Como aplica**: a confirmação grava título, categoria, subcategoria e nota na linha `transactions/mb:<id>` do espelho, com `date_time_modified` atual, como se você tivesse editado no app. Se o app ainda não importou a transação, a anotação fica `vinculada` e é aplicada quando o celular gravar a linha no espelho.
+- **Outras ferramentas**: resumo do ciclo, contas, categorias, buscar/editar/criar/apagar transações, ler/escrever/apagar linhas de qualquer tabela do espelho, SQL só leitura (`consultar_sql`, até 200 linhas, sem tabelas de credenciais) e atualizar do banco. Toda escrita vai pelo espelho como o aparelho `claude` (mesmo LWW e aviso em tempo real). Exige o espelho ligado e semeado.
+
 ## Segurança
 
 - As credenciais do Pluggy (`PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`) e `PLUGGY_ITEM_IDS` só existem como secrets no Worker; o navegador nunca as recebe e ela não está em nenhum arquivo do projeto. `.dev.vars` está no `.gitignore`.

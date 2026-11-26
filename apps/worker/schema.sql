@@ -150,3 +150,39 @@ CREATE TABLE IF NOT EXISTS espelho_meta (
 
 -- A view v_ajustes_espelho foi removida: o SQLite materializava a view e a junção virava O(tx x espelho). deTx (espelho.js) junta direto em `espelho`.
 DROP VIEW IF EXISTS v_ajustes_espelho;
+
+-- Conector MCP (claude.ai): clientes do registro dinâmico e códigos/tokens OAuth (só o SHA-256; expira em epoch segundos).
+CREATE TABLE IF NOT EXISTS mcp_clientes (
+  id       TEXT PRIMARY KEY,
+  nome     TEXT NOT NULL,
+  destinos TEXT NOT NULL,                 -- JSON: redirect_uris
+  criado   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mcp_oauth (
+  hash    TEXT PRIMARY KEY,
+  tipo    TEXT NOT NULL,                  -- codigo | acesso | refresh
+  cliente TEXT NOT NULL,
+  dados   TEXT,                           -- código: { destino, desafio }
+  expira  INTEGER NOT NULL,
+  criado  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_expira ON mcp_oauth(expira);
+
+-- Gastos contados ao Claude antes de o banco lançar. pendente -> vinculada (ligada a transacao_id) -> aplicada (gravada no espelho).
+CREATE TABLE IF NOT EXISTS anotacoes (
+  id           TEXT PRIMARY KEY,
+  valor        REAL NOT NULL,             -- positivo
+  data         TEXT NOT NULL,             -- AAAA-MM-DD
+  receita      INTEGER NOT NULL DEFAULT 0,
+  descricao    TEXT NOT NULL,
+  titulo       TEXT,
+  categoria    TEXT,                      -- category_pk do app
+  subcategoria TEXT,
+  nota         TEXT,
+  conta        TEXT,
+  status       TEXT NOT NULL DEFAULT 'pendente', -- pendente | vinculada | aplicada | descartada
+  transacao_id TEXT,                      -- id da transação do banco (transactions.id)
+  criada       TEXT NOT NULL,
+  atualizada   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_anotacoes_status ON anotacoes(status, data);
