@@ -12,6 +12,7 @@ import 'package:budget/struct/mbSync/contextoLocal.dart';
 import 'package:budget/struct/mbSync/categoriaEfetiva.dart' show MbContextoCategoria;
 import 'package:budget/struct/mbSync/cliente.dart';
 import 'package:budget/struct/mbSync/extrasTransacao.dart';
+import 'package:budget/struct/mbSync/iaAplicadas.dart' show mbImportarPadroesParaIa;
 import 'package:budget/struct/mbSync/mapeamento.dart';
 import 'package:budget/struct/mbSync/metas.dart';
 import 'package:budget/struct/mbSync/registro.dart';
@@ -22,7 +23,6 @@ import 'package:budget/struct/settings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:drift/drift.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart' show DateFormat;
 
 const String meuBancoUrlPadrao =
@@ -279,6 +279,7 @@ Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
       await mbRemoverEstado(_chaveRepuxar);
     }
     await mbAtualizarWidget();
+    await mbImportarPadroesParaIa(cliente);
     meuBancoUltimoErro.value = null;
     meuBancoPareado.value = true;
     meuBancoUltimaSync.value = DateTime.now();
@@ -287,12 +288,9 @@ Future<bool> _puxarUmaVez(MbCliente? clienteParaTeste) async {
     meuBancoUltimoErro.value = e.mensagem;
   } on TimeoutException {
     meuBancoUltimoErro.value = "Tempo esgotado ao falar com o Meu Banco.";
-  } on http.ClientException catch (e) {
-    if (kDebugMode) debugPrint("Meu Banco: ClientException: ${e.message}");
-    meuBancoUltimoErro.value = "Sem conexão com o Meu Banco.";
   } catch (e) {
     if (kDebugMode) debugPrint("Meu Banco: falha na sincronização: $e");
-    meuBancoUltimoErro.value = "Não foi possível sincronizar agora.";
+    meuBancoUltimoErro.value = mbErroDeRede(e) ?? "Não foi possível sincronizar agora.";
   } finally {
     await meuBancoAtualizarRevisar();
   }
@@ -611,11 +609,9 @@ Future<String?> mbMarcarSalario(String txId) async {
     return e.mensagem;
   } on TimeoutException {
     return "O Meu Banco demorou a responder. Tente de novo.";
-  } on http.ClientException {
-    return "Sem conexão com o Meu Banco.";
   } catch (e) {
     if (kDebugMode) debugPrint("Meu Banco: falha ao marcar o salário: $e");
-    return "Não foi possível marcar o salário agora.";
+    return mbErroDeRede(e) ?? "Não foi possível marcar o salário agora.";
   }
 }
 
@@ -638,10 +634,8 @@ Future<String> meuBancoAtualizar() async {
     return e.status == 401 ? "Token inválido ou revogado. Pareie de novo." : e.mensagem;
   } on TimeoutException {
     return "O Meu Banco demorou a responder. Tente de novo.";
-  } on http.ClientException {
-    return "Sem conexão com o Meu Banco.";
   } catch (e) {
     if (kDebugMode) debugPrint("Meu Banco: falha ao atualizar: $e");
-    return "Não foi possível atualizar agora.";
+    return mbErroDeRede(e) ?? "Não foi possível atualizar agora.";
   }
 }

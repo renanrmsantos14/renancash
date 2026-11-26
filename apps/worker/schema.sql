@@ -186,3 +186,33 @@ CREATE TABLE IF NOT EXISTS anotacoes (
   atualizada   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_anotacoes_status ON anotacoes(status, data);
+
+-- IA automática (docs/ia-automatica-plano.md). Memória por favorecido: chave = mbChavePadrao da descrição do banco; a mesma
+-- escolha confirmada pelo usuário soma 1, outra escolha troca e volta a 1; Desfazer zera (deixa de aplicar sozinha).
+CREATE TABLE IF NOT EXISTS ia_memoria (
+  chave           TEXT PRIMARY KEY,
+  category_fk     TEXT NOT NULL,
+  sub_category_fk TEXT,
+  nome            TEXT,                   -- título escrito pelo usuário (null = mantém o do banco)
+  confirmacoes    INTEGER NOT NULL DEFAULT 1,
+  atualizado_em   TEXT NOT NULL
+);
+-- Uma decisão por transação do banco. pendente (espera a linha mb: no espelho) -> aplicada -> desfeita; sombra = sugestão do
+-- Llama só registrada (acerto 1/0 quando o usuário classifica); descartada = a linha já tinha sido editada pelo usuário.
+CREATE TABLE IF NOT EXISTS ia_aplicacoes (
+  tx_id         TEXT PRIMARY KEY,         -- transactions.id (linha do espelho = 'mb:' || tx_id)
+  origem        TEXT NOT NULL,            -- memoria | regra | llama
+  chave         TEXT,                     -- ia_memoria.chave
+  sugestao      TEXT,                     -- JSON {name, category_fk, sub_category_fk}
+  confianca     REAL,
+  status        TEXT NOT NULL,            -- pendente | aplicada | sombra | desfeita | descartada
+  anterior      TEXT,                     -- JSON {name, category_fk, sub_category_fk, date_time_modified} antes da aplicação
+  depois        TEXT,                     -- JSON do que foi gravado
+  acerto        INTEGER,
+  criado_em     TEXT NOT NULL,
+  aplicado_em   TEXT,
+  atualizado_em TEXT NOT NULL,
+  avisada_em    TEXT                      -- push em lote já enviado
+);
+CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);
+CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;

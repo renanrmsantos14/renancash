@@ -16,7 +16,7 @@ export async function autenticarAparelho(request, db, agoraIso) {
   return reg.id;
 }
 
-const json = (texto) => (texto == null ? null : JSON.parse(texto));
+export const lerJson = (texto) => (texto == null ? null : JSON.parse(texto));
 
 // desde = null → leitura completa (sem exclusões). Senão, tudo que mudou desde (desde − 2 min).
 export async function puxar(db, desde, agoraIso, extras = {}) {
@@ -37,17 +37,17 @@ export async function puxar(db, desde, agoraIso, extras = {}) {
   let investimentosMensal = []; // um retrato por mês (aplicações do Inter e do Santander juntas)
   const investimentos = []; // lista completa a cada pull (não segue o `desde`)
   for (const s of snapshots.results) {
-    if (s.key === "avisos") avisos = json(s.data) || [];
-    else if (s.key === CHAVE_HISTORICO) investimentosMensal = serieMensal(json(s.data));
-    else if (s.key.startsWith("investimentos:")) investimentos.push(...(json(s.data) || []));
-    else faturas[s.key.slice("faturas:".length)] = json(s.data);
+    if (s.key === "avisos") avisos = lerJson(s.data) || [];
+    else if (s.key === CHAVE_HISTORICO) investimentosMensal = serieMensal(lerJson(s.data));
+    else if (s.key.startsWith("investimentos:")) investimentos.push(...(lerJson(s.data) || []));
+    else faturas[s.key.slice("faturas:".length)] = lerJson(s.data);
   }
   return {
     agora: agoraIso,
     completo: janela === null,
     contas: contas.results,
     transacoes: transacoes.results,
-    registros: registros.results.map((r) => ({ ...r, dados: json(r.dados) })),
+    registros: registros.results.map((r) => ({ ...r, dados: lerJson(r.dados) })),
     pendentes: pendentes.results.map((p) => p.id),
     removidas: removidas.results.map((r) => r.id),
     config: Object.fromEntries(config.results.map((c) => [c.chave, c.valor])),

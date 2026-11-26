@@ -1,6 +1,7 @@
 // Espelho completo do app: a linha inteira de cada tabela em JSON, com LWW por linha (plano: docs/espelho-completo-plano.md).
 // Desligado por padrão: tudo aqui só roda com a variável ESPELHO = "1".
 import { validarLinhasEspelho } from "@meu-banco/core";
+import { agoraTs } from "./app.js";
 
 export const espelhoLigado = (env) => ["1", "true"].includes(String(env.ESPELHO));
 
@@ -24,7 +25,6 @@ const SQL_ATUAIS =
   "SELECT e.tabela, e.pk, e.dados, e.updated_at, e.deleted_at, e.aparelho FROM espelho e JOIN json_each(?1) j ON e.tabela = json_extract(j.value, '$.tabela') AND e.pk = json_extract(j.value, '$.pk')";
 
 const chaveLinha = (l) => JSON.stringify([l.tabela, l.pk]);
-const agoraBd = () => new Date().toISOString();
 const comDadosTexto = (l) => ({ ...l, dados: l.dados == null ? null : JSON.stringify(l.dados) });
 const baixa = (v) => ({ dados: v.dados == null ? null : JSON.parse(v.dados), updated_at: v.updated_at, deleted_at: v.deleted_at, aparelho: v.aparelho ?? "" });
 const maisNova = (l, atual, aparelho) => l.updated_at > atual.updated_at || (l.updated_at === atual.updated_at && aparelho > atual.aparelho);
@@ -98,7 +98,7 @@ export async function enviarEspelho(db, corpo, agoraIso, aparelho) {
   const gravadas = new Set();
   if (escrever.size) {
     // server_at tirado aqui, colado no batch: ordena a página do cursor; um relógio tirado antes da leitura deixaria a linha atrás de um cursor já entregue.
-    const serverAt = agoraBd();
+    const serverAt = agoraTs();
     const resultados = await db.batch(emLotes([...escrever.values()].map(comDadosTexto)).map((l) => db.prepare(SQL_ENVIAR).bind(JSON.stringify(l), serverAt, aparelho)));
     for (const r of resultados) for (const x of r.results) gravadas.add(chaveLinha(x));
   }
@@ -112,6 +112,40 @@ export async function enviarEspelho(db, corpo, agoraIso, aparelho) {
     aparelho,
     cursor: gravadas.size ? await cursorAtual(db) : null,
   };
+}
+
+export const editadaNoApp = (d) => Number(d?.date_time_modified) >= 978307200; // 2001-01-01: o app trata como edição do usuário
+
+// Linhas vivas de uma tabela como objetos {pk, ...dados}.
+export async function linhasDe(db, tabela) {
+  const { results } = await db.prepare("SELECT pk, dados FROM espelho WHERE tabela = ?1 AND deleted_at IS NULL AND dados IS NOT NULL").bind(tabela).all();
+  return results.map((r) => ({ pk: r.pk, ...JSON.parse(r.dados || "{}") }));
+}
+
+export class ErroGravacao extends Error {}
+
+// updated_at = agora, mas sempre depois do que já está gravado: duas escritas do Claude no mesmo milissegundo (criar e apagar)
+// virariam "reenvio idêntico" e seriam ignoradas, e um aparelho com relógio adiantado faria o LWW recusar a edição para sempre.
+export async function gravar({ env, ctx }, linhas, aparelho) {
+  const agoraMs = Date.now();
+  const ts = new Date(agoraMs).toISOString();
+  const atuais = new Map();
+  for (const tabela of new Set(linhas.map((l) => l.tabela))) {
+    const pks = linhas.filter((l) => l.tabela === tabela).map((l) => l.pk);
+    const { results } = await env.DB.prepare("SELECT pk, updated_at FROM espelho WHERE tabela = ?1 AND pk IN (SELECT value FROM json_each(?2))").bind(tabela, JSON.stringify(pks)).all();
+    for (const r of results) atuais.set(chaveLinha({ tabela, pk: r.pk }), r.updated_at);
+  }
+  const marcadas = linhas.map((l) => {
+    const atual = atuais.get(chaveLinha(l));
+    const ms = Math.max(agoraMs, atual ? Date.parse(atual) + 1 || 0 : 0);
+    return { deleted_at: null, ...l, updated_at: new Date(ms).toISOString() };
+  });
+  const r = await enviarEspelho(env.DB, { linhas: marcadas }, ts, aparelho);
+  if (r.status === 409) throw new ErroGravacao("O espelho ainda não foi semeado pelo celular: nada pode ser gravado.");
+  if (r.status !== 200) throw new ErroGravacao(r.corpo?.erro || "Falha ao gravar");
+  if (r.corpo.rejeitados?.length) throw new ErroGravacao("Rejeitado: " + JSON.stringify(r.corpo.rejeitados).slice(0, 500));
+  if (r.gravadas) ctx.waitUntil(avisar(env, { tipo: "mudou", cursor: r.cursor, aparelho }).catch((e) => console.error("Aviso do espelho falhou", e?.stack || e)));
+  return r.gravadas;
 }
 
 export async function puxarEspelho(db, desde, limite, aparelho) {
@@ -142,7 +176,7 @@ export async function semear(db, corpo, agoraIso, aparelho) {
   const primeiro = corpo.lote === 0;
   if (primeiro && meta.semeado === "1" && corpo.substituir !== true) return { status: 409, corpo: { erro: "ja_semeado" } };
   if (!primeiro && meta.semeando !== aparelho) return { status: 409, corpo: { erro: "semeio_nao_iniciado" } };
-  const serverAt = agoraBd(); // colado no batch (ver enviarEspelho)
+  const serverAt = agoraTs(); // colado no batch (ver enviarEspelho)
   const comandos = [];
   if (primeiro) comandos.push(db.prepare("DELETE FROM espelho_meta WHERE chave = 'semeado'"), defMeta(db, "semeando", aparelho), defMeta(db, "semeando_desde", serverAt));
   for (const l of emLotes(lote.linhas.map(comDadosTexto))) comandos.push(db.prepare(SQL_SEMEAR).bind(JSON.stringify(l), serverAt, aparelho));

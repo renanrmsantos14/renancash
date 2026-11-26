@@ -38,6 +38,10 @@ export const TABELAS = [
   "CREATE INDEX IF NOT EXISTS idx_mcp_oauth_expira ON mcp_oauth(expira);",
   "CREATE TABLE IF NOT EXISTS anotacoes (id TEXT PRIMARY KEY, valor REAL NOT NULL, data TEXT NOT NULL, receita INTEGER NOT NULL DEFAULT 0, descricao TEXT NOT NULL, titulo TEXT, categoria TEXT, subcategoria TEXT, nota TEXT, conta TEXT, status TEXT NOT NULL DEFAULT 'pendente', transacao_id TEXT, criada TEXT NOT NULL, atualizada TEXT NOT NULL);",
   "CREATE INDEX IF NOT EXISTS idx_anotacoes_status ON anotacoes(status, data);",
+  "CREATE TABLE IF NOT EXISTS ia_memoria (chave TEXT PRIMARY KEY, category_fk TEXT NOT NULL, sub_category_fk TEXT, nome TEXT, confirmacoes INTEGER NOT NULL DEFAULT 1, atualizado_em TEXT NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS ia_aplicacoes (tx_id TEXT PRIMARY KEY, origem TEXT NOT NULL, chave TEXT, sugestao TEXT, confianca REAL, status TEXT NOT NULL, anterior TEXT, depois TEXT, acerto INTEGER, criado_em TEXT NOT NULL, aplicado_em TEXT, atualizado_em TEXT NOT NULL, avisada_em TEXT);",
+  "CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);",
+  "CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;",
 ];
 
 // Comandos ALTER TABLE para o que falta, dado { tabela: [colunas existentes] }. Tabela ausente fica de fora.

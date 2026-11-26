@@ -23,17 +23,20 @@ class Comando {
 export function criarD1() {
   const db = new DatabaseSync(":memory:");
   db.exec(SCHEMA);
+  let fila = Promise.resolve();
   return {
     prepare: (sql) => new Comando(db, sql),
     exec: async (sql) => { db.exec(sql); return { count: 1 }; },
-    async batch(comandos) {
-      db.exec("BEGIN");
-      try {
-        const saida = [];
-        for (const c of comandos) saida.push(await c.all());
-        db.exec("COMMIT");
-        return saida;
-      } catch (e) { db.exec("ROLLBACK"); throw e; }
-    },
+    // O D1 real executa cada batch de forma atômica; aqui serializa, senão dois batches em segundo plano se cruzam no BEGIN.
+    batch(comandos) { return (fila = fila.then(() => rodar(comandos), () => rodar(comandos))); },
   };
+  async function rodar(comandos) {
+    db.exec("BEGIN");
+    try {
+      const saida = [];
+      for (const c of comandos) saida.push(await c.all());
+      db.exec("COMMIT");
+      return saida;
+    } catch (e) { db.exec("ROLLBACK"); throw e; }
+  }
 }

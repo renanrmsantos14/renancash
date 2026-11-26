@@ -7,6 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:universal_html/html.dart' as html;
 
+/// Mensagem de "sem conexão" quando [e] é falha de rede (tempo esgotado ou cliente HTTP); senão null.
+String? mbErroDeRede(Object e) =>
+    e is TimeoutException || e is http.ClientException ? 'Sem conexão com o Meu Banco.' : null;
+
 class MbErroHttp implements Exception {
   final int status;
   final String mensagem;
@@ -114,6 +118,21 @@ class MbCliente {
   Future<Map<String, dynamic>> iaSugerir(Map<String, dynamic> corpo) => _chamar(
       'POST', '/api/ia/sugerir',
       corpo: corpo, limite: const Duration(seconds: 25));
+
+  /// "Feito pela IA": o que o Worker aplicou (sem `desde`, os últimos 14 dias).
+  Future<Map<String, dynamic>> iaAplicadas({String? desde}) =>
+      _chamar('GET', '/api/ia/aplicadas', query: desde == null ? null : {'desde': desde});
+
+  /// Desfaz uma aplicação. 404: não existe; 409: já desfeita (ambos viram MbErroHttp).
+  Future<void> iaDesfazer(String txId) async {
+    await _chamar('POST', '/api/ia/desfazer', corpo: {'tx_id': txId});
+  }
+
+  /// Importação única dos padrões do aparelho para a memória do Worker.
+  Future<void> iaMemoria(List<Map<String, dynamic>> padroes) async {
+    await _chamar('POST', '/api/ia/memoria',
+        corpo: {'padroes': padroes}, limite: const Duration(seconds: 60));
+  }
 
   Future<Map<String, dynamic>> iaEntender(Map<String, dynamic> corpo) => _chamar(
       'POST', '/api/ia/entender',

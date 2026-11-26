@@ -6,7 +6,11 @@ const REGEX_TOKEN = /^mb_[A-Za-z0-9_-]{43}$/; // 32 bytes em base64url (43 chars
 export const base64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 export const gerarToken = (prefixo = "mb_") => prefixo + base64url(crypto.getRandomValues(new Uint8Array(32)));
+export const agoraTs = () => new Date().toISOString();
+export const DIAS_REIMPORTAR = 10; // relê os últimos dias para pegar lançamentos que o banco posta com atraso (sync e IA)
 export const agoraS = () => Math.floor(Date.now() / 1000);
+export const diaSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
+export const hojeSP = () => diaSP.format(new Date());
 
 export async function hashToken(token) {
   const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
