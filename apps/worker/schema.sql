@@ -201,9 +201,9 @@ CREATE TABLE IF NOT EXISTS ia_memoria (
 -- Llama só registrada (acerto 1/0 quando o usuário classifica); descartada = a linha já tinha sido editada pelo usuário.
 CREATE TABLE IF NOT EXISTS ia_aplicacoes (
   tx_id         TEXT PRIMARY KEY,         -- transactions.id (linha do espelho = 'mb:' || tx_id)
-  origem        TEXT NOT NULL,            -- memoria | regra | llama | anotacao | devolucao
+  origem        TEXT NOT NULL,            -- memoria | regra | llama | anotacao | devolucao | claude (revisão diária pelo MCP)
   chave         TEXT,                     -- ia_memoria.chave
-  sugestao      TEXT,                     -- JSON {name, category_fk, sub_category_fk, note?}; devolucao: {reembolso_de, compra}
+  sugestao      TEXT,                     -- JSON {name, category_fk, sub_category_fk, note?}; devolucao: {reembolso_de, compra}; claude: + motivo (anotacao_id ou reembolso_de)
   confianca     REAL,
   status        TEXT NOT NULL,            -- pendente | aplicada | sombra | desfeita | descartada
   anterior      TEXT,                     -- JSON {name, category_fk, sub_category_fk, date_time_modified} antes da aplicação
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS ia_aplicacoes (
   criado_em     TEXT NOT NULL,
   aplicado_em   TEXT,
   atualizado_em TEXT NOT NULL,
-  avisada_em    TEXT                      -- push em lote já enviado
+  avisada_em    TEXT                      -- push em lote já enviado (claude: já nasce avisada; o aviso é o resumo)
 );
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;

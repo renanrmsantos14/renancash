@@ -20,16 +20,17 @@ class MbIaValores {
 String? _txt(Object? v) => v is String && v.isNotEmpty ? v : null;
 
 class MbIaAplicada {
-  final String txId, origem, status; // origem: memoria|regra|llama|anotacao|devolucao; status: pendente|aplicada|desfeita
+  final String txId, origem, status; // origem: memoria|regra|llama|anotacao|devolucao|claude; status: pendente|aplicada|desfeita
+  final String? tipo; // 'devolucao' também na devolução feita pela revisão do Claude
   final MbIaValores? antes;
   final MbIaValores depois;
   final DateTime? data;
-  const MbIaAplicada(this.txId, this.origem, this.status, this.antes, this.depois, this.data);
+  const MbIaAplicada(this.txId, this.origem, this.status, this.antes, this.depois, this.data, {this.tipo});
 
   bool get desfeita => status == 'desfeita';
 
   /// Devolução de compra: não tem nome nem categoria para corrigir, só Desfazer.
-  bool get devolucao => origem == 'devolucao';
+  bool get devolucao => origem == 'devolucao' || tipo == 'devolucao';
 
   /// Linha do Drift no espelho (`mb:<tx_id>`).
   String get pk => 'mb:$txId';
@@ -40,6 +41,7 @@ class MbIaAplicada {
         'llama' => 'IA',
         'anotacao' => 'Anotação',
         'devolucao' => 'Devolução de compra',
+        'claude' => 'Revisão do Claude',
         _ => origem,
       };
 
@@ -49,7 +51,8 @@ class MbIaAplicada {
     if (depois == null) return null;
     return MbIaAplicada(j['tx_id'] as String, '${j['origem'] ?? ''}', '${j['status'] ?? ''}',
         MbIaValores.tentar(j['antes']), depois,
-        DateTime.tryParse('${j['aplicado_em'] ?? j['criado_em'] ?? ''}')?.toLocal());
+        DateTime.tryParse('${j['aplicado_em'] ?? j['criado_em'] ?? ''}')?.toLocal(),
+        tipo: _txt(j['tipo']));
   }
 
   static List<MbIaAplicada> lista(Map<String, dynamic> resposta) => [

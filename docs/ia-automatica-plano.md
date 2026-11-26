@@ -134,3 +134,52 @@ Sem tabela nova e sem migração: `ia_aplicacoes` ganha só valores novos de `or
 - **LWW em `mb_revisoes`.** O app não guarda `updated_at` nessa tabela (`armazem.dart:36`): se o usuário responder o mesmo Pix offline e sincronizar depois, a resposta dele chega com hora posterior e ganha (desejado); a linha `ia_aplicacoes` fica `aplicada` apontando para algo que mudou — o Desfazer responde 412. Testar com dois aparelhos.
 - **Anotação × MCP aberto.** Se o Claude chamar `confirmar_anotacao` no mesmo instante em que a sincronização liga a anotação, o `UPDATE ... WHERE status = 'pendente'` condicional precisa ser a única porta (as duas transições usam a condição de status; sem ela, aplicação dupla).
 - `aplicarVinculadas` continua sem checar `editadaNoApp` (comportamento atual para confirmação manual); fora do escopo, mas é a mesma classe de risco.
+
+## Fase 3: spec
+
+### Estado atual (conferido no código em 26/11/2026, branch com a fase 2)
+
+- O MCP (`apps/worker/src/mcp.js`) tem 16 ferramentas; nenhuma grava em `ia_aplicacoes`. `editar_transacao` grava como edição do app (aparelho `claude`, `date_time_modified` novo): não aparece em "Feito pela IA" nem tem Desfazer.
+- `ia_aplicacoes` (PK `tx_id`) aceita qualquer `origem`; `aplicarPendentesIa` aplica a `pendente` quando a linha `mb:` existe e descarta se foi editada no app; `desfazerIa` restaura `anterior`. A anotação ligada sozinha usa `origem = 'anotacao'` e `chave = <id da anotação>`; a devolução usa `origem = 'devolucao'` e grava `mb_revisoes/tx:<id>`.
+- "Para classificar" no app = linhas `mb:` não editadas (`classificarDados.dart`); "Para revisar" = `filaRevisar` (`revisao.js`), exposto ao MCP por `deps.baseCiclo().revisar`.
+- Push: `notificacoes` (PK `chave`, `INSERT OR IGNORE`) + `enviarPendentes` (`index.js`, respeita `emSilencio` 22h–7h; o cron das 7h entrega o que ficou). Chave `ia:*` abre "Feito pela IA" (`notificacoesAparelho`; o app só confere `item.tipo`). O push em lote "N gastos classificados pela IA" sai de `naoAvisadasIa` (aplicado e não avisado).
+- `configIa` lê `ia_auto`, `ia_limiar` e `ia_devolucao` de `_config` do espelho, tabela `config` e vars `IA_*`.
+
+### Desenho
+
+1. **`fila_revisao {dias?}`** (só leitura; padrão 10, máximo 30). Núcleo em `src/revisaoClaude.js` (importa `iaAuto.js`, `anotacoes.js`, `espelho.js`, `revisao.js`; não importa `mcp.js`).
+   - `para_classificar`: transações do banco na janela, `scheduled = 0`, não `PENDING`, linha `mb:` viva e não editada (ou ainda não importada), sem decisão em `ia_aplicacoes` além de `sombra`, e que não sejam `pix_recebido` nem `envio_santander` (essas são do "Para revisar"). Cada item traz texto do banco, valor, conta, título atual no app e, quando houver, o palpite do Llama em sombra (categoria por nome + confiança).
+   - `para_revisar`: Pix recebidos de `b.revisar` com as compras candidatas a devolução (valor exato, até 30 dias antes, conta corrente, não usadas por outra devolução/empréstimo), com `mesmo_favorecido`.
+   - `outros_para_revisar`: os demais itens de `b.revisar` (só para o resumo; o Claude não decide).
+   - `anotacoes_pendentes`: anotações `pendente` com `candidatas` (mesma função da fase 2).
+   - `kill_switch`: `{ia_auto, ia_claude}` para o Claude saber se `aplicar_ia` vai recusar.
+2. **`aplicar_ia {itens: [...]}`** (até 30 por chamada; resultado item a item, um erro não para os outros). Recusa tudo se o espelho não está pronto, `ia_auto = "0"` ou `ia_claude = "0"`. Grava sempre `origem = 'claude'`, `confianca = 1`, `avisada_em = agora` (o resumo é o aviso; não sai o push em lote) e `sugestao.motivo`.
+   - `{tipo: "classificar", tx_id, categoria, subcategoria?, titulo?, motivo}`: categoria por nome ou pk (`resolverCategoria` do MCP + `resolver` do `iaAuto.js`, que confere receita × gasto). Só sem decisão ou com `sombra` (`ON CONFLICT ... WHERE status = 'sombra'`); linha `mb:` editada → recusa. Entra `pendente` e `aplicarPendentesIa` grava na hora (ou quando o app importar a linha).
+   - `{tipo: "anotacao", anotacao_id, tx_id, motivo}`: anotação `pendente`, transação entre as `candidatas` dela, não `PENDING`, não apagada nem editada no app, sem decisão `aplicada`/`desfeita`/`descartada`. Mesma transição condicional da fase 2 (`anotacoes.status = 'automatica'`), com `chave = <id da anotação>` e `sugestao.anotacao_id`; o resto (aplicar, descartar, desfazer, `editar_anotacao`) passa a reconhecer a anotação por `anotacaoDe(dec)` (origem `anotacao`, ou `claude` com `sugestao.anotacao_id`).
+   - `{tipo: "devolucao", tx_id, reembolso_de, motivo}`: Pix `pix_recebido` em conta corrente, não `PENDING`, sem resposta viva em `mb_revisoes` e sem decisão em `ia_aplicacoes` além de `sombra`; compra com valor exato, até 30 dias antes e não usada. Grava a mesma resposta `reembolso` da fase 2 (`ia: "claude"`) e a linha `aplicada` com `sugestao = {reembolso_de, compra, motivo}`. Aqui o favorecido pode ser diferente (é o que o Claude acrescenta à regra automática).
+   - Assumido: o que o Claude aplica não conta como confirmação em `ia_memoria` (`aprenderIa` já ignora o valor aplicado que volta) e o Desfazer não zera memória (só `memoria`/`llama`): um erro do Claude não vira regra automática.
+3. **`enviar_resumo {titulo, texto}`**: título até 80 caracteres e texto até 500 (acima disso recusa, para o Claude encurtar). Chave `ia:claude:<dia em SP>` com `INSERT OR IGNORE`: no máximo 1 por dia; o segundo responde `{enviado: false, motivo: "Já enviado hoje"}`. Chama `enviarPendentes` (via `deps`); entre 22h e 7h fica para o cron das 7h. Abre "Feito pela IA". Funciona com `ia_claude = "0"` (o resumo pode dizer só o que ficou pendente).
+4. **Kill switch `ia_claude = "0"`** (mesmas três fontes, var `IA_CLAUDE`): desliga só `aplicar_ia`. `ia_auto = "0"` também desliga.
+5. **Prompt da rotina** em `docs/ia-revisao-diaria.md`: começar por `fila_revisao`, aplicar só com certeza alta, nunca criar/apagar/editar fora de `aplicar_ia`, terminar com `enviar_resumo`. `INSTRUCOES` do MCP ganha: `aplicar_ia` e `enviar_resumo` são da revisão diária; numa conversa, só com o ok do Renan.
+6. **App**: `MbIaAplicada.rotuloOrigem` ganha `'claude' => 'Revisão do Claude'`; o cartão de devolução passa a ser reconhecido por `tipo == 'devolucao'` (que `listarAplicadas` passa a mandar também na devolução do Claude), então o Claude-devolução também esconde "Corrigir".
+7. Sem tabela nem coluna nova: só os valores `origem = 'claude'` e `ia_claude` (comentários do `schema.sql`).
+
+### Critérios de aceite
+
+- `fila_revisao` lista um gasto `mb:` não editado sem decisão (com o palpite em sombra, se houver) e não lista o já editado, o já aplicado pela IA, nem Pix recebido.
+- `aplicar_ia` classificar → a linha `mb:` muda, item "Revisão do Claude" em "Feito pela IA", Desfazer devolve nome e categoria de antes; `ia_memoria` não muda.
+- `aplicar_ia` numa transação editada no app, já aplicada pela memória, desfeita, com categoria de receita num gasto ou com categoria inexistente → recusa daquele item, nada gravado; os outros itens da chamada seguem.
+- Anotação pendente com 2 candidatas: `aplicar_ia` anotação na escolhida → título, categoria e nota gravados, anotação `aplicada`; Desfazer volta a anotação para `pendente`. Transação fora das candidatas → recusa.
+- Devolução: Pix recebido de 120,00 + compra −120,00 de outro favorecido 10 dias antes → `aplicar_ia` devolução grava `reembolso`; valor diferente, 31 dias ou compra já reembolsada → recusa; Desfazer grava tombstone.
+- `ia_claude = "0"` → `aplicar_ia` recusa tudo; `fila_revisao` e `enviar_resumo` funcionam.
+- `enviar_resumo` às 21h → 1 notificação `ia:claude:<dia>` e push; segunda chamada no mesmo dia → `enviado: false`; às 23h → gravada sem push (sai às 7h); texto com mais de 500 caracteres → erro.
+- As aplicações do Claude não geram o push em lote "N gastos classificados pela IA".
+- Testes: `apps/worker/test/revisao-claude.test.mjs`; `budget/test/mb_ia_aplicadas_test.dart` (rótulo e `tipo`); passo 6k em `verificar-worker`.
+
+### Riscos
+
+- **A rotina pode chamar ferramentas que criam ou apagam.** `criar_transacao`, `apagar_*` e `escrever_linha` continuam no MCP (a conversa usa); o servidor não distingue a rotina da conversa (mesmo token OAuth). A restrição fica no prompt. Mitigação possível depois: token próprio para a rotina com lista de ferramentas reduzida. Não feito.
+- **Medição do Llama.** Trocar a `sombra` pela decisão do Claude tira aquela transação da taxa de acerto do Llama (o acerto só é medido quando o Renan edita). Volume pequeno; aceitável.
+- **Conector na nuvem.** A rotina na nuvem só enxerga o `renancash` se o conector estiver habilitado nela (aba Connectors da rotina). Não verificado se o OAuth do conector customizado funciona dentro da rotina.
+- **Ordem do aviso.** Uma classificação `pendente` do Claude cuja linha `mb:` só chega depois do resumo é aplicada sem push próprio (já nasce avisada); aparece em "Feito pela IA".
+- **Certeza do Claude.** Não há limiar numérico: depende do prompt e do `motivo` gravado em cada item. `/api/ia/relatorio` só mede o Llama; o acompanhamento é por "Feito pela IA" (rótulo "Revisão do Claude"). Desfazer frequente → `ia_claude = "0"`.

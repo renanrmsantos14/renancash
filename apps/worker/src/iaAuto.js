@@ -4,7 +4,8 @@
 // Só roda com o espelho ligado e semeado. Kill switch: `ia_auto` = "0" (linha `_config` do espelho, tabela `config` ou var IA_AUTO)
 // desliga decisão, aplicação e push. `ia_limiar` (mesmas fontes) ausente = o Llama nunca aplica, só registra em sombra.
 // Também liga sozinha a anotação do MCP (origem `anotacao`) e a devolução de compra (origem `devolucao`, resposta `reembolso` gravada em
-// mb_revisoes); `ia_devolucao` = "0" desliga só a devolução. A escrita vai pelo mesmo caminho do MCP (`gravar`: LWW com updated_at = max(agora, atual + 1 ms)) como o aparelho "ia".
+// mb_revisoes); `ia_devolucao` = "0" desliga só a devolução. A revisão diária do Claude (origem `claude`, revisaoClaude.js) usa os
+// mesmos caminhos; `ia_claude` = "0" desliga só ela. A escrita vai pelo mesmo caminho do MCP (`gravar`: LWW com updated_at = max(agora, atual + 1 ms)) como o aparelho "ia".
 // Linha `mb:` já editada pelo usuário (date_time_modified >= 2001) nunca é sobrescrita.
 import { ordenarRegras, padraoCasa } from "@meu-banco/core";
 import { gravar, editadaNoApp, espelhoPronto, linhasDe, decisaoDe } from "./espelho.js";
@@ -17,7 +18,7 @@ import { tipoDeRevisao, nomeDaPessoa, normalizarRevisao } from "./revisao.js";
 
 const APARELHO = "ia";
 const MAX_TX = 200;
-const lerSeguro = (t) => { try { return json(t); } catch { return null; } }; // linha malformada fica de fora, como em lerRevisoes
+export const lerSeguro = (t) => { try { return json(t); } catch { return null; } }; // linha malformada fica de fora, como em lerRevisoes
 const falha = (msg) => (e) => console.error(msg, e?.stack || e);
 const MAX_LOTES_LLAMA = 2; // até 16 lançamentos por sincronização (cada chamada pode levar até 15 s); o resto fica para a próxima
 const MIN_CONFIRMACOES = 2;
@@ -45,24 +46,24 @@ function nomeDoUsuario(nome, descricao) {
 export async function configIa(env) {
   const db = env.DB;
   const [esp, cfg] = await db.batch([
-    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = '_config' AND pk IN ('ia_auto', 'ia_limiar', 'ia_devolucao') AND deleted_at IS NULL"),
-    db.prepare("SELECT chave, valor FROM config WHERE chave IN ('ia_auto', 'ia_limiar', 'ia_devolucao')"),
+    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = '_config' AND pk IN ('ia_auto', 'ia_limiar', 'ia_devolucao', 'ia_claude') AND deleted_at IS NULL"),
+    db.prepare("SELECT chave, valor FROM config WHERE chave IN ('ia_auto', 'ia_limiar', 'ia_devolucao', 'ia_claude')"),
   ]);
   const fontes = [
     Object.fromEntries(esp.results.map((r) => [r.pk, lerSeguro(r.dados)?.v])),
     Object.fromEntries(cfg.results.map((r) => [r.chave, r.valor])),
-    { ia_auto: env.IA_AUTO, ia_limiar: env.IA_LIMIAR, ia_devolucao: env.IA_DEVOLUCAO },
+    { ia_auto: env.IA_AUTO, ia_limiar: env.IA_LIMIAR, ia_devolucao: env.IA_DEVOLUCAO, ia_claude: env.IA_CLAUDE },
   ];
   const desligado = (chave) => fontes.some((f) => f[chave] != null && String(f[chave]).trim() === "0");
   const bruto = fontes.map((f) => f.ia_limiar).find((v) => v != null && String(v).trim() !== "");
   const l = Number(String(bruto ?? "").replace(",", "."));
-  return { auto: !desligado("ia_auto"), devolucao: !desligado("ia_devolucao"), limiar: bruto != null && l > 0 && l <= 1 ? l : null };
+  return { auto: !desligado("ia_auto"), devolucao: !desligado("ia_devolucao"), claude: !desligado("ia_claude"), limiar: bruto != null && l > 0 && l <= 1 ? l : null };
 }
 
 // ---------- Catálogo do app (espelho) ----------
 
 // Categoria (ou subcategoria, que leva a mãe) que ainda existe e serve ao sinal do valor → {category_fk, sub_category_fk} ou null.
-function resolver(cats, catPk, subPk, valor) {
+export function resolver(cats, catPk, subPk, valor) {
   let cat = cats.get(catPk);
   let sub = subPk ? cats.get(subPk) : null;
   if (cat?.main_category_pk) { sub = cat; cat = cats.get(cat.main_category_pk); }
@@ -174,7 +175,29 @@ export async function decidirIa(env, ctx) {
 
 // ---------- Devolução de compra (Pix recebido que abate um Pix enviado de mesmo valor e favorecido) ----------
 
-const emCentavos = (v) => Math.round(Number(v) * 100);
+export const emCentavos = (v) => Math.round(Number(v) * 100);
+export { JANELA_DEVOLUCAO };
+
+// Decisão que é devolução de compra (automática da fase 2 ou da revisão do Claude) e anotação ligada por ela (id ou null).
+export const ehDevolucao = (dec) => dec.origem === "devolucao" || (dec.origem === "claude" && lerSeguro(dec.sugestao)?.reembolso_de != null);
+export const anotacaoDe = (dec) => (dec.origem === "anotacao" || (dec.origem === "claude" && lerSeguro(dec.sugestao)?.anotacao_id) ? dec.chave : null);
+
+// Compras (conta corrente, saída) desde `desde` e as já usadas por outra devolução, reembolso ou empréstimo.
+export async function contextoDevolucao(db, desde) {
+  const [{ results: compras }, { results: decisoes }, { results: ias }] = await db.batch([
+    db.prepare("SELECT c.id, c.description, c.amount, c.date, c.contraparte, c.merchant FROM transactions c JOIN accounts a ON a.id = c.account_id WHERE c.date >= ?1 AND a.type != 'CREDIT' AND c.scheduled = 0 AND c.status != 'PENDING' AND c.amount < 0")
+      .bind(desde),
+    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = 'mb_revisoes' AND deleted_at IS NULL AND pk LIKE 'tx:%'"),
+    db.prepare("SELECT sugestao FROM ia_aplicacoes WHERE origem IN ('devolucao', 'claude') AND status IN ('pendente', 'aplicada')"),
+  ]);
+  const usadas = new Set(ias.map((r) => lerSeguro(r.sugestao)?.reembolso_de).filter(Boolean));
+  for (const r of decisoes) {
+    const d = decisaoDe(lerSeguro(r.dados));
+    if (d?.resposta === "emprestimo") usadas.add(r.pk.slice(3));
+    else if (d?.reembolso_de) usadas.add(String(d.reembolso_de));
+  }
+  return { compras, usadas };
+}
 
 // Pix recebido sem resposta e com exatamente 1 compra (Pix enviado de −valor, até 30 dias antes, mesmo favorecido) que nenhum outro
 // Pix disputa: grava a resposta `reembolso` (reembolso_de = a compra) em mb_revisoes e registra `aplicada`. Nunca sobrescreve resposta
@@ -191,18 +214,7 @@ export async function decidirDevolucoes(env, ctx) {
   ).bind(somarDias(hojeSP(), -DIAS_REIMPORTAR), MAX_TX).all();
   const recebidos = pix.filter((t) => tipoDeRevisao(t)?.tipo === "pix_recebido");
   if (!recebidos.length) return;
-  const [{ results: compras }, { results: decisoes }, { results: ias }] = await db.batch([
-    db.prepare("SELECT c.id, c.description, c.amount, c.date, c.contraparte, c.merchant FROM transactions c JOIN accounts a ON a.id = c.account_id WHERE c.date >= ?1 AND a.type != 'CREDIT' AND c.scheduled = 0 AND c.status != 'PENDING' AND c.amount < 0")
-      .bind(somarDias(recebidos.at(-1).date, -JANELA_DEVOLUCAO)),
-    db.prepare("SELECT pk, dados FROM espelho WHERE tabela = 'mb_revisoes' AND deleted_at IS NULL AND pk LIKE 'tx:%'"),
-    db.prepare("SELECT sugestao FROM ia_aplicacoes WHERE origem = 'devolucao' AND status IN ('pendente', 'aplicada')"),
-  ]);
-  const usadas = new Set(ias.map((r) => lerSeguro(r.sugestao)?.reembolso_de));
-  for (const r of decisoes) {
-    const d = decisaoDe(lerSeguro(r.dados));
-    if (d?.resposta === "emprestimo") usadas.add(r.pk.slice(3));
-    else if (d?.reembolso_de) usadas.add(String(d.reembolso_de));
-  }
+  const { compras, usadas } = await contextoDevolucao(db, somarDias(recebidos.at(-1).date, -JANELA_DEVOLUCAO));
   const achadas = recebidos.map((t) => {
     const nome = nomeDaPessoa(t.description);
     const parte = normalizarRevisao(t.contraparte);
@@ -261,23 +273,26 @@ export async function aplicarPendentesIa(env, ctx, cfg = null) {
   const { results } = await db.prepare(
     "SELECT i.tx_id, i.origem, i.chave, i.sugestao, e.dados FROM ia_aplicacoes i JOIN espelho e ON e.tabela = 'transactions' AND e.pk = 'mb:' || i.tx_id AND e.deleted_at IS NULL AND e.dados IS NOT NULL WHERE i.status = 'pendente'"
   ).all();
-  if (!results.length || !(cfg ?? (await configIa(env))).auto) return;
+  if (!results.length) return;
+  const c = cfg ?? (await configIa(env));
+  if (!c.auto) return;
   const ts = agoraTs();
   const dtm = agoraS();
   const descartar = [];
   const aplicar = [];
   for (const r of results) {
+    if (r.origem === "claude" && !c.claude) continue; // `ia_claude` = "0": a revisão do Claude que ainda esperava a linha não é aplicada
     const d = JSON.parse(r.dados);
     if (editadaNoApp(d)) { descartar.push(r); continue; }
     const s = JSON.parse(r.sugestao);
     const patch = { date_time_modified: dtm, ...(s.category_fk ? { category_fk: s.category_fk, sub_category_fk: s.sub_category_fk ?? null } : {}), ...(s.name ? { name: s.name } : {}), ...(s.note ? { note: s.note } : {}) };
     const nota = patch.note !== undefined;
-    aplicar.push({ tx_id: r.tx_id, origem: r.origem, chave: r.chave, patch, anterior: { ...campos(d, nota), date_time_modified: d.date_time_modified ?? null }, depois: { ...campos({ ...d, ...patch }, nota), date_time_modified: dtm } });
+    aplicar.push({ tx_id: r.tx_id, anotacao: anotacaoDe(r), patch, anterior: { ...campos(d, nota), date_time_modified: d.date_time_modified ?? null }, depois: { ...campos({ ...d, ...patch }, nota), date_time_modified: dtm } });
   }
   if (descartar.length) {
     await db.batch(descartar.flatMap((r) => [
       db.prepare("UPDATE ia_aplicacoes SET status = 'descartada', atualizado_em = ?1 WHERE tx_id = ?2 AND status = 'pendente'").bind(ts, r.tx_id),
-      ...(r.origem === "anotacao" ? [db.prepare("UPDATE anotacoes SET status = 'pendente', transacao_id = NULL, atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, r.chave)] : []),
+      ...(anotacaoDe(r) ? [db.prepare("UPDATE anotacoes SET status = 'pendente', transacao_id = NULL, atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, r.chave)] : []),
     ]));
   }
   if (!aplicar.length) return;
@@ -296,8 +311,8 @@ export async function aplicarPendentesIa(env, ctx, cfg = null) {
     return;
   }
   // Fora do try: a gravação já valeu; falhar aqui não pode devolver a decisão a `pendente` (a linha já tem o valor da IA).
-  const deAnotacao = minhas.filter((a) => a.origem === "anotacao");
-  if (deAnotacao.length) await db.batch(deAnotacao.map((a) => db.prepare("UPDATE anotacoes SET status = 'aplicada', atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, a.chave)));
+  const deAnotacao = minhas.filter((a) => a.anotacao);
+  if (deAnotacao.length) await db.batch(deAnotacao.map((a) => db.prepare("UPDATE anotacoes SET status = 'aplicada', atualizada = ?1 WHERE id = ?2 AND status = 'automatica'").bind(ts, a.anotacao)));
 }
 
 // ---------- Aprendizado (POST /api/espelho) ----------
@@ -368,8 +383,8 @@ export async function listarAplicadas(db, desde) {
   return {
     itens: results.map((i) => {
       const s = json(i.sugestao);
-      if (i.origem === "devolucao") {
-        return { tx_id: i.tx_id, origem: i.origem, status: i.status, antes: null, depois: { name: `Devolução: ${s?.compra ?? i.description ?? ""}`, category_fk: null }, criado_em: i.criado_em, aplicado_em: i.aplicado_em ?? null };
+      if (ehDevolucao(i)) {
+        return { tx_id: i.tx_id, origem: i.origem, tipo: "devolucao", status: i.status, antes: null, depois: { name: `Devolução: ${s?.compra ?? i.description ?? ""}`, category_fk: null }, criado_em: i.criado_em, aplicado_em: i.aplicado_em ?? null };
       }
       const depois = i.depois ? campos(json(i.depois)) : { name: s?.name || i.description || null, category_fk: s?.category_fk ?? null, sub_category_fk: s?.sub_category_fk ?? null };
       return { tx_id: i.tx_id, origem: i.origem, status: i.status, antes: i.anterior ? campos(json(i.anterior)) : null, depois, criado_em: i.criado_em, aplicado_em: i.aplicado_em ?? null };
@@ -386,7 +401,7 @@ export async function desfazerIa(env, ctx, corpo) {
   const dec = txId && (await db.prepare(`SELECT * FROM ia_aplicacoes WHERE tx_id = ?1 AND status IN ${SITUACOES}`).bind(txId).first());
   if (!dec) return { status: 404, corpo: { erro: "Aplicação da IA não encontrada" } };
   if (dec.status === "desfeita") return { status: 409, corpo: { erro: "Já desfeita" } };
-  if (dec.status === "aplicada" && dec.origem === "devolucao") {
+  if (dec.status === "aplicada" && ehDevolucao(dec)) {
     const erro = await desfazerDevolucao({ env, ctx }, dec);
     if (erro) return erro;
   } else if (dec.status === "aplicada") {
@@ -409,7 +424,7 @@ export async function desfazerIa(env, ctx, corpo) {
   if (["memoria", "llama"].includes(dec.origem) && dec.chave && aplicada) {
     await db.prepare("UPDATE ia_memoria SET confirmacoes = 0, atualizado_em = ?1 WHERE chave = ?2 AND category_fk = ?3").bind(ts, dec.chave, aplicada.category_fk).run();
   }
-  if (dec.origem === "anotacao" && dec.chave) {
+  if (anotacaoDe(dec)) {
     await db.prepare("UPDATE anotacoes SET status = 'pendente', transacao_id = NULL, atualizada = ?1 WHERE id = ?2 AND status IN ('automatica', 'aplicada')").bind(ts, dec.chave).run();
   }
   return { status: 200, corpo: { ok: true } };
