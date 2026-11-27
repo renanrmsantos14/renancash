@@ -157,11 +157,12 @@ export function planejarObjetivo(o, estado, opcoes = {}) {
 
 const restantes = (calc) => new Map([...calc.abertos, ...calc.quitados].map((e) => [e.txId, e.restanteCentavos]));
 
-async function assinaturaDe(estado) {
+async function assinaturaDe(estado, ajustar = []) {
   const alvo = new Set(estado.ligadas.map((t) => idReal(t.pk)));
   const base = {
     o: estado.objetivos.map((o) => [o.pk, o.name, o.amount, o.income, o.archived ? 1 : 0]).sort((a, b) => cmp(a[0], b[0])),
     t: estado.ligadas.map((t) => [t.pk, t.objective_loan_fk, t.amount, t.income, t.paid ? 1 : 0, t.date_created]).sort((a, b) => cmp(a[0], b[0])),
+    a: [...new Set(ajustar)].sort(cmp),
     d: [...estado.decisoes.values()].filter((d) => String(d.tx_id).startsWith("mig:") || alvo.has(d.tx_id)).map((d) => [d.tx_id, d.resposta, d.valor, d.data]).sort((a, b) => cmp(a[0], b[0])),
   };
   return hashToken(JSON.stringify(base));
@@ -196,7 +197,7 @@ export async function previa(db, opcoes = {}, estadoPronto = null) {
   const sim = simular(estado, aplicaveis);
   const sumNovo = aplicaveis.reduce((s, i) => s + i.saldoNovoCentavos, 0);
   return {
-    assinatura: await assinaturaDe(estado),
+    assinatura: await assinaturaDe(estado, opcoes.ajustar ?? []),
     itens: itens.map(({ linhas, ...resto }) => resto),
     totais: {
       antesCentavos: antes.devidoCentavos,

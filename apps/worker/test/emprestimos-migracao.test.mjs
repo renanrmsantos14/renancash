@@ -26,7 +26,7 @@ async function preparar({ espelho = true } = {}) {
   const perdao = (grupo, valor, data) => linha("mb_revisoes", `perdao:${grupo}`, { pk: `perdao:${grupo}`, dados: JSON.stringify({ tipo: "perdao", emprestimo_id: grupo, valor, data }) });
   const get = async (q = "") => { const r = await amb.pedir(ALVO + q, { headers: auth }); return { status: r.status, corpo: await r.json() }; };
   const post = async (sub, corpo) => { const r = await amb.pedir(`${ALVO}/${sub}`, { method: "POST", headers: auth, body: JSON.stringify(corpo) }); await amb.esperar(); return { status: r.status, corpo: await r.json() }; };
-  const aplicar = async (objetivos, extra = {}) => post("aplicar", { objetivos, assinatura: (await get()).corpo.assinatura, ...extra });
+  const aplicar = async (objetivos, extra = {}) => post("aplicar", { objetivos, assinatura: (await get(extra.ajustar?.length ? `?ajustar=${extra.ajustar.join(",")}` : "")).corpo.assinatura, ...extra });
   const migradas = async () => (await db.prepare("SELECT pk, dados, deleted_at FROM espelho WHERE tabela = 'mb_revisoes' AND pk LIKE 'tx:mig:%' ORDER BY pk").all()).results;
   const vivas = async () => (await migradas()).filter((r) => r.deleted_at == null);
   const devido = async () => {
@@ -101,7 +101,10 @@ test("devolução anterior ao primeiro empréstimo: fica como diferença; com `a
   assert.match(padrao.diferencas[0].motivo, /anterior ao primeiro/);
   const ajustada = item((await t.get("?ajustar=o1")).corpo, "o1");
   assert.deepEqual([ajustada.saldoNovoCentavos, ajustada.diferencas.length], [6000, 0]);
-  const r = await t.post("aplicar", { objetivos: ["o1"], assinatura: (await t.get()).corpo.assinatura, ajustar: ["o1"] });
+  // a assinatura vale para as opções da prévia: prévia sem ajuste não autoriza aplicar com ajuste
+  const semAjuste = (await t.get()).corpo.assinatura;
+  assert.equal((await t.post("aplicar", { objetivos: ["o1"], assinatura: semAjuste, ajustar: ["o1"] })).status, 409);
+  const r = await t.post("aplicar", { objetivos: ["o1"], assinatura: ajustada.assinatura ?? (await t.get("?ajustar=o1")).corpo.assinatura, ajustar: ["o1"] });
   assert.equal(r.status, 200);
   const dev = (await t.vivas()).map((l) => JSON.parse(JSON.parse(l.dados).dados)).find((d) => d.resposta === "devolucao");
   assert.deepEqual([dev.data, dev.data_original], ["2026-02-01", "2026-01-01"]);
@@ -342,7 +345,7 @@ test("ajustar em conta corrente: pagamento acima do saldo vira crédito e abate 
   assert.deepEqual([aj.saldoNovoCentavos, aj.diferencas.length], [35500, 0]);
   assert.match(aj.avisos.join(), /Datas ajustadas: 1 pagamento/);
   assert.equal(aj.alternativa.ajustar, false);
-  const r = await t.post("aplicar", { objetivos: ["o1"], assinatura: (await t.get()).corpo.assinatura, ajustar: ["o1"] });
+  const r = await t.post("aplicar", { objetivos: ["o1"], assinatura: (await t.get("?ajustar=o1")).corpo.assinatura, ajustar: ["o1"] });
   assert.equal(r.status, 200);
   const decs = (await t.vivas()).map((l) => JSON.parse(JSON.parse(l.dados).dados));
   const partes = decs.filter((d) => d.migrado_de.lancamento === "l4");
