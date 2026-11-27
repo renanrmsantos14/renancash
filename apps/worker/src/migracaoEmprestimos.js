@@ -173,7 +173,7 @@ export async function previa(db, opcoes = {}, estadoPronto = null) {
   const estado = estadoPronto ?? (await lerEstado(db));
   const ajustar = new Set(opcoes.ajustar ?? []);
   const itens = [];
-  for (const o of estado.objetivos.sort((a, b) => cmp(a.pk, b.pk))) {
+  for (const o of [...estado.objetivos].sort((a, b) => cmp(a.pk, b.pk))) {
     const base = { pessoa: opcoes.pessoas?.[o.pk] };
     const plano = planejarObjetivo(o, estado, { ...base, ajustar: ajustar.has(o.pk) });
     const vivas = [...estado.decisoes.keys()].filter((id) => id.startsWith(prefixo(o.pk)));

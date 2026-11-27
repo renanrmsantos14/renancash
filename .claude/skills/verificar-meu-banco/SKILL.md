@@ -81,7 +81,7 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 - Teste: `flutter test test/mb_ia_aplicadas_test.dart` (o índice diz que o Flutter roda no CI: não rode no PC local; confira o job "Checks do PR"). Worker: `cd apps/worker && node --test test/ia-auto.test.mjs` (passo 6i de `verificar-worker`).
 
 ## Empréstimos antigos (Empréstimos > Empréstimos antigos)
-- Tela `budget/lib/pages/migracaoEmprestimosPage.dart` + `struct/mbSync/migracaoEmprestimos.dart` (rotas `/api/emprestimos/migracao[/aplicar|/desfazer]` do Worker). Prévia por empréstimo, total "Emprestado em aberto" antes → depois, ajuste de datas ligado onde aproxima o saldo, pessoa corrigível, confirmação antes de gravar, Desfazer por empréstimo, lista do que não migra com o motivo.
+- Tela `budget/lib/pages/migracaoEmprestimosPage.dart` + `struct/mbSync/migracaoEmprestimos.dart` (rotas `/api/emprestimos/migracao[/aplicar|/desfazer]` do Worker). Prévia por empréstimo, total "Emprestado em aberto" antes → depois, ajuste de datas ligado onde aproxima o saldo, pessoa corrigível, confirmação antes de gravar, Desfazer por empréstimo ("Selecionar todos" não inclui os de status revisar), lista do que não migra com o motivo.
 - Teste: `flutter test test/mb_migracao_emprestimos_test.dart` (8: modelos, ajuste recomendado, migrar um e em lote, pessoa, 409 mantém o motivo na tela, desfazer, não migra). O mock do cliente precisa responder em **utf-8** (`http.Response.bytes`), senão a prévia falha como "Resposta inesperada". Prints sintéticos: `PRINTS=1 flutter test test/prints_migracao_emprestimos_test.dart --update-goldens`.
 - Quem aplica em PROD é o Renan, no app, depois do merge. Nunca rode a migração real pela IA.
 

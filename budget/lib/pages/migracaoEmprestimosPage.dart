@@ -205,7 +205,7 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
     final migrados = p.migrados;
     final naoMapeaveis = p.naoMapeaveis;
     final selecionados = [for (final i in escolhaveis) if (_escolhidos.contains(i.objetivo)) i];
-    final todos = selecionados.length == prontos.length;
+    final todos = prontos.isNotEmpty && prontos.every((i) => _escolhidos.contains(i.objetivo));
     return [
       _Resumo(p),
       const SizedBox(height: 16),
