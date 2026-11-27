@@ -216,3 +216,15 @@ CREATE TABLE IF NOT EXISTS ia_aplicacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;
+
+-- Saúde da IA: contador por hora (UTC) das chamadas ao modelo, alimentado pelo seguro() de ia.js. vazia = o modelo respondeu
+-- mas sem sugestão; erro = a chamada falhou (modelo fora do catálogo, timeout...). ultimo_erro guarda só tipo e mensagem curta
+-- (nunca prompt, descrição ou valor). Lido pelo check diário (saude.js); linhas com mais de 8 dias são apagadas por ele.
+CREATE TABLE IF NOT EXISTS saude_ia (
+  hora        TEXT PRIMARY KEY,           -- AAAA-MM-DDTHH (UTC)
+  ok          INTEGER NOT NULL DEFAULT 0,
+  vazia       INTEGER NOT NULL DEFAULT 0,
+  erro        INTEGER NOT NULL DEFAULT 0,
+  ultimo_erro TEXT,
+  atualizado  TEXT NOT NULL
+);

@@ -10,6 +10,7 @@ import 'package:budget/pages/meuBancoPage.dart';
 import 'package:budget/pages/objectivePage.dart';
 import 'package:budget/pages/homePage/homePageFaturaPatrimonio.dart' show CarregaPatrimonio;
 import 'package:budget/pages/pendenciasPage.dart' show PendenciasPage;
+import 'package:budget/pages/saudePage.dart' show SaudePage;
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:budget/pages/objectivesListPage.dart';
 import 'package:budget/pages/transactionFilters.dart' show SearchFilters;
@@ -19,6 +20,7 @@ import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
 import 'package:budget/struct/mbSync/estadoInicio.dart';
+import 'package:budget/struct/mbSync/saude.dart';
 import 'package:budget/struct/mbSync/orcamentos.dart'
     show mbMudouGeral, mbOrcamentoGeralPk, mbWatchGastoOrcamento;
 import 'package:budget/struct/currencyFunctions.dart' show budgetAmountToPrimaryCurrency;
@@ -89,6 +91,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
     if (_real) {
       meuBancoVerificarPareado();
       mbAtualizarRevisar(); // preenche os empréstimos em aberto
+      unawaited(mbChecarSaude()); // aviso da Saúde: só aparece com problema ou check atrasado
       meuBancoUltimaSync.addListener(_recarga.pedir);
       mbAjustesMudaram.addListener(_aoMudarAjustes);
       if (AjustesInicio.vencidas) mbVigiarVencidas();
@@ -131,6 +134,7 @@ class _InicioEditorialState extends State<InicioEditorial> {
   Future<void> _puxar() async {
     if (enableSwipeDownToRefresh(context)) runAllCloudFunctions(context);
     // O aviso é sobre a Início: se o usuário já abriu outra tela (ex.: uma meta), não cobre o título dela.
+    unawaited(mbChecarSaude());
     unawaited(meuBancoAtualizar().then((msg) {
       if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) {
         openSnackbar(SnackbarMessage(title: msg));

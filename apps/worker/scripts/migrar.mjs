@@ -42,6 +42,7 @@ export const TABELAS = [
   "CREATE TABLE IF NOT EXISTS ia_aplicacoes (tx_id TEXT PRIMARY KEY, origem TEXT NOT NULL, chave TEXT, sugestao TEXT, confianca REAL, status TEXT NOT NULL, anterior TEXT, depois TEXT, acerto INTEGER, criado_em TEXT NOT NULL, aplicado_em TEXT, atualizado_em TEXT NOT NULL, avisada_em TEXT);",
   "CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);",
   "CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;",
+  "CREATE TABLE IF NOT EXISTS saude_ia (hora TEXT PRIMARY KEY, ok INTEGER NOT NULL DEFAULT 0, vazia INTEGER NOT NULL DEFAULT 0, erro INTEGER NOT NULL DEFAULT 0, ultimo_erro TEXT, atualizado TEXT NOT NULL);",
 ];
 
 // Comandos ALTER TABLE para o que falta, dado { tabela: [colunas existentes] }. Tabela ausente fica de fora.

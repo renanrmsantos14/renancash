@@ -46,6 +46,12 @@ bool mbPayloadEhIa(String? payload) {
   return item is Map && item['tipo'] == 'ia_aplicadas';
 }
 
+/// Toque simples num alerta de saúde (`item.tipo == 'saude'`): abre a tela Saúde.
+bool mbPayloadEhSaude(String? payload) {
+  final item = mbDecodificarPayload(payload)?['item'];
+  return item is Map && item['tipo'] == 'saude';
+}
+
 /// Respostas que pedem uma escolha (gasto, pessoa ou empréstimo): o botão abre o app em vez de responder sozinho.
 const Set<String> _pedemOApp = {'reembolso', 'emprestimo', 'devolucao'};
 

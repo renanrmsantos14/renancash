@@ -162,6 +162,13 @@ class MbCliente {
     await _chamar('DELETE', '/api/pluggy/items/${Uri.encodeComponent(itemId)}');
   }
 
+  /// Último resultado do check de saúde (Pluggy, IA, espelho, cron) e se o check diário atrasou.
+  Future<Map<String, dynamic>> saude() => _chamar('GET', '/api/saude', limite: const Duration(seconds: 15));
+
+  /// "Verificar agora": roda o check no Worker (sonda a IA, então pode levar alguns segundos) e devolve o resultado.
+  Future<Map<String, dynamic>> saudeVerificar() =>
+      _chamar('POST', '/api/saude/verificar', corpo: const {}, limite: const Duration(seconds: 40));
+
   Future<Map<String, dynamic>> notificacoes(String? desde) =>
       _chamar('GET', '/api/notificacoes',
           query: desde == null || desde.isEmpty ? null : {'desde': desde});

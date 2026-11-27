@@ -9,4 +9,5 @@
 
 Verificação roda no GitHub Actions ("Checks do PR": analyze, testes e prints `prints_*_test.dart` no artefato "prints"); não rode Flutter no PC local.
 - verificar-worker | apps/worker/src/**, apps/worker/mock/**, apps/worker/scripts/**, apps/worker/test/**, apps/worker/schema.sql, apps/worker/wrangler.toml, apps/worker/public/**, packages/core/** | Worker + D1 + mock do Pluggy: sync, ciclo, alertas, /api/notificacoes, tokens de aparelho, migração, conector MCP/OAuth do claude.ai, IA automática (/api/ia/*, "Feito pela IA")
+- verificar-saude | apps/worker/src/saude.js, apps/worker/src/iaSaude.js, apps/worker/src/ia.js, apps/worker/test/saude.test.mjs, apps/worker/wrangler.toml, budget/lib/pages/saudePage.dart, budget/lib/struct/mbSync/saude.dart, budget/test/mb_saude_test.dart, budget/test/prints_saude_test.dart | alerta de saúde: check diário (Pluggy, IA, espelho, cron), contador de erros da IA, push com dedup, /api/saude, MCP `saude`, tela Saúde e aviso da Início
 - verificar-app-web | apps/worker/public/app/**, apps/worker/scripts/prints-app.mjs, apps/worker/scripts/conferir-app.mjs | app web em /app/ (sessão, CSP_APP e prints Playwright)
