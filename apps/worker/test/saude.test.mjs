@@ -149,7 +149,7 @@ test("IA: taxa de erro alta nas últimas 24 h (atenção a partir de 20%, erro a
 
 test("IA: respostas vazias (modelo responde, mas quase nunca sugere) e janela de 24 h", async () => {
   const { env } = await saudavel();
-  for (let i = 0; i < 10; i++) await registrarIa(env, "vazia", null, AGORA);
+  for (let i = 0; i < 25; i++) await registrarIa(env, "vazia", null, AGORA);
   const r = await rodar(env);
   assert.equal(item(r, "ia").status, "atencao");
   assert.match(item(r, "ia").resumo, /sem sugestão/);
@@ -159,7 +159,7 @@ test("IA: respostas vazias (modelo responde, mas quase nunca sugere) e janela de
   assert.equal(item(await rodar(env2), "ia").status, "ok");
 });
 
-test("Espelho: Durable Object fora do ar, tabela ausente e sem escrita há dias", async () => {
+test("Espelho: Durable Object fora do ar, tabela ausente e dias sem escrita (só informativo)", async () => {
   const fora = { idFromName: (n) => n, get: () => ({ fetch: async () => { throw new Error("DO reiniciando"); } }) };
   const { env } = await saudavel({ ESPELHO_HUB: fora });
   const r = await rodar(env);
@@ -173,8 +173,8 @@ test("Espelho: Durable Object fora do ar, tabela ausente e sem escrita há dias"
   const { env: e3 } = await saudavel();
   await e3.DB.prepare("UPDATE espelho SET server_at = ?1").bind(h(24 * 5)).run();
   const r3 = await rodar(e3);
-  assert.equal(item(r3, "espelho").status, "atencao");
-  assert.match(item(r3, "espelho").resumo, /Nenhuma escrita no espelho há 5 dias/);
+  assert.equal(item(r3, "espelho").status, "ok"); // dias sem editar nada não é falha
+  assert.match(item(r3, "espelho").detalhes.find((d) => d.nome === "Última escrita").texto, /Última escrita há 5 dias/);
 });
 
 test("Espelho desligado (ESPELHO=0) não é problema", async () => {

@@ -23,7 +23,7 @@ export const LIMITES = {
   ia_erro_atencao: 0.2,
   ia_erro_erro: 0.5,
   ia_vazia: 0.9,
-  espelho_escrita_dias: 3,
+  ia_vazia_amostra_min: 20, // lista vazia também é resposta legítima; só com volume vira sinal de formato quebrado
   cron_sync_atencao_h: 6,
   cron_sync_erro_h: 12,
   batimento_h: 26, // o check é diário; passou disso, atrasou
@@ -116,7 +116,7 @@ async function verificarIa(env, agora, L) {
     if (taxaErro >= L.ia_erro_atencao) {
       d.push({ nome: "Erros nas últimas 24 h", status: taxaErro >= L.ia_erro_erro ? "erro" : "atencao", texto: `${pct(taxaErro)} das chamadas da IA falharam em 24 h (${r.erro} de ${r.total})${r.ultimo_erro ? ": " + r.ultimo_erro : ""}` });
     } else d.push({ nome: "Erros nas últimas 24 h", status: "ok", texto: `${r.erro} falha(s) em ${r.total} chamadas nas últimas 24 h` });
-    if (r.total - r.erro >= L.ia_amostra_min && taxaVazia >= L.ia_vazia) d.push({ nome: "Respostas vazias", status: "atencao", texto: `${pct(taxaVazia)} das respostas da IA vieram sem sugestão em 24 h` });
+    if (r.total - r.erro >= L.ia_vazia_amostra_min && taxaVazia >= L.ia_vazia) d.push({ nome: "Respostas vazias", status: "atencao", texto: `${pct(taxaVazia)} das respostas da IA vieram sem sugestão em 24 h` });
   } else d.push({ nome: "Erros nas últimas 24 h", status: "ok", texto: r.total ? `${r.total} chamada(s) em 24 h, sem problema` : "Sem chamadas da IA em 24 h" });
   return item("ia", "IA de categorias", d, "Confira a constante MODELO em ia.js contra o catálogo do Workers AI e publique de novo.");
 }
@@ -144,7 +144,7 @@ async function verificarEspelho(env, agora, L) {
     const ultima = await env.DB.prepare("SELECT MAX(server_at) AS m FROM espelho").first("m");
     const h = horasDesde(ultima, agora);
     if (h === null) d.push({ nome: "Última escrita", status: "atencao", texto: "O espelho ainda não recebeu nenhuma linha" });
-    else if (h > L.espelho_escrita_dias * 24) d.push({ nome: "Última escrita", status: "atencao", texto: `Nenhuma escrita no espelho há ${fmtH(h)}` });
+    // Só informativo: ficar dias sem editar nada é normal e não prova falha (tabelas e Durable Object já cobrem isso).
     else d.push({ nome: "Última escrita", status: "ok", texto: `Última escrita há ${fmtH(Math.max(h, 1))}` });
   }
   return item("espelho", "Espelho (sincronia entre aparelhos)", d, "Veja os logs do Worker (wrangler tail); se faltar tabela, rode a migração.");

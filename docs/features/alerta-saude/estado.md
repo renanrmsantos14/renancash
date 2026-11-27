@@ -10,7 +10,7 @@
 - Contador da IA em tabela nova `saude_ia` (balde por hora), alimentada pelo `seguro()` de `ia.js`.
 - Push: mesmo mecanismo do `enviar_resumo` (`notificacoes` + `enviarPendentes`), chave `saude:<dia>:<assinatura>` (1 por dia) e `saude:ok:<dia>` para "voltou ao normal".
 - App: tela "Saúde" (Meu Banco › "Saúde do app") e aviso na Início quando há problema ou o batimento atrasa (> 26 h). MCP: ferramenta `saude` (leitura).
-- Limiares escolhidos por mim (a confirmar na revisão): sync 12 h/30 h, item 72 h, conta sem movimento 7 dias (com ≥ 8 transações históricas), IA erro 20 %/50 % com amostra ≥ 5, respostas vazias 90 %, espelho 3 dias, batimento 26 h.
+- Limiares escolhidos por mim (a confirmar na revisão): sync 12 h/30 h, item 72 h, conta sem movimento 7 dias (com ≥ 8 transações históricas), IA erro 20 %/50 % com amostra ≥ 5, respostas vazias 90 %, batimento 26 h.
 
 ## Restrições
 Sem merge, sem `wrangler deploy`, sem escrita no D1 de PROD, sem Pluggy real; repo público (fixtures sem dado real).
@@ -27,8 +27,8 @@ Sem merge, sem `wrangler deploy`, sem escrita no D1 de PROD, sem Pluggy real; re
 ## Fica para depois do merge (não provável no local)
 Cron real das 08:00; push real no aparelho; tela com dados reais; quantos Cron Triggers a conta Cloudflare aceita (este é o 2º cron do Worker); `migrar` aplicando `saude_ia` no D1 de PROD pelo deploy.
 
-## Pontos de decisão do code-review (não aplicados)
-- Espelho sem escrita por 3 dias vira "atenção" mesmo saudável (fim de semana sem editar): subir o limiar ou tirar o item?
-- "Respostas vazias" conta lista vazia legítima da IA; com 5+ usos sem sugestão no dia pode dar falso alerta.
-- `ultimo_erro` (classe + 100 caracteres da mensagem do Workers AI) aparece no push e na tela; o texto nunca leva prompt nosso, mas a mensagem do provedor não é controlada.
-- Ordem de entrega: `migrar` (cria `saude_ia`) antes do deploy; senão o 1º check marca IA em erro.
+## Decisões do code-review (Renan: "faz tudo sem me consultar", 27/11/2026)
+- Espelho: dias sem escrita deixam de ser alerta (só informativo); tabelas e Durable Object seguem checados.
+- Respostas vazias: só contam com ≥ 20 respostas sem erro em 24 h (lista vazia também é resposta legítima).
+- `ultimo_erro` (classe + 100 caracteres da mensagem do Workers AI) fica: ajuda a achar a causa e a mensagem do provedor não leva o nosso prompt.
+- Ordem de entrega: o `deploy.yml` roda `migrar --remote` antes do `wrangler deploy`, então `saude_ia` existe antes do 1º check.
