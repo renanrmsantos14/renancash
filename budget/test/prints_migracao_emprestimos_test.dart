@@ -72,14 +72,14 @@ Future<void> _tela(WidgetTester t, String modo, String nome, {Future<void> Funct
   t.view.physicalSize = const Size(390 * 2, 1500 * 2);
   t.view.devicePixelRatio = 2;
   addTearDown(t.view.reset);
-  await t.pumpWidget(MaterialApp(
+  await t.pumpWidget(RepaintBoundary(key: const Key('print'), child: MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: temaFlutter(temaAtivo(b)),
     home: MigracaoEmprestimosPage(previaInicial: _previa),
-  ));
+  )));
   await t.pump(const Duration(seconds: 3));
   if (depois != null) await depois();
-  await expectLater(find.byType(MaterialApp), matchesGoldenFile('../../.verificacao/2026-11-27-t3-emprestimos-migracao/${nome}_$modo.png'));
+  await expectLater(find.byKey(const Key('print')), matchesGoldenFile('../../.verificacao/2026-11-27-t3-emprestimos-migracao/${nome}_$modo.png'));
 }
 
 void main() {
@@ -97,7 +97,7 @@ void main() {
     testWidgets('print confirmação $modo', skip: _pular, (t) async {
       await _tela(t, modo, 'confirmacao', depois: () async {
         await t.tap(find.byKey(const Key('migrar_3')));
-        await t.pump(const Duration(seconds: 1));
+        await t.pumpAndSettle();
       });
     });
   }
