@@ -5,7 +5,7 @@
 const dia = (d) => /^\d{4}-\d{2}-\d{2}/.exec(String(d ?? ""))?.[0] ?? null;
 const centavos = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.round(Math.abs(v) * 100) : 0);
 const texto = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
-const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+export const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** @returns {{abertos: object[], quitados: object[], devidoCentavos: number}} */
 export function calcularEmprestimos(decisoes, perdoes = []) {

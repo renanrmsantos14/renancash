@@ -3,8 +3,8 @@
 //  - tx_id SINTÉTICO `mig:<objetivo>:<lançamento>`: com o id real o app trataria a transação como "não gasto" e a apagaria.
 //  - As transações e o objetivo antigos NUNCA são tocados. O status "migrado" vem das decisões vivas (a tabela D1 é só histórico).
 //  - Tudo em centavos inteiros; datas em America/Sao_Paulo (dia() do espelho).
-import { agoraTs } from "./app.js";
-import { calcularEmprestimos } from "./emprestimosCalculo.js";
+import { agoraTs, hashToken } from "./app.js";
+import { calcularEmprestimos, cmp } from "./emprestimosCalculo.js";
 import { decisaoDe, dia, ErroGravacao, espelhoPronto, gravar, linhasDe } from "./espelho.js";
 
 const APARELHO = "migracao"; // id próprio: o aviso "mudou" não pode ser filtrado do app que pediu a migração
@@ -12,12 +12,6 @@ const centavos = (v) => (Number.isFinite(Number(v)) ? Math.round(Math.abs(Number
 const prefixo = (objetivo) => `mig:${objetivo}:`;
 const idReal = (pk) => (pk.startsWith("mb:") ? pk.slice(3) : pk); // transactions.id; a decisão `tx:<id>` usa o id puro
 const reais = (c) => c / 100;
-const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-
-async function sha256(texto) {
-  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto)));
-  return [...h].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 // ---------- leitura ----------
 
@@ -170,7 +164,7 @@ async function assinaturaDe(estado) {
     t: estado.ligadas.map((t) => [t.pk, t.objective_loan_fk, t.amount, t.income, t.paid ? 1 : 0, t.date_created]).sort((a, b) => cmp(a[0], b[0])),
     d: [...estado.decisoes.values()].filter((d) => String(d.tx_id).startsWith("mig:") || alvo.has(d.tx_id)).map((d) => [d.tx_id, d.resposta, d.valor, d.data]).sort((a, b) => cmp(a[0], b[0])),
   };
-  return sha256(JSON.stringify(base));
+  return hashToken(JSON.stringify(base));
 }
 
 /** Prévia (leitura pura). `opcoes`: { pessoas?: {objetivo: nome}, ajustar?: [objetivo] }. */
@@ -263,7 +257,7 @@ export async function aplicar(env, ctx, corpo) {
 
   const antes = calcularEmprestimos(eventosDe(estado), perdoesDe(estado));
   const depois = simular(estado, escolhidos).depois;
-  const hashOutros = await sha256(JSON.stringify(eventosCanonicos(estado, null)));
+  const hashOutros = await hashToken(JSON.stringify(eventosCanonicos(estado, null)));
   try {
     await gravar({ env, ctx }, escolhidos.flatMap((p) => p.linhas), APARELHO);
   } catch (e) {
@@ -289,7 +283,7 @@ function eventosCanonicos(estado, semPrefixo) {
   const ev = eventosDe(estado, { semPrefixo }).filter((d) => d.resposta === "emprestimo" || d.resposta === "devolucao")
     .map((d) => [d.tx_id, d.resposta, d.valor, d.data, d.emprestimo_id ?? null, d.sobra ?? null, d.sobra_para ?? null, d.sobra_id ?? null]);
   const pe = perdoesDe(estado, semPrefixo).map((p) => ["perdao", p.emprestimo_id, p.valor, p.data]);
-  return [...ev, ...pe].sort((a, b) => cmp(JSON.stringify(a), JSON.stringify(b)));
+  return [...ev, ...pe].map((x) => JSON.stringify(x)).sort(cmp).map((x) => JSON.parse(x));
 }
 
 // ---------- desfazer ----------
@@ -314,7 +308,7 @@ export async function desfazer(env, ctx, corpo) {
   const mudam = [...rSem].filter(([id, r]) => (rCom.get(id) ?? 0) !== r).map(([id]) => id);
   if (mudam.length) {
     const ultima = await env.DB.prepare("SELECT hash_outros FROM emprestimos_migracao WHERE objetivo = ?1 AND acao = 'aplicar' ORDER BY id DESC LIMIT 1").bind(objetivo).first("hash_outros");
-    const hoje = await sha256(JSON.stringify(eventosCanonicos(estado, pre)));
+    const hoje = await hashToken(JSON.stringify(eventosCanonicos(estado, pre)));
     if (ultima !== hoje) return erro(409, { erro: "Não dá para desfazer: houve lançamentos no modelo novo depois da migração e o desfazer mudaria o saldo de outros empréstimos", emprestimos: mudam });
   }
   const ts = agoraTs();
@@ -327,10 +321,4 @@ export async function desfazer(env, ctx, corpo) {
   await env.DB.prepare("INSERT INTO emprestimos_migracao (objetivo, acao, em, pks, antes, depois) VALUES (?1, 'desfazer', ?2, ?3, ?4, ?5)")
     .bind(objetivo, ts, JSON.stringify(pks), com.devidoCentavos, sem.devidoCentavos).run();
   return { status: 200, corpo: { ok: true, removidas: pks.length, antesCentavos: com.devidoCentavos, depoisCentavos: sem.devidoCentavos } };
-}
-
-/** Linhas do histórico (auditoria) de um objetivo ou de todos. */
-export async function historico(db) {
-  const { results } = await db.prepare("SELECT id, objetivo, acao, em, saldo_antigo, saldo_novo, antes, depois, pessoa FROM emprestimos_migracao ORDER BY id DESC LIMIT 200").all();
-  return results;
 }
