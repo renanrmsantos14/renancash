@@ -79,3 +79,9 @@ description: "Verifica o sync Meu Banco do app (LWW, pareamento por QR e deep li
 ## Feito pela IA (Configurações > Meu Banco > Classificação automática > Feito pela IA)
 - Tela `budget/lib/pages/feitoPelaIaPage.dart` + `struct/mbSync/iaAplicadas.dart` (rotas `/api/ia/aplicadas` e `/api/ia/desfazer` do Worker). Lista os últimos 14 dias com antes/depois e origem (regra, memória, Llama); "Desfazer" devolve nome e categoria e a transação volta à fila; se o usuário editou depois da IA, o Worker responde **412** e a tela mostra a mensagem do servidor ("Use Corrigir para mudar"); "Corrigir" abre a transação no editor; já desfeita (409) é tratada como sucesso. Alerta push com chave `ia:` (toque sem botão) abre esta tela (`initializeNotifications.dart`).
 - Teste: `flutter test test/mb_ia_aplicadas_test.dart` (o índice diz que o Flutter roda no CI: não rode no PC local; confira o job "Checks do PR"). Worker: `cd apps/worker && node --test test/ia-auto.test.mjs` (passo 6i de `verificar-worker`).
+
+## Empréstimos antigos (Empréstimos > Empréstimos antigos)
+- Tela `budget/lib/pages/migracaoEmprestimosPage.dart` + `struct/mbSync/migracaoEmprestimos.dart` (rotas `/api/emprestimos/migracao[/aplicar|/desfazer]` do Worker). Prévia por empréstimo, total "Emprestado em aberto" antes → depois, ajuste de datas ligado onde aproxima o saldo, pessoa corrigível, confirmação antes de gravar, Desfazer por empréstimo, lista do que não migra com o motivo.
+- Teste: `flutter test test/mb_migracao_emprestimos_test.dart` (8: modelos, ajuste recomendado, migrar um e em lote, pessoa, 409 mantém o motivo na tela, desfazer, não migra). O mock do cliente precisa responder em **utf-8** (`http.Response.bytes`), senão a prévia falha como "Resposta inesperada". Prints sintéticos: `PRINTS=1 flutter test test/prints_migracao_emprestimos_test.dart --update-goldens`.
+- Quem aplica em PROD é o Renan, no app, depois do merge. Nunca rode a migração real pela IA.
+

@@ -1,13 +1,13 @@
 # Empréstimos unificados
 
 - Nível: 3 (migra dado financeiro real existente; sem volta fácil se mal feito)
-- Etapa: 5 de 7 Construir (spec revisada pelo Opus, ciclo 1)
-- Próximo passo: planejador/prévia/aplicar/desfazer no Worker + testes · sozinho
-- Branch e PR: feature/emprestimos-unificados · ainda não
+- Etapa: 6 de 7 Revisar (construído e provado local; falta revisão adversarial do diff, PR em rascunho)
+- Próximo passo: qualidade, PR em rascunho, revisão Opus do diff · sozinho
+- Branch e PR: feature/emprestimos-unificados · rascunho (ver PR)
 - Protótipo: sem protótipo (prévia em texto/cartão; UI mínima dentro de Empréstimos)
 - Go: 27/11/2026 via brief da thread e3bee913 (nível 3, sem executar nada em PROD)
 - PROD: ainda não (a migração só roda por ação do Renan no app, após merge)
-- Atualizado: 27/11/2026 16:20
+- Atualizado: 27/11/2026 16:50
 
 ## Decisões
 | Data | Decisão | Por quê | Quem decidiu |
@@ -21,11 +21,11 @@
 ## Tarefas e provas
 | # | Tarefa | Depende de | Cenário (ação → resultado) | Prova | Nível | Resultado |
 |---|---|---|---|---|---|---|
-| 1 | Port do cálculo + planejador | - | objetivo sintético → eventos e saldo | node --test (paridade JS: 7 casos ok) | 2 | cálculo ok; planejador pendente |
-| 2 | Prévia e reconciliação | 1 | parcial, perdoado, sem pessoa, pago a mais → soma bate/explicada | node --test | 2 | pendente |
-| 3 | Aplicar/desfazer + rotas + tabela | 2 | aplicar → decisões no espelho; desfazer → volta; assinatura mudou → 409 | node --test | 3 | pendente |
-| 4 | UI Flutter (prévia, confirmar, desfazer) | 3 | cartão em Empréstimos → prévia → confirmar | CI Checks + print | 2 | pendente |
-| 5 | Simulação contra o backup | 3 | prévia e aplicar em D1 falso | contagem e diferença total | 3 | pendente |
+| 1 | Port do cálculo + planejador | - | objetivo sintético → eventos e saldo | node --test (paridade JS/Dart) | 2 | ok |
+| 2 | Prévia e reconciliação | 1 | parcial, perdoado, sem pessoa, pago a mais → soma bate/explicada | node --test (24 testes da migração) | 2 | ok |
+| 3 | Aplicar/desfazer + rotas + tabela | 2 | aplicar → decisões no espelho; desfazer → volta; assinatura mudou → 409 | node --test (Worker 330/330) | 3 | ok |
+| 4 | UI Flutter (prévia, confirmar, desfazer) | 3 | Empréstimos → "Empréstimos antigos" → prévia → confirmar | flutter test (8 da migração, 40 com os de empréstimos) + prints sintéticos; CI Checks pendente | 2 | ok local; CI no PR |
+| 5 | Simulação contra o backup | 3 | prévia e aplicar em D1 falso (cópia local) | 6 prontos, 1 não mapeável; aplicar/desfazer ok nos dois modos; soma explicada | 3 | ok |
 
 ## Ações críticas (só nível 3)
 | # | Ação | Alvo real | Simulação | Backup conferido | Plano de volta | Executada em |
@@ -34,6 +34,11 @@
 
 ## Pendências e fora de escopo
 - `devo`, valor fixo e moedas diferentes ficam como "não mapeável" na prévia.
+
+## Achados da simulação (só contagem e totais)
+- Sem ajuste de datas, pagamentos acima do saldo eram descartados e o saldo novo ficava longe do antigo; com ajuste, a diferença restante são créditos reais de pessoas que pagaram a mais.
+- Devoluções soltas passam a abater empréstimos migrados pela regra FIFO (vínculo editável depois no app).
+- 1 objetivo sem lançamentos não migra.
 
 ## Retro
 -

@@ -61,3 +61,9 @@ description: Verifica o Meu Banco localmente (Worker + D1 + mock do Pluggy, cone
 
 ## Empréstimos com pessoa, perdão e sobra
 - `revisoes` aceita o tipo `perdao` e os campos `pessoa, emprestimo_id, sobra, sobra_para, sobra_id, recategorizado` (`packages/core/src/sync.ts`); o Geral exclui empréstimo (`ajuste_gasto:0`) e inclui o perdão como gasto na data dele; `sobra_para: reembolso` abate só a sobra (`reembolso_valor`). Teste: `cd apps/worker && node --test test/*.test.mjs` (casos nos dois modos, com e sem espelho) e `cd packages/core && pnpm test`.
+
+## Migração dos empréstimos antigos (`src/migracaoEmprestimos.js`, rotas `/api/emprestimos/migracao`, tabela `emprestimos_migracao`)
+- `cd apps/worker && node --test test/emprestimos-migracao.test.mjs test/emprestimos-calculo.test.mjs test/migrar.test.mjs` → 24 testes da migração (prévia sem gravar, não mapeável, pago a mais com/sem `ajustar`, aplicar com `tx_id` sintético `mig:<obj>:<tx>`, assinatura velha → 409, lote/idempotência, desfazer, bloqueios por perdão/referência/mudança alheia, cookie + origem) e paridade com o Dart (`test/fixtures/emprestimos-paridade.json`).
+- Só use dados **sintéticos** nos testes e nunca copie o backup decifrado para o repo. Simulação contra o backup: sempre numa cópia no scratchpad, e no PR entram só contagem e diferença total.
+- A migração **nunca** roda em PROD pela IA: quem aplica é o Renan, no app (Empréstimos → Empréstimos antigos), depois do merge.
+
