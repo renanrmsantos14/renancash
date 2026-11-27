@@ -33,6 +33,8 @@ export const TABELAS = [
   "CREATE TABLE IF NOT EXISTS espelho (tabela TEXT NOT NULL, pk TEXT NOT NULL, dados TEXT, updated_at TEXT NOT NULL, deleted_at TEXT, server_at TEXT NOT NULL, aparelho TEXT, PRIMARY KEY (tabela, pk));",
   "CREATE INDEX IF NOT EXISTS idx_espelho_server ON espelho(server_at, tabela, pk);",
   "CREATE TABLE IF NOT EXISTS espelho_meta (chave TEXT PRIMARY KEY, valor TEXT);",
+  "CREATE TABLE IF NOT EXISTS emprestimos_migracao (id INTEGER PRIMARY KEY AUTOINCREMENT, objetivo TEXT NOT NULL, acao TEXT NOT NULL, em TEXT NOT NULL, pks TEXT NOT NULL, saldo_antigo INTEGER, saldo_novo INTEGER, antes INTEGER, depois INTEGER, hash_outros TEXT, pessoa TEXT);",
+  "CREATE INDEX IF NOT EXISTS idx_emprestimos_migracao_obj ON emprestimos_migracao(objetivo, id);",
   "CREATE TABLE IF NOT EXISTS mcp_clientes (id TEXT PRIMARY KEY, nome TEXT NOT NULL, destinos TEXT NOT NULL, criado INTEGER NOT NULL);",
   "CREATE TABLE IF NOT EXISTS mcp_oauth (hash TEXT PRIMARY KEY, tipo TEXT NOT NULL, cliente TEXT NOT NULL, dados TEXT, expira INTEGER NOT NULL, criado INTEGER NOT NULL);",
   "CREATE INDEX IF NOT EXISTS idx_mcp_oauth_expira ON mcp_oauth(expira);",

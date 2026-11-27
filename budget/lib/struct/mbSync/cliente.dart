@@ -138,6 +138,11 @@ class MbCliente {
       'POST', '/api/ia/entender',
       corpo: corpo, limite: const Duration(seconds: 25));
 
+  /// Chamada genérica para extensões em outros arquivos (migração de empréstimos).
+  Future<Map<String, dynamic>> chamarEmprestimos(String metodo, String caminho,
+          {Map<String, String>? query, Object? corpo}) =>
+      _chamar(metodo, caminho, query: query, corpo: corpo);
+
   Future<Map<String, dynamic>> atualizar() =>
       _chamar('POST', '/api/sync/atualizar', corpo: const {});
 
