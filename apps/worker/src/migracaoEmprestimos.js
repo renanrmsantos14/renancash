@@ -157,7 +157,7 @@ export function planejarObjetivo(o, estado, opcoes = {}) {
 
 const restantes = (calc) => new Map([...calc.abertos, ...calc.quitados].map((e) => [e.txId, e.restanteCentavos]));
 
-async function assinaturaDe(estado, ajustar = []) {
+async function assinaturaDe(estado, ajustar) {
   const alvo = new Set(estado.ligadas.map((t) => idReal(t.pk)));
   const base = {
     o: estado.objetivos.map((o) => [o.pk, o.name, o.amount, o.income, o.archived ? 1 : 0]).sort((a, b) => cmp(a[0], b[0])),
@@ -180,7 +180,7 @@ export async function previa(db, opcoes = {}, estadoPronto = null) {
     if (vivas.length) {
       // migrado com ou sem ajuste de datas: vale se as decisões vivas batem com qualquer um dos dois planos
       const bate = (pl) => {
-        const previstas = new Map(pl.linhas.map((l) => [JSON.parse(l.dados.dados).tx_id, JSON.parse(l.dados.dados)]));
+        const previstas = new Map(pl.linhas.map((l) => { const d = JSON.parse(l.dados.dados); return [d.tx_id, d]; }));
         return previstas.size === vivas.length && vivas.every((id) => { const a = previstas.get(id), b = estado.decisoes.get(id); return a && a.valor === b.valor && a.data === b.data && a.resposta === b.resposta; });
       };
       const igual = bate(plano) || bate(planejarObjetivo(o, estado, { ...base, ajustar: !ajustar.has(o.pk) }));
@@ -258,7 +258,7 @@ export async function aplicar(env, ctx, corpo) {
 
   const antes = calcularEmprestimos(eventosDe(estado), perdoesDe(estado));
   const depois = simular(estado, escolhidos).depois;
-  const hashOutros = await hashToken(JSON.stringify(eventosCanonicos(estado)));
+  const hashDosOutros = await hashOutros(estado);
   try {
     await gravar({ env, ctx }, escolhidos.flatMap((p) => p.linhas), APARELHO);
   } catch (e) {
@@ -268,7 +268,7 @@ export async function aplicar(env, ctx, corpo) {
   const ts = agoraTs();
   await env.DB.batch(escolhidos.map((p) =>
     env.DB.prepare("INSERT INTO emprestimos_migracao (objetivo, acao, em, pks, saldo_antigo, saldo_novo, antes, depois, hash_outros, pessoa) VALUES (?1, 'aplicar', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
-      .bind(p.objetivo, ts, JSON.stringify(p.linhas.map((l) => l.pk)), p.saldoAntigoCentavos, p.saldoNovoCentavos, antes.devidoCentavos, depois.devidoCentavos, hashOutros, p.pessoa)));
+      .bind(p.objetivo, ts, JSON.stringify(p.linhas.map((l) => l.pk)), p.saldoAntigoCentavos, p.saldoNovoCentavos, antes.devidoCentavos, depois.devidoCentavos, hashDosOutros, p.pessoa)));
   return {
     status: 200,
     corpo: {
@@ -281,11 +281,11 @@ export async function aplicar(env, ctx, corpo) {
 
 // Eventos de empréstimo/devolução/perdão que não são de nenhuma migração (`mig:`), em forma canônica, para saber se algo mudou fora dela.
 // Ignora TODAS as migrações (não só a do objetivo): migrar ou desfazer outro objetivo depois não pode invalidar a trava do desfazer.
-function eventosCanonicos(estado, semPrefixo = "mig:") {
-  const ev = eventosDe(estado, { semPrefixo }).filter((d) => d.resposta === "emprestimo" || d.resposta === "devolucao")
+function hashOutros(estado) {
+  const ev = eventosDe(estado, { semPrefixo: "mig:" }).filter((d) => d.resposta === "emprestimo" || d.resposta === "devolucao")
     .map((d) => [d.tx_id, d.resposta, d.valor, d.data, d.emprestimo_id ?? null, d.sobra ?? null, d.sobra_para ?? null, d.sobra_id ?? null]);
-  const pe = perdoesDe(estado, semPrefixo).map((p) => ["perdao", p.emprestimo_id, p.valor, p.data]);
-  return [...ev, ...pe].map((x) => JSON.stringify(x)).sort(cmp).map((x) => JSON.parse(x));
+  const pe = perdoesDe(estado, "mig:").map((p) => ["perdao", p.emprestimo_id, p.valor, p.data]);
+  return hashToken(`[${[...ev, ...pe].map((x) => JSON.stringify(x)).sort(cmp)}]`);
 }
 
 // ---------- desfazer ----------
@@ -310,7 +310,7 @@ export async function desfazer(env, ctx, corpo) {
   const mudam = [...rSem].filter(([id, r]) => (rCom.get(id) ?? 0) !== r).map(([id]) => id);
   if (mudam.length) {
     const ultima = await env.DB.prepare("SELECT hash_outros FROM emprestimos_migracao WHERE objetivo = ?1 AND acao = 'aplicar' ORDER BY id DESC LIMIT 1").bind(objetivo).first("hash_outros");
-    const hoje = await hashToken(JSON.stringify(eventosCanonicos(estado)));
+    const hoje = await hashOutros(estado);
     if (ultima !== hoje) return erro(409, { erro: "Não dá para desfazer: houve lançamentos no modelo novo depois da migração e o desfazer mudaria o saldo de outros empréstimos", emprestimos: mudam });
   }
   const ts = agoraTs();

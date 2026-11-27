@@ -202,11 +202,14 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
     final cor = cores(context);
     final escolhaveis = p.migraveis;
     final prontos = [for (final i in escolhaveis) if (i.status != 'revisar') i];
+    final migrados = p.migrados;
+    final naoMapeaveis = p.naoMapeaveis;
     final selecionados = [for (final i in escolhaveis) if (_escolhidos.contains(i.objetivo)) i];
+    final todos = selecionados.length == prontos.length;
     return [
       _Resumo(p),
       const SizedBox(height: 16),
-      if (escolhaveis.isEmpty && p.migrados.isEmpty)
+      if (escolhaveis.isEmpty && migrados.isEmpty)
         Text('Nenhum empréstimo antigo para migrar.', style: EdTexto.corpo(context).copyWith(color: cor.mu)),
       for (final i in escolhaveis) ...[
         _Cartao(
@@ -228,8 +231,8 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
           child: Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton(
               key: const Key('escolher_todos'),
-              onPressed: _ocupado ? null : () => setState(() => selecionados.length == prontos.length ? _escolhidos.clear() : _escolhidos.addAll([for (final i in prontos) i.objetivo])),
-              child: Text(selecionados.length == prontos.length ? 'Limpar seleção' : 'Selecionar todos'),
+              onPressed: _ocupado ? null : () => setState(() => todos ? _escolhidos.clear() : _escolhidos.addAll([for (final i in prontos) i.objetivo])),
+              child: Text(todos ? 'Limpar seleção' : 'Selecionar todos'),
             ),
             FilledButton(
               key: const Key('migrar_selecionados'),
@@ -238,23 +241,23 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
             ),
           ]),
         ),
-      if (p.migrados.isNotEmpty) ...[
+      if (migrados.isNotEmpty) ...[
         Text('Já migrados', style: EdTexto.rotulo(context)),
         const SizedBox(height: 8),
-        for (final i in p.migrados) ...[
+        for (final i in migrados) ...[
           _Migrado(i, ocupado: _ocupado, onDesfazer: () => _desfazer(i)),
           const SizedBox(height: 8),
         ],
       ],
-      if (p.naoMapeaveis.isNotEmpty)
+      if (naoMapeaveis.isNotEmpty)
         Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             key: const Key('nao_mapeados'),
             tilePadding: EdgeInsets.zero,
-            title: Text('Não migram (${p.naoMapeaveis.length})', style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
+            title: Text('Não migram (${naoMapeaveis.length})', style: EdTexto.corpo(context).copyWith(fontWeight: FontWeight.w600)),
             children: [
-              for (final i in p.naoMapeaveis)
+              for (final i in naoMapeaveis)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
