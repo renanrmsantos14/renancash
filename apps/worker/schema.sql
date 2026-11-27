@@ -216,3 +216,20 @@ CREATE TABLE IF NOT EXISTS ia_aplicacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_status ON ia_aplicacoes(status, atualizado_em);
 CREATE INDEX IF NOT EXISTS idx_ia_aplicacoes_aviso ON ia_aplicacoes(tx_id) WHERE aplicado_em IS NOT NULL AND avisada_em IS NULL;
+
+-- Histórico (auditoria) da migração dos empréstimos antigos para o modelo novo (docs/features/emprestimos-unificados/spec.md).
+-- O STATUS "migrado" não vem daqui: vem das decisões `tx:mig:<objetivo>:*` vivas em mb_revisoes (um novo semeio do celular pode apagá-las).
+CREATE TABLE IF NOT EXISTS emprestimos_migracao (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  objetivo     TEXT NOT NULL,          -- objectives.pk do empréstimo antigo
+  acao         TEXT NOT NULL,          -- aplicar | desfazer
+  em           TEXT NOT NULL,
+  pks          TEXT NOT NULL,          -- JSON: pks de mb_revisoes gravados/apagados
+  saldo_antigo INTEGER,                -- centavos
+  saldo_novo   INTEGER,
+  antes        INTEGER,                -- "Emprestado em aberto" (centavos) antes/depois da ação
+  depois       INTEGER,
+  hash_outros  TEXT,                   -- hash dos demais eventos de empréstimo no momento de aplicar (trava do desfazer)
+  pessoa       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_emprestimos_migracao_obj ON emprestimos_migracao(objetivo, id);

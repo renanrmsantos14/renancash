@@ -1,0 +1,50 @@
+{
+  "_comentario": "Casos sintéticos executados pelo Worker (test/emprestimos-calculo.test.mjs) e pelo app (budget/test/emprestimos_paridade_test.dart). Esperado escrito à mão, em centavos.",
+  "casos": [
+    { "nome": "pagamento parcial",
+      "decisoes": [
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-01", "pessoa": "Ana" },
+        { "tx_id": "b", "resposta": "devolucao", "valor": 30, "data": "2026-01-10", "emprestimo_id": "a" } ],
+      "perdoes": [],
+      "esperado": { "devido": 7000, "abertos": [ { "id": "a", "original": 10000, "restante": 7000, "pessoa": "Ana", "pagamentos": 1 } ], "quitados": [] } },
+    { "nome": "grupo soma e pagamento acima do saldo é limitado",
+      "decisoes": [
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-01", "pessoa": "Ana" },
+        { "tx_id": "c", "resposta": "emprestimo", "valor": 50, "data": "2026-01-05", "emprestimo_id": "a" },
+        { "tx_id": "b", "resposta": "devolucao", "valor": 200, "data": "2026-01-10", "emprestimo_id": "a" } ],
+      "perdoes": [],
+      "esperado": { "devido": 0, "abertos": [], "quitados": [ { "id": "a", "original": 15000, "restante": 0, "pessoa": "Ana", "pagamentos": 1 } ] } },
+    { "nome": "devolução com vínculo anterior ao empréstimo não abate",
+      "decisoes": [
+        { "tx_id": "b", "resposta": "devolucao", "valor": 40, "data": "2026-01-01", "emprestimo_id": "a" },
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-02", "pessoa": "Ana" } ],
+      "perdoes": [],
+      "esperado": { "devido": 10000, "abertos": [ { "id": "a", "original": 10000, "restante": 10000, "pessoa": "Ana", "pagamentos": 0 } ], "quitados": [] } },
+    { "nome": "devolução sem vínculo abate o mais antigo (FIFO)",
+      "decisoes": [
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-01", "pessoa": "Ana" },
+        { "tx_id": "d", "resposta": "emprestimo", "valor": 80, "data": "2026-01-02", "pessoa": "Beto" },
+        { "tx_id": "b", "resposta": "devolucao", "valor": 120, "data": "2026-01-10" } ],
+      "perdoes": [],
+      "esperado": { "devido": 6000, "abertos": [ { "id": "d", "original": 8000, "restante": 6000, "pessoa": "Beto", "pagamentos": 1 } ], "quitados": [ { "id": "a", "original": 10000, "restante": 0, "pessoa": "Ana", "pagamentos": 1 } ] } },
+    { "nome": "perdão quita o saldo restante",
+      "decisoes": [
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-01", "pessoa": "Ana" },
+        { "tx_id": "b", "resposta": "devolucao", "valor": 40, "data": "2026-01-10", "emprestimo_id": "a" } ],
+      "perdoes": [ { "emprestimo_id": "a", "valor": 60, "data": "2026-02-01" } ],
+      "esperado": { "devido": 0, "abertos": [], "quitados": [ { "id": "a", "original": 10000, "restante": 0, "pessoa": "Ana", "pagamentos": 1, "perdoado": 6000 } ] } },
+    { "nome": "sobra do Pix abate outro empréstimo",
+      "decisoes": [
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100, "data": "2026-01-01", "pessoa": "Ana" },
+        { "tx_id": "d", "resposta": "emprestimo", "valor": 50, "data": "2026-01-02", "pessoa": "Beto" },
+        { "tx_id": "b", "resposta": "devolucao", "valor": 120, "sobra": 20, "sobra_para": "emprestimo", "sobra_id": "d", "data": "2026-01-10", "emprestimo_id": "a" } ],
+      "perdoes": [],
+      "esperado": { "devido": 3000, "abertos": [ { "id": "d", "original": 5000, "restante": 3000, "pessoa": "Beto", "pagamentos": 1 } ], "quitados": [ { "id": "a", "original": 10000, "restante": 0, "pessoa": "Ana", "pagamentos": 1 } ] } },
+    { "nome": "no mesmo dia o empréstimo vem antes da devolução",
+      "decisoes": [
+        { "tx_id": "b", "resposta": "devolucao", "valor": 25.5, "data": "2026-01-01T09:00:00", "emprestimo_id": "a" },
+        { "tx_id": "a", "resposta": "emprestimo", "valor": 100.1, "data": "2026-01-01", "pessoa": "Ana" } ],
+      "perdoes": [],
+      "esperado": { "devido": 7460, "abertos": [ { "id": "a", "original": 10010, "restante": 7460, "pessoa": "Ana", "pagamentos": 1 } ], "quitados": [] } }
+  ]
+}
