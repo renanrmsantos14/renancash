@@ -325,3 +325,49 @@ test("aplicar com cookie do app web exige a mesma origem", async () => {
   assert.equal(propria.status, 409); // passou da autenticação; o2 não está migrado
   assert.equal((await t.pedir(ALVO, { headers: { cookie } })).status, 200); // GET da prévia com cookie
 });
+
+test("ajustar em conta corrente: pagamento acima do saldo vira crédito e abate o próximo empréstimo (soma = saldo antigo)", async () => {
+  const t = await preparar();
+  await t.objetivo("o1", { name: "Ana" });
+  await t.lanc("l1", "o1", 5, "2026-06-23T15:00:00Z");
+  await t.lanc("l2", "o1", 487, "2026-07-07T15:00:00Z");
+  await t.lanc("l3", "o1", -487, "2026-07-10T15:00:00Z");
+  await t.lanc("l4", "o1", -200, "2026-07-13T15:00:00Z"); // só há 5 em aberto: 195 de crédito
+  await t.lanc("l5", "o1", 50, "2026-09-10T15:00:00Z");
+  await t.lanc("l6", "o1", 500, "2026-11-07T15:00:00Z");
+  const padrao = item((await t.get()).corpo, "o1");
+  assert.deepEqual([padrao.saldoAntigoCentavos, padrao.saldoNovoCentavos, soma(padrao)], [35500, 55000, -19500]);
+  assert.deepEqual(padrao.alternativa, { ajustar: true, saldoNovoCentavos: 35500, diferencaCentavos: 0 }); // o outro modo bate com o antigo
+  const aj = item((await t.get("?ajustar=o1")).corpo, "o1");
+  assert.deepEqual([aj.saldoNovoCentavos, aj.diferencas.length], [35500, 0]);
+  assert.match(aj.avisos.join(), /Datas ajustadas: 1 pagamento/);
+  assert.equal(aj.alternativa.ajustar, false);
+  const r = await t.post("aplicar", { objetivos: ["o1"], assinatura: (await t.get()).corpo.assinatura, ajustar: ["o1"] });
+  assert.equal(r.status, 200);
+  const decs = (await t.vivas()).map((l) => JSON.parse(JSON.parse(l.dados).dados));
+  const partes = decs.filter((d) => d.migrado_de.lancamento === "l4");
+  assert.deepEqual(partes.map((d) => [d.tx_id, d.valor, d.data, d.data_original ?? null]).sort(), [
+    ["mig:o1:l4", 5, "2026-07-13", null], ["mig:o1:l4~2", 50, "2026-09-10", "2026-07-13"], ["mig:o1:l4~3", 145, "2026-11-07", "2026-07-13"],
+  ].map((x) => [x[0], x[1], x[2], x[3]]).sort());
+  assert.equal(await t.devido(), 35500);
+  assert.equal(item((await t.get()).corpo, "o1").status, "migrado"); // vale com ou sem o parâmetro `ajustar` na consulta
+  assert.equal((await t.post("desfazer", { objetivo: "o1" })).status, 200);
+  assert.equal((await t.vivas()).length, 0); // as partes saem todas
+});
+
+test("ajustar: crédito que sobra depois do último empréstimo continua como diferença explicada", async () => {
+  const t = await preparar();
+  await t.objetivo("o1", { name: "Ana" });
+  await t.lanc("l1", "o1", 100, "2026-01-01T15:00:00Z");
+  await t.lanc("l2", "o1", -130, "2026-01-10T15:00:00Z");
+  const aj = item((await t.get("?ajustar=o1")).corpo, "o1");
+  assert.deepEqual([aj.saldoAntigoCentavos, aj.saldoNovoCentavos, soma(aj)], [-3000, 0, -3000]);
+  assert.match(aj.diferencas[0].motivo, /sobrou crédito/);
+});
+
+test("aplicar aceita `ajustar` vazio", async () => {
+  const t = await preparar();
+  await t.objetivo("o1", { name: "Ana" });
+  await t.lanc("l1", "o1", 100, "2026-01-01T15:00:00Z");
+  assert.equal((await t.aplicar(["o1"], { ajustar: [] })).status, 200);
+});

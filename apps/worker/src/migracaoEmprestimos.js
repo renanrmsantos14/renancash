@@ -87,17 +87,52 @@ export function planejarObjetivo(o, estado, opcoes = {}) {
   const inicio = emprestimos[0].data;
   const grupo = `${prefixo(o.pk)}${emprestimos[0].pk}`;
   const pessoa = (typeof opcoes.pessoa === "string" ? opcoes.pessoa.trim().slice(0, 60) : nome) || null;
-  const eventos = mapeados.map((t) => {
-    const antecipada = t.tipo === "devolucao" && opcoes.ajustar && t.data < inicio;
-    return {
-      pk: t.pk, tipo: t.tipo, valor: t.valor, data: antecipada ? inicio : t.data, dataOriginal: antecipada ? t.data : null,
-      d: {
-        tipo: "decisao", tx_id: `${prefixo(o.pk)}${t.pk}`, resposta: t.tipo, valor: reais(t.valor), data: antecipada ? inicio : t.data,
-        descricao: `Migrado do empréstimo antigo${nome ? ` "${nome}"` : ""}`, ...(t.tipo === "emprestimo" && pessoa ? { pessoa } : {}),
-        emprestimo_id: grupo, migrado_de: { objetivo: o.pk, lancamento: t.pk }, ...(antecipada ? { data_original: t.data } : {}),
-      },
-    };
+  const montar = (t, valor, data, id, dataOriginal) => ({
+    pk: t.pk, tipo: t.tipo, valor, data, dataOriginal,
+    d: {
+      tipo: "decisao", tx_id: id, resposta: t.tipo, valor: reais(valor), data,
+      descricao: `Migrado do empréstimo antigo${nome ? ` "${nome}"` : ""}`, ...(t.tipo === "emprestimo" && pessoa ? { pessoa } : {}),
+      emprestimo_id: grupo, migrado_de: { objetivo: o.pk, lancamento: t.pk }, ...(dataOriginal ? { data_original: dataOriginal } : {}),
+    },
   });
+  const idDe = (t) => `${prefixo(o.pk)}${t.pk}`;
+  let eventos;
+  let ajustados = 0;
+  if (!opcoes.ajustar) eventos = mapeados.map((t) => montar(t, t.valor, t.data, idDe(t), null));
+  else {
+    // Com ajuste, pagamento acima do saldo do dia não se perde: o excedente vira crédito e é aplicado, em partes, no dia dos próximos empréstimos
+    // (a devolução guarda `data_original`). Empréstimo do dia entra antes do pagamento do mesmo dia, como no cálculo do app.
+    eventos = [];
+    const ordem = [...mapeados].sort((a, b) => cmp(a.data, b.data) || (a.tipo === b.tipo ? 0 : a.tipo === "emprestimo" ? -1 : 1) || cmp(a.pk, b.pk));
+    const fila = [];
+    const usouId = new Set();
+    const parte = (t, valor, data) => {
+      const id = usouId.has(t.pk) ? `${idDe(t)}~${eventos.filter((e) => e.pk === t.pk).length + 1}` : idDe(t);
+      usouId.add(t.pk);
+      eventos.push(montar(t, valor, data, id, data === t.data ? null : t.data));
+    };
+    let saldo = 0;
+    for (const t of ordem) {
+      if (t.tipo === "emprestimo") {
+        eventos.push(montar(t, t.valor, t.data, idDe(t), null));
+        saldo += t.valor;
+        while (fila.length && saldo > 0) {
+          const c = fila[0];
+          const x = Math.min(c.resta, saldo);
+          parte(c.t, x, t.data);
+          c.resta -= x;
+          saldo -= x;
+          if (!c.resta) fila.shift();
+        }
+      } else {
+        const x = Math.min(t.valor, saldo);
+        saldo -= x;
+        if (x > 0) parte(t, x, t.data);
+        if (t.valor > x) { fila.push({ t, resta: t.valor - x }); ajustados++; }
+      }
+    }
+    for (const c of fila) diferencas.push({ tx: c.t.pk, data: c.t.data, tipo: "devolucao", centavos: -c.resta, motivo: "Pago a mais: sobrou crédito depois do último empréstimo" });
+  }
   const calc = calcularEmprestimos(eventos.map((e) => e.d));
   const g = [...calc.abertos, ...calc.quitados].find((e) => e.txId === grupo);
   const absorvido = new Map();
@@ -115,6 +150,7 @@ export function planejarObjetivo(o, estado, opcoes = {}) {
   if (pagos.some((t) => t.divergente)) motivos.push("Sinal do valor e tipo (receita/despesa) divergem em algum lançamento: usei o sinal");
   if (!fecha) motivos.push("A reconciliação não fechou: não migre sem conferir");
   if (!pessoa) avisos.push("Sem pessoa: fica em \"Sem pessoa\" na tela");
+  if (ajustados) avisos.push(`Datas ajustadas: ${ajustados} pagamento(s) acima do saldo foram aplicados no dia dos próximos empréstimos`);
   const status = !fecha ? "revisar" : motivos.length && (o.archived && saldoAntigo > 0 || pagos.some((t) => t.divergente)) ? "revisar" : "pronto";
   return {
     ...base, pessoa, status, motivos, avisos, lancamentos: mias.length, originalCentavos: g.originalCentavos, pagoCentavos: g.pagoCentavos,
@@ -143,13 +179,23 @@ export async function previa(db, opcoes = {}, estadoPronto = null) {
   const ajustar = new Set(opcoes.ajustar ?? []);
   const itens = [];
   for (const o of estado.objetivos.sort((a, b) => cmp(a.pk, b.pk))) {
-    const plano = planejarObjetivo(o, estado, { pessoa: opcoes.pessoas?.[o.pk], ajustar: ajustar.has(o.pk) });
+    const base = { pessoa: opcoes.pessoas?.[o.pk] };
+    const plano = planejarObjetivo(o, estado, { ...base, ajustar: ajustar.has(o.pk) });
     const vivas = [...estado.decisoes.keys()].filter((id) => id.startsWith(prefixo(o.pk)));
     if (vivas.length) {
-      const previstas = new Map(plano.linhas.map((l) => [JSON.parse(l.dados.dados).tx_id, JSON.parse(l.dados.dados)]));
-      const igual = previstas.size === vivas.length && vivas.every((id) => { const a = previstas.get(id), b = estado.decisoes.get(id); return a && a.valor === b.valor && a.data === b.data && a.resposta === b.resposta; });
+      // migrado com ou sem ajuste de datas: vale se as decisões vivas batem com qualquer um dos dois planos
+      const bate = (pl) => {
+        const previstas = new Map(pl.linhas.map((l) => [JSON.parse(l.dados.dados).tx_id, JSON.parse(l.dados.dados)]));
+        return previstas.size === vivas.length && vivas.every((id) => { const a = previstas.get(id), b = estado.decisoes.get(id); return a && a.valor === b.valor && a.data === b.data && a.resposta === b.resposta; });
+      };
+      const igual = bate(plano) || bate(planejarObjetivo(o, estado, { ...base, ajustar: !ajustar.has(o.pk) }));
       itens.push({ ...plano, status: igual ? "migrado" : "desatualizado", motivos: igual ? [] : ["O empréstimo antigo mudou depois da migração (lançamento novo, editado ou apagado): confira antes de desfazer e migrar de novo"], linhas: [] });
-    } else itens.push(plano);
+    } else {
+      const alt = plano.status !== "nao_mapeavel" ? planejarObjetivo(o, estado, { ...base, ajustar: !ajustar.has(o.pk) }) : null;
+      // mostra o que o outro modo (com/sem ajuste de datas) faria, para a pessoa escolher com os números na mão
+      const comparar = alt && alt.saldoNovoCentavos !== plano.saldoNovoCentavos ? { ajustar: !ajustar.has(o.pk), saldoNovoCentavos: alt.saldoNovoCentavos, diferencaCentavos: alt.saldoAntigoCentavos - alt.saldoNovoCentavos } : null;
+      itens.push(comparar ? { ...plano, alternativa: comparar } : plano);
+    }
   }
   const antes = calcularEmprestimos(eventosDe(estado), perdoesDe(estado));
   const aplicaveis = itens.filter((i) => i.status === "pronto" || i.status === "revisar");
@@ -196,7 +242,7 @@ export async function aplicar(env, ctx, corpo) {
   if (!(await espelhoPronto(env))) return erro(409, { erro: "O espelho não está ativo ou semeado: nada pode ser gravado" });
   if (!corpo || typeof corpo !== "object" || !okLista(corpo.objetivos, 50) || typeof corpo.assinatura !== "string") return erro(400, { erro: "Informe objetivos[] e assinatura" });
   if (corpo.pessoas != null && (typeof corpo.pessoas !== "object" || Object.values(corpo.pessoas).some((v) => typeof v !== "string"))) return erro(400, { erro: "pessoas inválido" });
-  if (corpo.ajustar != null && !okLista(corpo.ajustar, 50)) return erro(400, { erro: "ajustar inválido" });
+  if (corpo.ajustar != null && !(Array.isArray(corpo.ajustar) && !corpo.ajustar.length) && !okLista(corpo.ajustar, 50)) return erro(400, { erro: "ajustar inválido" });
   const opcoes = { pessoas: corpo.pessoas ?? {}, ajustar: corpo.ajustar ?? [] };
   const estado = await lerEstado(env.DB);
   const atual = await previa(env.DB, opcoes, estado);
