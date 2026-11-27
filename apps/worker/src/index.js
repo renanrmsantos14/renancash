@@ -14,6 +14,7 @@ import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta, hoje
 import { sugerir, entender } from "./ia.js";
 import { EspelhoHub as HubBase } from "./hub.js";
 import { registrarCliente, autorizar, trocarToken, acessoValido, metadadosRecurso, metadadosServidor } from "./oauth.js";
+import { rodarSaude, lerSaude, CRON_SAUDE } from "./saude.js";
 import { tratarMcp, aplicarVinculadas, alertasAnotacoes } from "./mcp.js";
 import { decidirIa, aplicarPendentesIa, aprenderIa, estadoMb, listarAplicadas, desfazerIa, importarMemoria, relatorioIa, naoAvisadasIa, stmtAvisadasIa } from "./iaAuto.js";
 import { aplicar as aplicarMigracao, desfazer as desfazerMigracao, previa as previaMigracao } from "./migracaoEmprestimos.js";
@@ -102,7 +103,12 @@ export default {
   },
 
   async scheduled(evento, env, ctx) {
-    // Um cron só (plano gratuito: 5 por conta), de 3 em 3 horas em horário de Brasília (22h07, 01h07, ..., 19h07).
+    // Check de saúde (08h00 BRT): não sincroniza; só verifica, grava o resultado e avisa se algo estiver errado.
+    if (evento.cron === CRON_SAUDE) {
+      ctx.waitUntil(rodarSaude(env, { enviarPendentes: () => enviarPendentes(env) }).catch((e) => console.error("Check de saúde falhou", e?.stack || e)));
+      return;
+    }
+    // Cron de sincronização (o outro cron é o da saúde; plano gratuito: 5 por conta), de 3 em 3 horas em horário de Brasília (22h07, 01h07, ..., 19h07).
     // Cada sincronização envia os alertas pendentes, então o que ficou retido no silêncio (22h-7h) sai no tick das 07h07.
     // O tick de domingo 19h07 BRT (22h UTC) também manda o resumo semanal; o de 04h07 BRT (07h UTC) faz o backup.
     const t = new Date(evento.scheduledTime);
@@ -498,7 +504,7 @@ async function entregarNotificacoes(request, env, url) {
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
 const ROTAS_IA = new Set(["/api/ia/aplicadas", "/api/ia/desfazer", "/api/ia/memoria", "/api/ia/relatorio"]);
 const ROTAS_EMPRESTIMOS = new Set(["/api/emprestimos/migracao", "/api/emprestimos/migracao/aplicar", "/api/emprestimos/migracao/desfazer"]);
-const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender", ...ROTAS_IA, ...ROTAS_EMPRESTIMOS]);
+const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender", "/api/saude", "/api/saude/verificar", ...ROTAS_IA, ...ROTAS_EMPRESTIMOS]);
 const MAX_CORPO_IA = 64 * 1024; // contexto + lote pequeno cabem com folga
 const ROTAS_ESPELHO = new Set(["/api/espelho", "/api/espelho/semear", "/api/espelho/ws"]);
 const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
@@ -578,6 +584,8 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     // aborta o pull do banco em qualquer erro do envio; assim ele esvazia a fila e segue puxando até ser atualizado.
     return json({ ok: true, aceitos: 0, rejeitados: [], descontinuado: true });
   }
+  if (rota === "GET /api/saude") return json(await lerSaude(env));
+  if (rota === "POST /api/saude/verificar") return json((await rodarSaude(env, { enviarPendentes: () => enviarPendentes(env) })).resultado); // manual: o push repetido no dia é descartado pela chave
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
   if (ROTAS_IA.has(caminho)) return rotaIa(request, env, url, rota, ctx);
   if (ROTAS_EMPRESTIMOS.has(caminho)) return rotaMigracaoEmprestimos(request, env, url, rota, ctx);
@@ -675,6 +683,7 @@ async function notificacoesAparelho(env, desde, ts) {
   // "Para revisar": leva o item (o app mostra os botões das opções) e some com o aviso de item já respondido em outro aparelho.
   const fila = new Map(b.revisar.map((i) => [i.tipo === "salario_nao_detectado" ? "salario" : i.id, i]));
   const notificacoes = results.flatMap((n) => {
+    if (n.chave.startsWith("saude:")) return [{ ...n, item: { tipo: "saude" } }]; // abre a tela Saúde
     if (n.chave.startsWith("ia:")) return [{ ...n, item: { tipo: "ia_aplicadas", desde: n.chave.startsWith("ia:claude:") ? null : n.chave.slice("ia:".length) } }]; // abre "Feito pela IA" (o resumo do Claude não tem data ISO na chave)
     if (!n.chave.startsWith("revisar:")) return [n];
     const k = n.chave.startsWith("revisar:salario:") ? "salario" : n.chave.slice("revisar:".length);

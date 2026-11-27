@@ -1,4 +1,5 @@
 import 'package:budget/pages/feitoPelaIaPage.dart';
+import 'package:budget/pages/saudePage.dart';
 import 'package:budget/pages/meuBancoConexoes.dart';
 import 'package:budget/pages/meuBancoParear.dart';
 import 'package:budget/struct/atualizador.dart';
@@ -381,6 +382,13 @@ class _MeuBancoPageState extends State<MeuBancoPage> {
               onPressed: () => pushRoute(context, const FeitoPelaIaPage()),
               icon: const Icon(Icons.auto_awesome_rounded, size: 20),
               label: _rotuloBotao("Feito pela IA"),
+            ),
+          ]),
+          _secao("Saúde do app", [
+            OutlinedButton.icon(
+              onPressed: () => pushRoute(context, const SaudePage()),
+              icon: const Icon(Icons.favorite_border_rounded, size: 20),
+              label: _rotuloBotao("Ver saúde"),
             ),
           ]),
           _secao("Contas conectadas",

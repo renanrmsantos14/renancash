@@ -7,6 +7,8 @@
 // mostra "Sem IA agora". Resposta fora do formato só descarta as sugestões (`ia: true`, lista vazia).
 // Nada de descrição ou valor vai para o log.
 
+import { registrarIa } from "./iaSaude.js";
+
 // Na lista de JSON mode da doc do Workers AI e no catálogo atual, sem data de remoção. O @cf/meta/llama-3.1-8b-instruct
 // saiu do catálogo (toda chamada falhava e o app recebia lista vazia).
 export const MODELO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
@@ -199,12 +201,17 @@ async function rodar(ai, mensagens, maxTokens) {
   }
 }
 
-// Falha da IA vira null. O log leva só o tipo do erro (nunca prompt, descrição ou valor).
-async function seguro(fn) {
+// Falha da IA vira null (a resposta ao app não quebra), mas deixa rastro: console.error e contador em saude_ia, que o check
+// diário lê (saude.js). O log leva só o tipo e o começo da mensagem do erro (nunca prompt, descrição ou valor).
+async function seguro(env, fn) {
   try {
-    return await fn();
+    const r = await fn();
+    await registrarIa(env, Array.isArray(r) && !r.length ? "vazia" : "ok");
+    return r;
   } catch (e) {
-    console.error("IA indisponível:", e?.name || "Erro", String(e?.message || "").slice(0, 80));
+    const msg = `${e?.name || "Erro"}: ${String(e?.message || "").slice(0, 100)}`;
+    console.error("IA indisponível:", msg);
+    await registrarIa(env, "erro", msg);
     return null;
   }
 }
@@ -215,7 +222,7 @@ export async function sugerir(env, corpo) {
   if (!env.AI || !lancamentos.length) return { sugestoes: [], ia: Boolean(env.AI) };
   const ctx = montarContexto(corpo?.contexto);
   if (!ctx.cats.size) return { sugestoes: [], ia: true };
-  const sugestoes = await seguro(async () => lerResposta(await rodar(env.AI, promptSugerir(ctx, lancamentos), 110 * lancamentos.length + 60), ctx, lancamentos));
+  const sugestoes = await seguro(env, async () => lerResposta(await rodar(env.AI, promptSugerir(ctx, lancamentos), 110 * lancamentos.length + 60), ctx, lancamentos));
   return { sugestoes: sugestoes ?? [], ia: sugestoes !== null };
 }
 
@@ -226,6 +233,6 @@ export async function entender(env, corpo) {
   if (!env.AI || !l || !explicacao) return { sugestao: null, ia: Boolean(env.AI) };
   const ctx = montarContexto(corpo?.contexto);
   if (!ctx.cats.size) return { sugestao: null, ia: true };
-  const sugestoes = await seguro(async () => lerResposta(await rodar(env.AI, promptEntender(ctx, l, explicacao), 200), ctx, [l]));
+  const sugestoes = await seguro(env, async () => lerResposta(await rodar(env.AI, promptEntender(ctx, l, explicacao), 200), ctx, [l]));
   return { sugestao: sugestoes?.[0] ?? null, ia: sugestoes !== null };
 }

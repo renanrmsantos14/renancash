@@ -148,10 +148,19 @@ class AlertasBento extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([meuBancoRevisar, meuBancoClassificar]),
+        listenable: Listenable.merge([meuBancoRevisar, meuBancoClassificar, meuBancoSaudeAviso]),
         builder: (context, _) {
           final p = _paraValidar();
+          final saude = meuBancoSaudeAviso.value;
           final avisos = [
+            if (saude != null)
+              _Aviso(
+                rotulo: 'Saúde do app',
+                valor: saude.status == MbSaudeStatus.erro ? 'Com problema' : 'Atenção',
+                detalhe: mbSaudeResumoAviso(saude),
+                semantica: 'Saúde do app: ${mbSaudeResumoAviso(saude)}',
+                onTap: () => pushRoute(context, const SaudePage()),
+              ),
             if (p.n > 0)
               _Aviso(
                 rotulo: 'Para validar',

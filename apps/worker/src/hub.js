@@ -20,6 +20,10 @@ export class EspelhoHub {
       await this.ctx.storage.setAlarm(Date.now() + 1000);
       return new Response(null, { status: 202 });
     }
+    // Sonda do check de saúde (saude.js): só prova que o objeto acorda e responde.
+    if (new URL(request.url).pathname === "/saude") {
+      return Response.json({ ok: true, sockets: this.ctx.getWebSockets().length, alarme: (await this.ctx.storage.getAlarm()) ?? null });
+    }
     const aviso = await request.text();
     for (const ws of this.ctx.getWebSockets()) {
       try { ws.send(aviso); } catch { /* socket já fechado: o runtime o remove */ }

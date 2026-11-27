@@ -3,6 +3,7 @@ import 'package:budget/database/tables.dart';
 import 'package:budget/functions.dart';
 import 'package:budget/pages/addTransactionPage.dart';
 import 'package:budget/pages/feitoPelaIaPage.dart';
+import 'package:budget/pages/saudePage.dart';
 import 'package:budget/pages/upcomingOverdueTransactionsPage.dart';
 import 'package:budget/struct/databaseGlobal.dart';
 import 'package:budget/struct/notificationsGlobal.dart';
@@ -50,7 +51,8 @@ onSelectNotification(NotificationResponse notificationResponse) async {
   // Alerta do Meu Banco: o botão responde a fila; o toque simples só abre o app na Início.
   if (notificationResponse.payload?.startsWith(mbPrefixoPayload) == true) {
     // Toque (sem botão) num alerta `ia:`: abre "Feito pela IA".
-    if ((notificationResponse.actionId ?? '').isEmpty && mbPayloadEhIa(notificationResponse.payload)) {
+    if ((notificationResponse.actionId ?? '').isEmpty &&
+        (mbPayloadEhIa(notificationResponse.payload) || mbPayloadEhSaude(notificationResponse.payload))) {
       notificationPayload = notificationResponse.payload;
       runNotificationPayLoadsNoContext();
       return;
@@ -83,6 +85,11 @@ Future<bool> runNotificationPayLoads(context) async {
   if (mbPayloadEhIa(notificationPayload)) {
     notificationPayload = "";
     pushRoute(context, const FeitoPelaIaPage());
+    return true;
+  }
+  if (mbPayloadEhSaude(notificationPayload)) {
+    notificationPayload = "";
+    pushRoute(context, const SaudePage());
     return true;
   }
   if (notificationPayload == "addTransaction") {

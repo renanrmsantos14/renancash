@@ -7,6 +7,7 @@ import { gravar as gravarEspelho, editadaNoApp, ErroGravacao, linhasDe, espelhoP
 import { agoraS, agoraTs, diaSP as DIA, hojeSP } from "./app.js";
 import { desfazerIa, configIa } from "./iaAuto.js";
 import { paraClassificar, paraRevisar, aplicarClaude, enviarResumo, MAX_ITENS, MAX_TITULO_RESUMO, MAX_TEXTO_RESUMO } from "./revisaoClaude.js";
+import { lerSaude } from "./saude.js";
 import { candidatas } from "./anotacoes.js";
 import { somarDias } from "./ciclo.js";
 
@@ -274,6 +275,13 @@ const FERRAMENTAS = [
     annotations: LEITURA,
   },
   {
+    name: "saude",
+    title: "Saúde do RenanCash",
+    description: "Resultado do último check diário (08h00): bancos (Pluggy), IA, espelho e cron, cada um com status ok/atencao/erro, causa e ação sugerida; batimento_em e atrasado dizem se o próprio check está em dia. Só leitura.",
+    inputSchema: obj({}),
+    annotations: LEITURA,
+  },
+  {
     name: "aplicar_ia",
     title: "Aplicar decisões da revisão diária",
     description: `Aplica só o que é certeza, como IA (aparece em "Feito pela IA" com Desfazer; nunca cria nem apaga; transação editada no app é recusada). Até ${MAX_ITENS} itens: classificar {tx_id, categoria, subcategoria?, titulo?}, anotacao {anotacao_id, tx_id} ou devolucao {tx_id do Pix recebido, reembolso_de = compra_id}. motivo obrigatório. Resultado item a item.`,
@@ -523,6 +531,10 @@ const EXECUTAR = {
 
   async atualizar_banco(_a, c) {
     return c.deps.atualizar();
+  },
+
+  async saude(_a, c) {
+    return lerSaude(c.env);
   },
 
   async fila_revisao(a, c) {
