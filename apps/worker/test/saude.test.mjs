@@ -3,14 +3,14 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { criarAmbiente, entrarComSenha, criarAparelho, hubMudo, restaurarFetch } from "./ambiente.mjs";
-import { rodarSaude, verificar, lerSaude, CRON_SAUDE, CHAVE_RESULTADO } from "../src/saude.js";
+import { rodarSaude, verificar, lerSaude, CHAVE_RESULTADO } from "../src/saude.js";
 import { registrarIa } from "../src/iaSaude.js";
 import { sugerir } from "../src/ia.js";
 import { tratarMcp } from "../src/mcp.js";
 
 afterEach(restaurarFetch);
 
-const AGORA = new Date("2026-11-27T11:00:00.000Z"); // 08h00 em São Paulo
+const AGORA = new Date("2026-11-27T10:07:00.000Z"); // 07h07 em São Paulo (tick do check)
 const h = (horas) => new Date(AGORA.getTime() - horas * 3600_000).toISOString();
 const dia = (n) => new Date(AGORA.getTime() - n * 86400_000).toISOString().slice(0, 10);
 
@@ -19,7 +19,7 @@ const hubOk = { idFromName: (n) => n, get: () => ({ fetch: async () => Response.
 
 // Ambiente saudável: sincronizou há 1 h, conexão em dia, IA respondendo, espelho com escrita recente, cron e check em dia.
 async function saudavel(extra = {}) {
-  const amb = criarAmbiente({ AI: IA_OK, ESPELHO: "1", ESPELHO_HUB: hubOk, ...extra });
+  const amb = criarAmbiente({ AI: IA_OK, ESPELHO: "1", SAUDE: "1", ESPELHO_HUB: hubOk, ...extra });
   const db = amb.env.DB;
   await db.prepare("INSERT INTO sync_log (origem, started_at, finished_at, ok) VALUES ('cron', ?1, ?2, 1)").bind(h(1.1), h(1)).run();
   await db.prepare("INSERT INTO pluggy_items (id, conector, status, criado, atualizado) VALUES ('item-1', 'Banco Exemplo', 'UPDATED', ?1, ?2)").bind(h(900), h(2)).run();
@@ -278,7 +278,7 @@ test("rotas: GET /api/saude e POST /api/saude/verificar com o app; MCP saude em 
   assert.equal(dados.itens.find((i) => i.id === "pluggy").status, "erro");
 });
 
-test("cron: scheduled com o cron da saúde roda o check, grava a notificação e dispara o push (mock)", async () => {
+test("cron: o tick das 10h UTC roda o check, grava a notificação e dispara o push (mock)", async () => {
   const par = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const { env, ctx, worker, esperar } = await saudavel({
     VAPID_PRIVADA: JSON.stringify(await crypto.subtle.exportKey("jwk", par.privateKey)), VAPID_PUBLICA: "pub", VAPID_ASSUNTO: "mailto:teste@exemplo.test",
@@ -289,8 +289,8 @@ test("cron: scheduled com o cron da saúde roda o check, grava a notificação e
   const fetchOriginal = globalThis.fetch;
   globalThis.fetch = async (alvo, init) => { pushes.push(String(alvo)); return new Response(null, { status: 201 }); };
   try {
-    // 11h UTC = 08h BRT: fora do silêncio (22h-7h), o push sai na hora
-    await worker.scheduled({ cron: CRON_SAUDE, scheduledTime: Date.UTC(2026, 10, 27, 11, 0) }, env, ctx);
+    // 10h07 UTC = 07h07 BRT: fim do silêncio (22h-7h), o push sai na hora
+    await worker.scheduled({ cron: "7 1,4,7,10,13,16,19,22 * * *", scheduledTime: Date.UTC(2026, 10, 27, 10, 7) }, env, ctx);
     await esperar();
   } finally { globalThis.fetch = fetchOriginal; }
   const [n] = await notificacoes(env.DB);
@@ -298,5 +298,5 @@ test("cron: scheduled com o cron da saúde roda o check, grava a notificação e
   assert.equal(pushes.length, 1, "1 push para o aparelho inscrito");
   assert.match(String(pushes[0]), /push\.exemplo\.test/);
   const sync = await env.DB.prepare("SELECT COUNT(*) AS n FROM sync_log").first("n");
-  assert.equal(sync, 1, "o cron da saúde não sincroniza (não chama o Pluggy)");
+  assert.equal(sync, 2, "o tick sincroniza primeiro (1 linha já existia) e só então roda o check");
 });

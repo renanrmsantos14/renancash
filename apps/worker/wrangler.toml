@@ -31,9 +31,10 @@ new_sqlite_classes = ["EspelhoHub"]
 
 # Cron em UTC (BRT = UTC-3), de 3 em 3 h no minuto 7 (fugir do pico): 22h07, 01h07, 04h07, 07h07 (fim do silêncio: entrega o que ficou retido),
 # 10h07, 13h07, 16h07 e 19h07 BRT (no domingo, resumo semanal). O backup roda no tick de 04h07 BRT.
-# O 2º cron (11h UTC = 08h00 BRT) roda o check de saúde (src/saude.js); o horário também está em CRON_SAUDE.
+# O tick de 07h07 BRT (10h UTC) também roda o check de saúde (src/saude.js, HORA_SAUDE_UTC). Não crie um 2º cron: o plano gratuito
+# aceita 5 por conta e a conta já está no limite (o deploy falha com o código 10072).
 [triggers]
-crons = ["7 1,4,7,10,13,16,19,22 * * *", "0 11 * * *"]
+crons = ["7 1,4,7,10,13,16,19,22 * * *"]
 
 # Porta fixa do "wrangler dev" (o mock usa 8788). Se estiver ocupada, o dev falha em vez de trocar de porta.
 [dev]
@@ -49,6 +50,7 @@ IMPORT_DAYS = "180"
 VAPID_ASSUNTO = "https://renancash.renanrmsantos14.workers.dev"
 VAPID_PUBLICA = "BCCEito1b82Hd_K0qfA4P_zI9BmxguFLCTl5O0faqoA5bncCWF1t3UOnhpQqv0GhZHbCeFBhGhwj7P_skGm8WP8"
 ESPELHO = "1"
+SAUDE = "1" # liga o check diário de saúde no tick das 07h07 (src/saude.js)
 
 # Limite de tentativas de login por IP (5 por minuto).
 # Workers AI (plano gratuito: 10.000 neurons/dia). Sugestões da aba Pendências do app (src/ia.js).

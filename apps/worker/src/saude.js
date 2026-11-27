@@ -1,4 +1,4 @@
-// Alerta de saúde: um check diário (cron 08:00 de São Paulo) olha Pluggy, IA, Espelho e o próprio cron, grava o resultado
+// Alerta de saúde: um check diário (tick do cron das 07h07 de São Paulo) olha Pluggy, IA, Espelho e o próprio cron, grava o resultado
 // em snapshots e, havendo problema, manda 1 push com a causa e a ação (no máximo 1 vez por dia por conjunto de problemas).
 // Quando tudo volta ao normal, manda "voltou ao normal". Nada aqui chama a API do Pluggy: lê só o que o Worker já gravou.
 import { MODELO } from "./ia.js";
@@ -9,7 +9,9 @@ import { stmtAlertas } from "./alertas.js";
 import { diaSP } from "./app.js";
 import { somarDias } from "./ciclo.js";
 
-export const CRON_SAUDE = "0 11 * * *"; // UTC; 08:00 em São Paulo (sem horário de verão). Mudou aqui, mude no wrangler.toml.
+// O plano gratuito da Cloudflare aceita 5 cron triggers por conta (a conta já está no limite), então não há cron próprio:
+// o check roda no tick de sincronização das 10h UTC (07h07 em São Paulo, sem horário de verão), logo depois do fim do silêncio.
+export const HORA_SAUDE_UTC = 10;
 export const CHAVE_RESULTADO = "saude:resultado";
 export const CHAVE_BATIMENTO = "saude:batimento";
 
