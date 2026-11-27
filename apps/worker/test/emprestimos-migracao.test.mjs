@@ -371,3 +371,19 @@ test("aplicar aceita `ajustar` vazio", async () => {
   await t.lanc("l1", "o1", 100, "2026-01-01T15:00:00Z");
   assert.equal((await t.aplicar(["o1"], { ajustar: [] })).status, 200);
 });
+
+test("POST na raiz da migração não executa nada (405) e o desfazer de um objetivo do lote não é travado pelo outro", async () => {
+  const t = await preparar();
+  await t.decisao("e1", { valor: 100, data: "2026-01-20", pessoa: "Eva" });
+  await t.decisao("d1", { resposta: "devolucao", valor: 80, data: "2026-02-01" }); // sem vínculo: o FIFO liga os empréstimos
+  await t.objetivo("o1", { name: "Ana" });
+  await t.lanc("l1", "o1", 100, "2026-01-01T15:00:00Z");
+  await t.objetivo("o2", { name: "Bia" });
+  await t.lanc("l2", "o2", 50, "2026-01-02T15:00:00Z");
+  assert.equal((await t.aplicar(["o1", "o2"])).status, 200);
+  const raiz = await t.pedir(ALVO, { method: "POST", headers: t.auth, body: JSON.stringify({ objetivo: "o1" }) });
+  assert.equal(raiz.status, 405);
+  assert.equal((await t.vivas()).length, 2);
+  const r = await t.post("desfazer", { objetivo: "o1" }); // o2 foi migrado no mesmo lote: não é "lançamento novo"
+  assert.equal(r.status, 200);
+});

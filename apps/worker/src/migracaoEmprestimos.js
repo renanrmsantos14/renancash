@@ -257,7 +257,7 @@ export async function aplicar(env, ctx, corpo) {
 
   const antes = calcularEmprestimos(eventosDe(estado), perdoesDe(estado));
   const depois = simular(estado, escolhidos).depois;
-  const hashOutros = await hashToken(JSON.stringify(eventosCanonicos(estado, null)));
+  const hashOutros = await hashToken(JSON.stringify(eventosCanonicos(estado)));
   try {
     await gravar({ env, ctx }, escolhidos.flatMap((p) => p.linhas), APARELHO);
   } catch (e) {
@@ -278,8 +278,9 @@ export async function aplicar(env, ctx, corpo) {
   };
 }
 
-// Eventos de empréstimo/devolução/perdão que não são do objetivo (prefixo), em forma canônica, para saber se algo mudou desde a migração.
-function eventosCanonicos(estado, semPrefixo) {
+// Eventos de empréstimo/devolução/perdão que não são de nenhuma migração (`mig:`), em forma canônica, para saber se algo mudou fora dela.
+// Ignora TODAS as migrações (não só a do objetivo): migrar ou desfazer outro objetivo depois não pode invalidar a trava do desfazer.
+function eventosCanonicos(estado, semPrefixo = "mig:") {
   const ev = eventosDe(estado, { semPrefixo }).filter((d) => d.resposta === "emprestimo" || d.resposta === "devolucao")
     .map((d) => [d.tx_id, d.resposta, d.valor, d.data, d.emprestimo_id ?? null, d.sobra ?? null, d.sobra_para ?? null, d.sobra_id ?? null]);
   const pe = perdoesDe(estado, semPrefixo).map((p) => ["perdao", p.emprestimo_id, p.valor, p.data]);
@@ -308,7 +309,7 @@ export async function desfazer(env, ctx, corpo) {
   const mudam = [...rSem].filter(([id, r]) => (rCom.get(id) ?? 0) !== r).map(([id]) => id);
   if (mudam.length) {
     const ultima = await env.DB.prepare("SELECT hash_outros FROM emprestimos_migracao WHERE objetivo = ?1 AND acao = 'aplicar' ORDER BY id DESC LIMIT 1").bind(objetivo).first("hash_outros");
-    const hoje = await hashToken(JSON.stringify(eventosCanonicos(estado, pre)));
+    const hoje = await hashToken(JSON.stringify(eventosCanonicos(estado)));
     if (ultima !== hoje) return erro(409, { erro: "Não dá para desfazer: houve lançamentos no modelo novo depois da migração e o desfazer mudaria o saldo de outros empréstimos", emprestimos: mudam });
   }
   const ts = agoraTs();

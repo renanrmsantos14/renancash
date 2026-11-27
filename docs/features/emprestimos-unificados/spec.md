@@ -22,7 +22,7 @@ Por objetivo: pessoa, original, pago, saldo antigo, saldo novo, nº de lançamen
 - O app chama só por toque do Renan, com confirmação (por empréstimo ou em lote).
 
 ## Trava extra
-- `hash_outros`: a assinatura da prévia inclui o estado dos outros empréstimos; se algo alheio muda entre a prévia e o aplicar, volta 409.
+- `hash_outros`: gravado no aplicar e conferido no desfazer (ignora as decisões `mig:`); se houve lançamento alheio depois da migração, o desfazer volta 409. A assinatura da prévia cobre só os objetivos, os lançamentos ligados e as decisões `mig:` deles; mudança alheia entre prévia e aplicar não gera 409 (o antes/depois é recalculado no aplicar).
 - Todos os empréstimos/pagamentos de um objetivo formam uma conta corrente por pessoa; partes de ajuste ganham `~2`, `~3` no `tx_id`.
 
 ## Fora do escopo

@@ -201,6 +201,7 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
   List<Widget> _corpo(BuildContext context, MbMigPrevia p) {
     final cor = cores(context);
     final escolhaveis = p.migraveis;
+    final prontos = [for (final i in escolhaveis) if (i.status != 'revisar') i];
     final selecionados = [for (final i in escolhaveis) if (_escolhidos.contains(i.objetivo)) i];
     return [
       _Resumo(p),
@@ -227,8 +228,8 @@ class _MigracaoEmprestimosPageState extends State<MigracaoEmprestimosPage> {
           child: Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton(
               key: const Key('escolher_todos'),
-              onPressed: _ocupado ? null : () => setState(() => selecionados.length == escolhaveis.length ? _escolhidos.clear() : _escolhidos.addAll([for (final i in escolhaveis) i.objetivo])),
-              child: Text(selecionados.length == escolhaveis.length ? 'Limpar seleção' : 'Selecionar todos'),
+              onPressed: _ocupado ? null : () => setState(() => selecionados.length == prontos.length ? _escolhidos.clear() : _escolhidos.addAll([for (final i in prontos) i.objetivo])),
+              child: Text(selecionados.length == prontos.length ? 'Limpar seleção' : 'Selecionar todos'),
             ),
             FilledButton(
               key: const Key('migrar_selecionados'),

@@ -632,12 +632,13 @@ async function rotaMigracaoEmprestimos(request, env, url, rota, ctx) {
     const ajustar = (url.searchParams.get("ajustar") ?? "").split(",").filter(Boolean).slice(0, 50);
     return json(await previaMigracao(env.DB, { ajustar }));
   }
-  if (request.method !== "POST") return json({ erro: "Método não permitido" }, 405);
+  const acao = { "POST /api/emprestimos/migracao/aplicar": aplicarMigracao, "POST /api/emprestimos/migracao/desfazer": desfazerMigracao }[rota];
+  if (!acao) return json({ erro: "Método não permitido" }, 405);
   const texto = await request.text();
   if (texto.length > MAX_CORPO_IA) return json({ erro: "Pedido grande demais" }, 413);
   let corpo = null;
   try { corpo = JSON.parse(texto); } catch {}
-  const r = rota.endsWith("/aplicar") ? await aplicarMigracao(env, ctx, corpo) : await desfazerMigracao(env, ctx, corpo);
+  const r = await acao(env, ctx, corpo);
   return json(r.corpo, r.status);
 }
 
