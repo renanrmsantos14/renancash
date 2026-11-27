@@ -16,6 +16,7 @@ import { EspelhoHub as HubBase } from "./hub.js";
 import { registrarCliente, autorizar, trocarToken, acessoValido, metadadosRecurso, metadadosServidor } from "./oauth.js";
 import { tratarMcp, aplicarVinculadas, alertasAnotacoes } from "./mcp.js";
 import { decidirIa, aplicarPendentesIa, aprenderIa, estadoMb, listarAplicadas, desfazerIa, importarMemoria, relatorioIa, naoAvisadasIa, stmtAvisadasIa } from "./iaAuto.js";
+import { aplicar as aplicarMigracao, desfazer as desfazerMigracao, previa as previaMigracao } from "./migracaoEmprestimos.js";
 import { avisar, configDe, editadaNoApp, enviarEspelho, ajuste, deTx, espelhoLigado, espelhoPronto, hubDo, puxarEspelho, registrosDoEspelho, semear } from "./espelho.js";
 
 // O Durable Object também roda a sincronização pedida pelo webhook (alarme): fora do limite de ~30 s do waitUntil.
@@ -496,7 +497,8 @@ async function entregarNotificacoes(request, env, url) {
 
 // Rotas dos apps: token de aparelho (Bearer) ou sessão do painel (cookie; POST exige mesma origem).
 const ROTAS_IA = new Set(["/api/ia/aplicadas", "/api/ia/desfazer", "/api/ia/memoria", "/api/ia/relatorio"]);
-const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender", ...ROTAS_IA]);
+const ROTAS_EMPRESTIMOS = new Set(["/api/emprestimos/migracao", "/api/emprestimos/migracao/aplicar", "/api/emprestimos/migracao/desfazer"]);
+const ROTAS_APARELHO = new Set(["/api/config", "/api/sync", "/api/notificacoes", "/api/sync/atualizar", "/api/pluggy/connect-token", "/api/pluggy/items", "/api/ia/sugerir", "/api/ia/entender", ...ROTAS_IA, ...ROTAS_EMPRESTIMOS]);
 const MAX_CORPO_IA = 64 * 1024; // contexto + lote pequeno cabem com folga
 const ROTAS_ESPELHO = new Set(["/api/espelho", "/api/espelho/semear", "/api/espelho/ws"]);
 const ROTA_CONEXAO = /^\/api\/pluggy\/items\/[^/]+$/; // DELETE de uma conexão
@@ -578,6 +580,7 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
   }
   if (rota === "POST /api/sync/atualizar") return atualizarAgora(env, "app", ctx);
   if (ROTAS_IA.has(caminho)) return rotaIa(request, env, url, rota, ctx);
+  if (ROTAS_EMPRESTIMOS.has(caminho)) return rotaMigracaoEmprestimos(request, env, url, rota, ctx);
   if (rota === "POST /api/ia/sugerir" || rota === "POST /api/ia/entender") {
     const texto = await request.text();
     if (texto.length > MAX_CORPO_IA) return json({ erro: "Pedido grande demais" }, 413);
@@ -619,6 +622,24 @@ async function rotaAparelho(request, env, url, caminho, ctx) {
     return json({ ok: true }, 201);
   }
   return json({ erro: "Método não permitido" }, 405);
+}
+
+// Migração dos empréstimos antigos para o modelo novo (docs/features/emprestimos-unificados/spec.md). A prévia só lê; aplicar e desfazer
+// só rodam por toque do usuário no app (token de aparelho ou cookie do app web; POST com cookie exige mesma origem, em `identificar`).
+async function rotaMigracaoEmprestimos(request, env, url, rota, ctx) {
+  if (!(await espelhoPronto(env))) return json({ erro: "O espelho não está ativo ou semeado" }, 409);
+  if (rota === "GET /api/emprestimos/migracao") {
+    const ajustar = (url.searchParams.get("ajustar") ?? "").split(",").filter(Boolean).slice(0, 50);
+    return json(await previaMigracao(env.DB, { ajustar }));
+  }
+  const acao = { "POST /api/emprestimos/migracao/aplicar": aplicarMigracao, "POST /api/emprestimos/migracao/desfazer": desfazerMigracao }[rota];
+  if (!acao) return json({ erro: "Método não permitido" }, 405);
+  const texto = await request.text();
+  if (texto.length > MAX_CORPO_IA) return json({ erro: "Pedido grande demais" }, 413);
+  let corpo = null;
+  try { corpo = JSON.parse(texto); } catch {}
+  const r = await acao(env, ctx, corpo);
+  return json(r.corpo, r.status);
 }
 
 // IA automática ("Feito pela IA"): token do aparelho (APK) ou cookie do app web; POST com cookie exige mesma origem (identificar).

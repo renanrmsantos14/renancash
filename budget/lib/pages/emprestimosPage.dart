@@ -1,3 +1,4 @@
+import 'package:budget/pages/migracaoEmprestimosPage.dart';
 import 'package:budget/struct/editorial.dart';
 import 'package:budget/widgets/editorial/movimento.dart';
 import 'package:budget/struct/mbSync/emprestimos.dart';
@@ -75,6 +76,15 @@ class _Conteudo extends StatelessWidget {
               ],
             ),
           ),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            key: const Key('empréstimos_antigos'),
+            onPressed: () => abrirMigracaoEmprestimos(context),
+            icon: const Icon(Icons.history_rounded, size: 18),
+            label: const Text('Empréstimos antigos'),
+          ),
+        ),
       ]),
     );
   }

@@ -207,7 +207,7 @@ const msDe = (v) => {
   const ms = typeof v === "number" ? (v < 1e11 ? v * 1000 : v) : Date.parse(v); // o Drift grava DateTime em segundos
   return Number.isNaN(ms) ? null : ms;
 };
-const dia = (v) => { const ms = msDe(v); return ms == null ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms)); };
+export const dia = (v) => { const ms = msDe(v); return ms == null ? null : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms)); };
 
 export function configDe(linhas) {
   const c = Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
