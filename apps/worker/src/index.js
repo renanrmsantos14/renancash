@@ -14,7 +14,7 @@ import { base64url, gerarToken, hashToken, normalizarDesde, montarResposta, hoje
 import { sugerir, entender } from "./ia.js";
 import { EspelhoHub as HubBase } from "./hub.js";
 import { registrarCliente, autorizar, trocarToken, acessoValido, metadadosRecurso, metadadosServidor } from "./oauth.js";
-import { rodarSaude, lerSaude, CRON_SAUDE } from "./saude.js";
+import { rodarSaude, lerSaude, HORA_SAUDE_UTC } from "./saude.js";
 import { tratarMcp, aplicarVinculadas, alertasAnotacoes } from "./mcp.js";
 import { decidirIa, aplicarPendentesIa, aprenderIa, estadoMb, listarAplicadas, desfazerIa, importarMemoria, relatorioIa, naoAvisadasIa, stmtAvisadasIa } from "./iaAuto.js";
 import { aplicar as aplicarMigracao, desfazer as desfazerMigracao, previa as previaMigracao } from "./migracaoEmprestimos.js";
@@ -103,21 +103,18 @@ export default {
   },
 
   async scheduled(evento, env, ctx) {
-    // Check de saúde (08h00 BRT): não sincroniza; só verifica, grava o resultado e avisa se algo estiver errado.
-    if (evento.cron === CRON_SAUDE) {
-      ctx.waitUntil(rodarSaude(env, { enviarPendentes: () => enviarPendentes(env) }).catch((e) => console.error("Check de saúde falhou", e?.stack || e)));
-      return;
-    }
-    // Cron de sincronização (o outro cron é o da saúde; plano gratuito: 5 por conta), de 3 em 3 horas em horário de Brasília (22h07, 01h07, ..., 19h07).
+    // Um cron só (plano gratuito: 5 por conta, e a conta já está no limite), de 3 em 3 horas em horário de Brasília (22h07, 01h07, ..., 19h07).
     // Cada sincronização envia os alertas pendentes, então o que ficou retido no silêncio (22h-7h) sai no tick das 07h07.
     // O tick de domingo 19h07 BRT (22h UTC) também manda o resumo semanal; o de 04h07 BRT (07h UTC) faz o backup.
     const t = new Date(evento.scheduledTime);
     const resumo = t.getUTCDay() === 0 && t.getUTCHours() === 22;
     const backup = t.getUTCHours() === 7 && env.BACKUP;
+    const saude = t.getUTCHours() === HORA_SAUDE_UTC && ["1", "true"].includes(String(env.SAUDE)); // (SAUDE = "1" no wrangler.toml; ligado como o ESPELHO) 07h07 BRT: check diário de saúde, depois da sincronização
     ctx.waitUntil(sincronizar(env, "cron", ctx).finally(async () => {
       if (resumo) await alertaSemanal(env);
       // O backup nunca derruba a sincronização: em falha, só registra o erro (sem segredos).
       if (backup) await salvarBackup(env, t).then((k) => console.log("Backup salvo", k), (e) => console.error("Backup falhou", e?.message || e));
+      if (saude) await rodarSaude(env, { enviarPendentes: () => enviarPendentes(env) }).catch((e) => console.error("Check de saúde falhou", e?.stack || e));
     }));
   },
 };

@@ -277,7 +277,7 @@ const FERRAMENTAS = [
   {
     name: "saude",
     title: "Saúde do RenanCash",
-    description: "Resultado do último check diário (08h00): bancos (Pluggy), IA, espelho e cron, cada um com status ok/atencao/erro, causa e ação sugerida; batimento_em e atrasado dizem se o próprio check está em dia. Só leitura.",
+    description: "Resultado do último check diário (07h07): bancos (Pluggy), IA, espelho e cron, cada um com status ok/atencao/erro, causa e ação sugerida; batimento_em e atrasado dizem se o próprio check está em dia. Só leitura.",
     inputSchema: obj({}),
     annotations: LEITURA,
   },

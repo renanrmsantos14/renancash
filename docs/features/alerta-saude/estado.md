@@ -5,7 +5,7 @@
 - **Próximo passo:** você revisa o PR, confirma os limiares e faz o merge · **com você**
 
 ## Decisões (briefing do Renan em 27/11/2026)
-- Check diário no cron `0 11 * * *` (08:00 de São Paulo); o horário muda no `wrangler.toml`.
+- Check diário no tick das 10h UTC (07h07 de São Paulo) do cron único de sincronização (`HORA_SAUDE_UTC` em `saude.js`; a Cloudflare recusou um 2º cron: limite de 5 do plano gratuito).
 - Itens: Pluggy, IA, Espelho, Cron/Worker. Resultado em `snapshots` (`saude:resultado`), batimento em `saude:batimento`.
 - Contador da IA em tabela nova `saude_ia` (balde por hora), alimentada pelo `seguro()` de `ia.js`.
 - Push: mesmo mecanismo do `enviar_resumo` (`notificacoes` + `enviarPendentes`), chave `saude:<dia>:<assinatura>` (1 por dia) e `saude:ok:<dia>` para "voltou ao normal".
@@ -25,7 +25,7 @@ Sem merge, sem `wrangler deploy`, sem escrita no D1 de PROD, sem Pluggy real; re
 - [ ] "Checks do PR" no CI
 
 ## Fica para depois do merge (não provável no local)
-Cron real das 08:00; push real no aparelho; tela com dados reais; quantos Cron Triggers a conta Cloudflare aceita (este é o 2º cron do Worker); `migrar` aplicando `saude_ia` no D1 de PROD pelo deploy.
+Cron real das 07h07; push real no aparelho; tela com dados reais; `migrar` aplicando `saude_ia` no D1 de PROD pelo deploy.
 
 ## Decisões do code-review (Renan: "faz tudo sem me consultar", 27/11/2026)
 - Espelho: dias sem escrita deixam de ser alerta (só informativo); tabelas e Durable Object seguem checados.
